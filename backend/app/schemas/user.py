@@ -1,25 +1,30 @@
-"""Schemas de usuario y serialización de documentos Mongo."""
+"""User schemas and Mongo document serialization helpers."""
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
+
+SexType = Literal["Masculino", "Femenino"]
+GoalType = Literal["perder_grasa", "mantener_peso", "ganar_masa"]
+
+
+class UserCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
 
 
 class UserBase(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     email: EmailStr
-    age: int | None = Field(default=None, ge=0, le=120)
-    sex: str | None = Field(default=None, max_length=50)
+    age: int | None = Field(default=None, gt=0, le=120)
+    sex: SexType | None = None
     height: float | None = Field(default=None, gt=0)
     current_weight: float | None = Field(default=None, gt=0)
-    activity_level: str | None = Field(default=None, max_length=100)
-    goal: str | None = Field(default=None, max_length=150)
+    training_days_per_week: int | None = Field(default=None, ge=0, le=7)
+    goal: GoalType | None = None
     preferences: list[str] = Field(default_factory=list)
     restrictions: list[str] = Field(default_factory=list)
-
-
-class UserCreate(UserBase):
-    password: str = Field(min_length=8, max_length=128)
 
 
 class UserInDB(UserBase):
@@ -44,7 +49,7 @@ def serialize_user(document: dict[str, Any]) -> UserPublic:
         sex=document.get("sex"),
         height=document.get("height"),
         current_weight=document.get("current_weight"),
-        activity_level=document.get("activity_level"),
+        training_days_per_week=document.get("training_days_per_week"),
         goal=document.get("goal"),
         preferences=document.get("preferences", []),
         restrictions=document.get("restrictions", []),

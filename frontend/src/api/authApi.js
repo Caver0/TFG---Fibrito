@@ -13,10 +13,3 @@ export function login(payload) {
     body: payload,
   })
 }
-
-export function getCurrentUser(token) {
-  return apiRequest('/users/me', {
-    method: 'GET',
-    token,
-  })
-}

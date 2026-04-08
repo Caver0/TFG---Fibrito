@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import ProfilePage from './pages/ProfilePage'
 import { useAuth } from './context/AuthContext'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
@@ -11,7 +12,7 @@ function App() {
     return (
       <main className="app-shell">
         <section className="card">
-          <p>Cargando sesión...</p>
+          <p>Cargando sesion...</p>
         </section>
       </main>
     )
@@ -30,25 +31,21 @@ function App() {
   }
 
   return (
-    <main className="app-shell">
-      <section className="card profile-card">
-        <span className="eyebrow">Sesión activa</span>
-        <h1>Bienvenido a Fibrito</h1>
-        <p className="profile-name">{user.name}</p>
-        <p className="profile-email">{user.email}</p>
-        <div className="profile-grid">
+    <main className="app-shell app-shell-wide">
+      <section className="card dashboard-card">
+        <div className="dashboard-header">
           <div>
-            <span className="profile-label">Objetivo</span>
-            <strong>{user.goal || 'Pendiente'}</strong>
+            <span className="eyebrow">Sesion activa</span>
+            <h1>Perfil de {user.name}</h1>
+            <p className="profile-email">{user.email}</p>
           </div>
-          <div>
-            <span className="profile-label">Actividad</span>
-            <strong>{user.activity_level || 'Pendiente'}</strong>
-          </div>
+
+          <button type="button" className="secondary-button" onClick={logout}>
+            Cerrar sesion
+          </button>
         </div>
-        <button type="button" onClick={logout}>
-          Cerrar sesión
-        </button>
+
+        <ProfilePage />
       </section>
     </main>
   )

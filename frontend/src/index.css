@@ -16,7 +16,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -32,10 +33,14 @@ button {
   padding: 24px;
 }
 
+.app-shell-wide {
+  align-items: start;
+}
+
 .card,
 .auth-panel {
   width: min(100%, 440px);
-  background: rgba(255, 252, 247, 0.9);
+  background: rgba(255, 252, 247, 0.92);
   border: 1px solid rgba(94, 72, 54, 0.12);
   border-radius: 24px;
   box-shadow: 0 24px 60px rgba(73, 54, 39, 0.12);
@@ -43,22 +48,41 @@ button {
   backdrop-filter: blur(12px);
 }
 
+.dashboard-card {
+  width: min(100%, 1080px);
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.dashboard-header h1,
+.auth-copy h1,
+.section-heading h2 {
+  margin: 8px 0 12px;
+  line-height: 1.05;
+}
+
+.dashboard-header h1 {
+  font-size: clamp(2rem, 5vw, 3rem);
+}
+
 .auth-panel,
-.profile-card {
+.profile-section {
   display: flex;
   flex-direction: column;
   gap: 24px;
 }
 
-.auth-copy h1,
-.profile-card h1 {
-  margin: 8px 0 12px;
-  font-size: clamp(2rem, 6vw, 2.8rem);
-  line-height: 1;
-}
-
 .auth-copy p,
-.profile-card p {
+.dashboard-header p,
+.section-heading p {
   margin: 0;
   color: #5f564d;
 }
@@ -71,13 +95,31 @@ button {
   color: #b85c27;
 }
 
-.auth-form {
-  display: flex;
-  flex-direction: column;
+.profile-page {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(320px, 0.95fr);
+  gap: 24px;
+}
+
+.profile-section {
+  border-radius: 22px;
+  background: #fffaf4;
+  border: 1px solid rgba(94, 72, 54, 0.1);
+  padding: 28px;
+}
+
+.auth-form,
+.profile-form {
+  display: grid;
   gap: 16px;
 }
 
-.auth-form label {
+.profile-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.auth-form label,
+.profile-form label {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -85,7 +127,9 @@ button {
   font-weight: 600;
 }
 
-.auth-form input {
+.auth-form input,
+.profile-form input,
+.profile-form select {
   width: 100%;
   border: 1px solid #d8cab8;
   border-radius: 14px;
@@ -94,23 +138,44 @@ button {
 }
 
 .auth-form button,
-.profile-card button {
+.profile-form button,
+.secondary-button {
   border-radius: 999px;
   padding: 14px 18px;
-  background: #1c1a17;
-  color: #fff8f1;
   font-weight: 700;
   transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
-.auth-form button:disabled {
+.auth-form button,
+.profile-form button {
+  background: #1c1a17;
+  color: #fff8f1;
+}
+
+.secondary-button {
+  background: #f2e8da;
+  color: #3f372f;
+}
+
+.auth-form button:disabled,
+.profile-form button:disabled {
   opacity: 0.7;
   cursor: wait;
 }
 
 .auth-form button:hover,
-.profile-card button:hover {
+.profile-form button:hover,
+.secondary-button:hover {
   transform: translateY(-1px);
+}
+
+.profile-form button {
+  grid-column: 1 / -1;
+}
+
+.profile-form .form-error,
+.profile-form .form-success {
+  grid-column: 1 / -1;
 }
 
 .auth-switch {
@@ -125,46 +190,89 @@ button {
   font-weight: 700;
 }
 
-.form-error {
+.form-error,
+.form-success,
+.info-note {
   margin: 0;
-  color: #b42318;
+  padding: 12px 14px;
+  border-radius: 14px;
 }
 
-.profile-name {
-  font-size: 1.6rem;
-  font-weight: 700;
+.form-error {
+  color: #b42318;
+  background: #fef3f2;
+}
+
+.form-success {
+  color: #146c43;
+  background: #ebf9f0;
+}
+
+.info-note {
+  color: #5f564d;
+  background: #f7efe5;
+}
+
+.info-note-warning {
+  color: #8a4b13;
+  background: #fff3e5;
 }
 
 .profile-email {
   font-size: 1rem;
 }
 
-.profile-grid {
+.nutrition-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
 
-.profile-grid div {
+.metric-card {
   border-radius: 18px;
-  padding: 16px;
+  padding: 18px;
   background: #fff4e7;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.profile-label {
-  display: block;
-  margin-bottom: 8px;
-  font-size: 0.85rem;
+.metric-card span {
   color: #8a7b6d;
+  font-size: 0.92rem;
+}
+
+.metric-card strong {
+  font-size: 1.4rem;
+}
+
+.summary-footnote {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: #5f564d;
+  font-size: 0.95rem;
+}
+
+@media (max-width: 900px) {
+  .profile-page {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
   .card,
-  .auth-panel {
+  .auth-panel,
+  .profile-section {
     padding: 24px;
   }
 
-  .profile-grid {
+  .dashboard-header {
+    flex-direction: column;
+  }
+
+  .profile-form,
+  .nutrition-grid {
     grid-template-columns: 1fr;
   }
 }

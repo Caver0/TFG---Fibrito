@@ -1,4 +1,4 @@
-"""Rutas HTTP de autenticación."""
+"""Authentication routes."""
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, status
@@ -29,14 +29,14 @@ def register_user(payload: UserCreate) -> UserPublic:
         "email": normalized_email,
         "password_hash": get_password_hash(payload.password),
         "created_at": datetime.now(timezone.utc),
-        "age": payload.age,
-        "sex": payload.sex,
-        "height": payload.height,
-        "current_weight": payload.current_weight,
-        "activity_level": payload.activity_level,
-        "goal": payload.goal,
-        "preferences": payload.preferences,
-        "restrictions": payload.restrictions,
+        "age": None,
+        "sex": None,
+        "height": None,
+        "current_weight": None,
+        "training_days_per_week": None,
+        "goal": None,
+        "preferences": [],
+        "restrictions": [],
     }
 
     try:

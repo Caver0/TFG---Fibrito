@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import * as authApi from '../api/authApi'
+import * as userApi from '../api/userApi'
 
 const AUTH_STORAGE_KEY = 'fibrito-auth'
 const AuthContext = createContext(null)
@@ -24,6 +25,27 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(storedSession.user ?? null)
   const [isReady, setIsReady] = useState(false)
 
+  function clearSession() {
+    setToken('')
+    setUser(null)
+    window.localStorage.removeItem(AUTH_STORAGE_KEY)
+  }
+
+  async function refreshUser(activeToken = token) {
+    if (!activeToken) {
+      return null
+    }
+
+    const currentUser = await userApi.getCurrentUser(activeToken)
+    setUser(currentUser)
+    return currentUser
+  }
+
+  function replaceUser(nextUser) {
+    setUser(nextUser)
+    return nextUser
+  }
+
   useEffect(() => {
     if (!token) {
       setIsReady(true)
@@ -32,23 +54,13 @@ export function AuthProvider({ children }) {
 
     let isMounted = true
 
-    authApi
-      .getCurrentUser(token)
-      .then((currentUser) => {
-        if (!isMounted) {
-          return
-        }
-
-        setUser(currentUser)
-      })
+    refreshUser(token)
       .catch(() => {
         if (!isMounted) {
           return
         }
 
-        setToken('')
-        setUser(null)
-        window.localStorage.removeItem(AUTH_STORAGE_KEY)
+        clearSession()
       })
       .finally(() => {
         if (isMounted) {
@@ -89,9 +101,7 @@ export function AuthProvider({ children }) {
   }
 
   function handleLogout() {
-    setToken('')
-    setUser(null)
-    window.localStorage.removeItem(AUTH_STORAGE_KEY)
+    clearSession()
   }
 
   const value = {
@@ -102,6 +112,8 @@ export function AuthProvider({ children }) {
     login: handleLogin,
     register: handleRegister,
     logout: handleLogout,
+    refreshUser,
+    replaceUser,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
