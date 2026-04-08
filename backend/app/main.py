@@ -1,4 +1,4 @@
-"""Puerta de entrada que crea la app FastAPI, prepara CORS para el frontend, conecta Mongodb y añade endpoints mínimos."""
+"""Puerta de entrada de la API y composición de routers."""
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -6,6 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.database import connect_to_mongo
+from app.routes.auth import router as auth_router
+from app.routes.users import router as users_router
 
 settings = get_settings()
 
@@ -30,16 +32,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
+app.include_router(users_router)
+
 
 @app.get("/")
 def root():
-    return {
-        "message": "Fibrito API funcionando correctamente"
-    }
+    return {"message": "Fibrito API funcionando correctamente"}
 
 
 @app.get("/health")
 def health():
-    return {
-        "status": "ok"
-    }
+    return {"status": "ok"}

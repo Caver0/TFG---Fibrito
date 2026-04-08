@@ -1,7 +1,4 @@
-<<<<<<< HEAD
-# TFG---Fibrito
-=======
-# FIBRIT0
+# FIBRITO
 
 Aplicación web para la planificación nutricional personalizada y el seguimiento adaptativo del progreso corporal.
 
@@ -21,9 +18,17 @@ Aplicación web para la planificación nutricional personalizada y el seguimient
 ## Primer arranque
 
 ### 1. Crear archivo `.env`
+
 Copiar `.env.example` a `.env`
 
 ### 2. Levantar contenedores
+
 ```bash
 docker compose up --build
->>>>>>> feature/00-base-architecture
+```
+
+## Endpoints base de autenticación
+
+- `POST /auth/register`
+- `POST /auth/login`
+- `GET /users/me`

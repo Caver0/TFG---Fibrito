@@ -1,5 +1,6 @@
-"""Centralizamos un cliente de Mongodb reutilizable"""
-from pymongo import MongoClient
+"""Centralizamos un cliente de MongoDB reutilizable."""
+from pymongo import ASCENDING, MongoClient
+
 from app.core.config import get_settings
 
 _client: MongoClient | None = None
@@ -11,6 +12,8 @@ def connect_to_mongo() -> MongoClient:
     if _client is None:
         settings = get_settings()
         _client = MongoClient(settings.mongodb_url)
+        database = _client[settings.mongo_db_name]
+        database.users.create_index([("email", ASCENDING)], unique=True)
 
     return _client
 

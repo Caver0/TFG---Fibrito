@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     mongodb_url: str = Field(validation_alias="MONGODB_URL")
     mongo_db_name: str = Field(validation_alias="MONGO_DB_NAME")
 
-    jwt_secret_key: str = Field(default="change_this_secret_key", validation_alias="JWT_SECRET_KEY")
+    jwt_secret_key: str = Field(validation_alias="JWT_SECRET_KEY")
     jwt_algorithm: str = Field(default="HS256", validation_alias="JWT_ALGORITHM")
     access_token_expire_minutes: int = Field(default=120, validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES")
 
