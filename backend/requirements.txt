@@ -1,0 +1,6 @@
+fastapi==0.115.12
+uvicorn[standard]==0.34.0
+pymongo==4.11.2
+dnspython==2.7.0
+pydantic-settings==2.8.1
+python-dotenv==1.0.1
