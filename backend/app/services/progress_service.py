@@ -1,6 +1,6 @@
 """Business logic for weight tracking, weekly grouping, and progress summaries."""
 from collections import defaultdict
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from datetime import UTC, date, datetime
 
 from bson import ObjectId
@@ -79,6 +79,13 @@ def build_progress_summary(entries: list[WeightEntry]) -> ProgressSummary:
     )
 
 
+def round_progress_value(value: float | None) -> float | None:
+    if value is None:
+        return None
+
+    return float(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
 def get_week_label(iso_year: int, iso_week: int) -> str:
     return f"{iso_year}-W{iso_week:02d}"
 
@@ -124,6 +131,23 @@ def calculate_weekly_averages(
         )
 
     return weekly_averages
+
+
+def serialize_weekly_average(average: WeeklyAverage) -> WeeklyAverage:
+    return WeeklyAverage(
+        week_label=average.week_label,
+        iso_year=average.iso_year,
+        iso_week=average.iso_week,
+        start_date=average.start_date,
+        end_date=average.end_date,
+        average_weight=round_progress_value(average.average_weight),
+        entry_count=average.entry_count,
+        is_complete=average.is_complete,
+    )
+
+
+def serialize_weekly_averages(weekly_averages: list[WeeklyAverage]) -> list[WeeklyAverage]:
+    return [serialize_weekly_average(average) for average in weekly_averages]
 
 
 def get_last_two_weeks_for_analysis(

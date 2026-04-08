@@ -16,7 +16,11 @@ from app.services.goal_adjustment_service import (
     get_existing_adjustment,
     list_adjustment_history,
 )
-from app.services.progress_service import calculate_weekly_averages, list_weight_entries
+from app.services.progress_service import (
+    calculate_weekly_averages,
+    list_weight_entries,
+    serialize_weekly_averages,
+)
 
 router = APIRouter(prefix="/progress", tags=["progress"])
 
@@ -27,7 +31,7 @@ def read_weekly_averages(
 ) -> WeeklyAveragesResponse:
     database = get_database()
     entries = list_weight_entries(database, current_user.id)
-    averages = calculate_weekly_averages(entries)
+    averages = serialize_weekly_averages(calculate_weekly_averages(entries))
     return WeeklyAveragesResponse(averages=averages)
 
 

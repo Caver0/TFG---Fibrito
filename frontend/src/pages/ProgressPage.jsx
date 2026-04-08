@@ -224,14 +224,14 @@ function ProgressPage() {
       setWeeklyAnalysis(response.analysis)
       await refreshUser(token)
       await reloadWeeklyData(token)
-      if (response.analysis.reason.startsWith('Ya existe un analisis guardado')) {
-        setApplyMessage(response.analysis.reason)
+      if (response.analysis.adjustment_reason.startsWith('Ya existe un analisis guardado')) {
+        setApplyMessage(response.analysis.adjustment_reason)
       } else if (response.adjustment?.adjustment_applied) {
         setApplyMessage('Ajuste semanal aplicado y guardado correctamente.')
       } else if (response.adjustment) {
         setApplyMessage('Analisis semanal guardado sin cambios de calorias.')
       } else {
-        setApplyMessage(response.analysis.reason)
+        setApplyMessage(response.analysis.adjustment_reason)
       }
     } catch (error) {
       setApplyError(error.message)

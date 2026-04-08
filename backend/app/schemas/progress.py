@@ -34,12 +34,16 @@ class WeeklyAnalysisResponse(BaseModel):
     progress_status: str
     adjustment_needed: bool
     goal: GoalType | None
+    progress_direction_ok: bool | None
+    progress_rate_ok: bool | None
     previous_week_label: str | None
     current_week_label: str | None
     previous_week_avg: float | None
     current_week_avg: float | None
     weekly_change: float | None
+    max_weekly_loss: float | None
     calorie_change: int
     previous_target_calories: float | None
     new_target_calories: float | None
+    adjustment_reason: str
     reason: str

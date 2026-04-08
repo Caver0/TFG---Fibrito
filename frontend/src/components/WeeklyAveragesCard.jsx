@@ -1,3 +1,5 @@
+import { formatProgressMetric } from '../utils/progressFormat'
+
 function WeeklyAveragesCard({ averages, error, isLoading }) {
   return (
     <section className="profile-section">
@@ -23,7 +25,7 @@ function WeeklyAveragesCard({ averages, error, isLoading }) {
               </div>
               <div>
                 <span className="history-label">Media</span>
-                <strong>{average.average_weight}</strong>
+                <strong>{formatProgressMetric(average.average_weight)}</strong>
               </div>
               <div>
                 <span className="history-label">Registros</span>

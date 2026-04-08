@@ -1,3 +1,9 @@
+import {
+  formatDirectionStatus,
+  formatProgressMetric,
+  formatRateStatus,
+} from '../utils/progressFormat'
+
 function getStatusLabel(status) {
   if (status === 'on_track') {
     return 'En objetivo'
@@ -51,16 +57,30 @@ function WeeklyAnalysisCard({
             </article>
             <article className="metric-card">
               <span>Media anterior</span>
-              <strong>{analysis.previous_week_avg ?? 'Sin datos'}</strong>
+              <strong>{formatProgressMetric(analysis.previous_week_avg)}</strong>
             </article>
             <article className="metric-card">
               <span>Media actual</span>
-              <strong>{analysis.current_week_avg ?? 'Sin datos'}</strong>
+              <strong>{formatProgressMetric(analysis.current_week_avg)}</strong>
             </article>
             <article className="metric-card">
               <span>Cambio semanal</span>
-              <strong>{analysis.weekly_change ?? 'Sin datos'}</strong>
+              <strong>{formatProgressMetric(analysis.weekly_change)}</strong>
             </article>
+            <article className="metric-card">
+              <span>Direccion del progreso</span>
+              <strong>{formatDirectionStatus(analysis.progress_direction_ok)}</strong>
+            </article>
+            <article className="metric-card">
+              <span>Velocidad del progreso</span>
+              <strong>{formatRateStatus(analysis.progress_rate_ok)}</strong>
+            </article>
+            {analysis.max_weekly_loss !== null && analysis.max_weekly_loss !== undefined ? (
+              <article className="metric-card">
+                <span>Limite maximo de bajada</span>
+                <strong>{formatProgressMetric(analysis.max_weekly_loss)}</strong>
+              </article>
+            ) : null}
             <article className="metric-card">
               <span>Cambio calorico</span>
               <strong>{analysis.calorie_change}</strong>
@@ -75,7 +95,7 @@ function WeeklyAnalysisCard({
             </article>
           </div>
 
-          <p className="info-note">{analysis.reason}</p>
+          <p className="info-note">{analysis.adjustment_reason}</p>
         </>
       ) : null}
 

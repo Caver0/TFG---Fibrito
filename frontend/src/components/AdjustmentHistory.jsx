@@ -1,3 +1,9 @@
+import {
+  formatDirectionStatus,
+  formatProgressMetric,
+  formatRateStatus,
+} from '../utils/progressFormat'
+
 function AdjustmentHistory({ entries, error, isLoading }) {
   return (
     <section className="profile-section">
@@ -22,11 +28,17 @@ function AdjustmentHistory({ entries, error, isLoading }) {
                 <span>{entry.adjustment_applied ? 'Ajuste aplicado' : 'Sin ajuste'}</span>
               </div>
               <p>
-                {entry.previous_week_label}: {entry.previous_week_avg} | {entry.current_week_label}: {entry.current_week_avg}
+                {entry.previous_week_label}: {formatProgressMetric(entry.previous_week_avg)} | {entry.current_week_label}:{' '}
+                {formatProgressMetric(entry.current_week_avg)}
               </p>
-              <p>Cambio semanal: {entry.weekly_change}</p>
+              <p>Cambio semanal: {formatProgressMetric(entry.weekly_change)}</p>
+              <p>Direccion del progreso: {formatDirectionStatus(entry.progress_direction_ok)}</p>
+              <p>Velocidad del progreso: {formatRateStatus(entry.progress_rate_ok)}</p>
+              {entry.max_weekly_loss !== null && entry.max_weekly_loss !== undefined ? (
+                <p>Limite maximo de bajada: {formatProgressMetric(entry.max_weekly_loss)}</p>
+              ) : null}
               <p>Calorias: {entry.previous_target_calories} {'->'} {entry.new_target_calories}</p>
-              <p>{entry.reason}</p>
+              <p>{entry.adjustment_reason}</p>
             </article>
           ))}
         </div>
