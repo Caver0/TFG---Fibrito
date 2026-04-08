@@ -1,3 +1,5 @@
+import { formatTrainingTimeOfDay } from '../utils/dietDistribution'
+
 function formatDietTimestamp(value) {
   if (!value) {
     return 'Sin fecha'
@@ -49,6 +51,14 @@ function DietHistory({
               <div>
                 <span className="history-label">Calorias</span>
                 <strong>{diet.target_calories} kcal</strong>
+              </div>
+              <div>
+                <span className="history-label">Entreno</span>
+                <strong>
+                  {diet.training_optimization_applied
+                    ? `Optimizada (${formatTrainingTimeOfDay(diet.training_time_of_day)})`
+                    : 'Sin optimizacion'}
+                </strong>
               </div>
               <button
                 type="button"

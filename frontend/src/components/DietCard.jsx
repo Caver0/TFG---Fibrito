@@ -1,3 +1,5 @@
+import { formatTrainingTimeOfDay } from '../utils/dietDistribution'
+
 function formatDietTimestamp(value) {
   if (!value) {
     return 'Sin fecha'
@@ -7,6 +9,14 @@ function formatDietTimestamp(value) {
     dateStyle: 'medium',
     timeStyle: 'short',
   })
+}
+
+function formatDistribution(percentages) {
+  if (!percentages?.length) {
+    return 'Sin distribucion guardada'
+  }
+
+  return percentages.map((value) => `${value}%`).join(' / ')
 }
 
 function DietCard({ description, diet, error, isLoading, title }) {
@@ -51,6 +61,18 @@ function DietCard({ description, diet, error, isLoading, title }) {
               <span>Carbohidratos totales</span>
               <strong>{diet.carb_grams} g</strong>
             </article>
+            <article className="metric-card">
+              <span>Distribucion usada</span>
+              <strong>{formatDistribution(diet.distribution_percentages)}</strong>
+            </article>
+            <article className="metric-card">
+              <span>Optimizacion por entreno</span>
+              <strong>{diet.training_optimization_applied ? 'Si' : 'No'}</strong>
+            </article>
+            <article className="metric-card">
+              <span>Momento de entreno</span>
+              <strong>{formatTrainingTimeOfDay(diet.training_time_of_day)}</strong>
+            </article>
           </div>
 
           <div className="meal-list">
@@ -59,6 +81,7 @@ function DietCard({ description, diet, error, isLoading, title }) {
                 <div className="meal-card-header">
                   <strong>Comida {meal.meal_number}</strong>
                 </div>
+                <p>Porcentaje usado: {meal.distribution_percentage ?? 'Sin dato'}%</p>
                 <p>Calorias objetivo: {meal.target_calories} kcal</p>
                 <p>Proteina objetivo: {meal.target_protein_grams} g</p>
                 <p>Grasas objetivo: {meal.target_fat_grams} g</p>

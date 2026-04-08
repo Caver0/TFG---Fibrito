@@ -25,7 +25,12 @@ def create_daily_diet(
     database = get_database()
 
     try:
-        diet_payload = generate_daily_diet(current_user, payload.meals_count)
+        diet_payload = generate_daily_diet(
+            current_user,
+            payload.meals_count,
+            custom_percentages=payload.custom_percentages,
+            training_time_of_day=payload.training_time_of_day,
+        )
     except NutritionProfileIncompleteError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
