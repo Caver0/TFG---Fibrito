@@ -111,7 +111,7 @@ def build_nutrition_summary(profile: NutritionCalculationInput | Mapping[str, An
         current_weight=round_nutrition(input_data.current_weight),
         training_days_per_week=input_data.training_days_per_week,
         goal=input_data.goal,
-        activity_factor=round_nutrition(activity_factor),
+        activity_factor=activity_factor,
         bmr=round_nutrition(bmr),
         tdee=round_nutrition(tdee),
         target_calories=round_nutrition(target_calories),
