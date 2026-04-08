@@ -277,6 +277,87 @@ button {
   font-size: 0.95rem;
 }
 
+.weekly-averages-list,
+.adjustment-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.weekly-average-row,
+.adjustment-card {
+  border-radius: 18px;
+  padding: 18px;
+  background: #fff4e7;
+}
+
+.weekly-average-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.analysis-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-weight: 700;
+}
+
+.status-on_track {
+  background: #ebf9f0;
+  color: #146c43;
+}
+
+.status-needs_adjustment {
+  background: #fff3e5;
+  color: #8a4b13;
+}
+
+.status-insufficient_data,
+.status-profile_incomplete {
+  background: #f2e9df;
+  color: #5f564d;
+}
+
+.analysis-goal {
+  color: #5f564d;
+  font-weight: 600;
+}
+
+.analysis-actions button {
+  border-radius: 999px;
+  padding: 14px 18px;
+  background: #1c1a17;
+  color: #fff8f1;
+  font-weight: 700;
+}
+
+.analysis-actions button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.adjustment-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.adjustment-card p {
+  margin: 0 0 8px;
+  color: #5f564d;
+}
+
 .weight-history-list {
   display: flex;
   flex-direction: column;
@@ -338,7 +419,8 @@ button {
   .profile-form,
   .weight-form,
   .nutrition-grid,
-  .history-row {
+  .history-row,
+  .weekly-average-row {
     grid-template-columns: 1fr;
   }
 }

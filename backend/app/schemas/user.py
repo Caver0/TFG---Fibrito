@@ -23,6 +23,7 @@ class UserBase(BaseModel):
     current_weight: float | None = Field(default=None, gt=0)
     training_days_per_week: int | None = Field(default=None, ge=0, le=7)
     goal: GoalType | None = None
+    target_calories: float | None = Field(default=None, gt=0)
     preferences: list[str] = Field(default_factory=list)
     restrictions: list[str] = Field(default_factory=list)
 
@@ -51,6 +52,7 @@ def serialize_user(document: dict[str, Any]) -> UserPublic:
         current_weight=document.get("current_weight"),
         training_days_per_week=document.get("training_days_per_week"),
         goal=document.get("goal"),
+        target_calories=document.get("target_calories"),
         preferences=document.get("preferences", []),
         restrictions=document.get("restrictions", []),
     )

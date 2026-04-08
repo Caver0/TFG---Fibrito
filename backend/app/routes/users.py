@@ -10,6 +10,7 @@ from app.schemas.user import UserPublic, serialize_user
 from app.services.nutrition_service import (
     NutritionProfileIncompleteError,
     build_nutrition_summary,
+    get_default_target_calories,
 )
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -25,16 +26,18 @@ def update_current_user_profile(
     payload: NutritionProfileUpdate,
     current_user: UserPublic = Depends(get_current_user),
 ) -> UserPublic:
-    update_data = payload.model_dump(exclude_unset=True)
-    if not update_data:
-        return current_user
-
     database = get_database()
-    updated_user = database.users.find_one_and_update(
-        {"_id": ObjectId(current_user.id)},
-        {"$set": update_data},
-        return_document=ReturnDocument.AFTER,
-    )
+    update_data = payload.model_dump(exclude_unset=True)
+    current_user_id = ObjectId(current_user.id)
+
+    if update_data:
+        updated_user = database.users.find_one_and_update(
+            {"_id": current_user_id},
+            {"$set": update_data},
+            return_document=ReturnDocument.AFTER,
+        )
+    else:
+        updated_user = database.users.find_one({"_id": current_user_id})
 
     if not updated_user:
         raise HTTPException(
@@ -42,6 +45,16 @@ def update_current_user_profile(
             detail="User not found",
         )
 
+    try:
+        next_target_calories = get_default_target_calories(updated_user)
+    except NutritionProfileIncompleteError:
+        next_target_calories = None
+
+    updated_user = database.users.find_one_and_update(
+        {"_id": current_user_id},
+        {"$set": {"target_calories": next_target_calories}},
+        return_document=ReturnDocument.AFTER,
+    )
     return serialize_user(updated_user)
 
 
@@ -50,7 +63,10 @@ def read_current_user_nutrition(
     current_user: UserPublic = Depends(get_current_user),
 ) -> NutritionSummary:
     try:
-        return build_nutrition_summary(current_user)
+        return build_nutrition_summary(
+            current_user,
+            target_calories_override=current_user.target_calories,
+        )
     except NutritionProfileIncompleteError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

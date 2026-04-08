@@ -1,11 +1,12 @@
-"""Business logic for weight tracking and progress summaries."""
+"""Business logic for weight tracking, weekly grouping, and progress summaries."""
+from collections import defaultdict
 from decimal import Decimal
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from bson import ObjectId
 from fastapi import HTTPException, status
 
-from app.schemas.progress import ProgressSummary
+from app.schemas.progress import ProgressSummary, WeeklyAverage
 from app.schemas.weight import WeightEntry, WeightEntryCreate, serialize_weight_entry
 
 
@@ -76,3 +77,60 @@ def build_progress_summary(entries: list[WeightEntry]) -> ProgressSummary:
         number_of_entries=len(entries),
         latest_entry_date=latest_entry.date,
     )
+
+
+def get_week_label(iso_year: int, iso_week: int) -> str:
+    return f"{iso_year}-W{iso_week:02d}"
+
+
+def get_week_bounds(iso_year: int, iso_week: int) -> tuple[date, date]:
+    start_date = date.fromisocalendar(iso_year, iso_week, 1)
+    end_date = date.fromisocalendar(iso_year, iso_week, 7)
+    return start_date, end_date
+
+
+def group_weight_entries_by_week(entries: list[WeightEntry]) -> dict[tuple[int, int], list[WeightEntry]]:
+    grouped_entries: dict[tuple[int, int], list[WeightEntry]] = defaultdict(list)
+    for entry in entries:
+        iso_year, iso_week, _ = entry.date.isocalendar()
+        grouped_entries[(iso_year, iso_week)].append(entry)
+    return grouped_entries
+
+
+def calculate_weekly_averages(
+    entries: list[WeightEntry],
+    reference_date: date | None = None,
+) -> list[WeeklyAverage]:
+    grouped_entries = group_weight_entries_by_week(entries)
+    today = reference_date or datetime.now(UTC).date()
+    weekly_averages: list[WeeklyAverage] = []
+
+    for (iso_year, iso_week), week_entries in sorted(grouped_entries.items()):
+        start_date, end_date = get_week_bounds(iso_year, iso_week)
+        average_weight = float(
+            sum(Decimal(str(entry.weight)) for entry in week_entries) / Decimal(len(week_entries))
+        )
+        weekly_averages.append(
+            WeeklyAverage(
+                week_label=get_week_label(iso_year, iso_week),
+                iso_year=iso_year,
+                iso_week=iso_week,
+                start_date=start_date,
+                end_date=end_date,
+                average_weight=average_weight,
+                entry_count=len(week_entries),
+                is_complete=end_date < today,
+            )
+        )
+
+    return weekly_averages
+
+
+def get_last_two_weeks_for_analysis(
+    weekly_averages: list[WeeklyAverage],
+) -> tuple[WeeklyAverage, WeeklyAverage] | None:
+    complete_weeks = [week for week in weekly_averages if week.is_complete]
+    if len(complete_weeks) < 2:
+        return None
+
+    return complete_weeks[-2], complete_weeks[-1]

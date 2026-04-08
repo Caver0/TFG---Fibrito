@@ -38,7 +38,16 @@ function ProfilePage() {
     }
 
     loadNutritionSummary(token)
-  }, [token])
+  }, [
+    token,
+    user?.age,
+    user?.sex,
+    user?.height,
+    user?.current_weight,
+    user?.training_days_per_week,
+    user?.goal,
+    user?.target_calories,
+  ])
 
   async function handleSave(profilePayload) {
     if (!token) {

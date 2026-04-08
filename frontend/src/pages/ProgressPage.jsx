@@ -1,21 +1,37 @@
 import { useEffect, useState } from 'react'
+import * as progressApi from '../api/progressApi'
 import * as weightApi from '../api/weightApi'
+import AdjustmentHistory from '../components/AdjustmentHistory'
+import ProgressSummary from '../components/ProgressSummary'
+import WeeklyAnalysisCard from '../components/WeeklyAnalysisCard'
+import WeeklyAveragesCard from '../components/WeeklyAveragesCard'
 import WeightForm from '../components/WeightForm'
 import WeightHistory from '../components/WeightHistory'
-import ProgressSummary from '../components/ProgressSummary'
 import { useAuth } from '../context/AuthContext'
 
 function ProgressPage() {
-  const { token } = useAuth()
+  const { refreshUser, token } = useAuth()
   const [entries, setEntries] = useState([])
   const [summary, setSummary] = useState(null)
+  const [weeklyAverages, setWeeklyAverages] = useState([])
+  const [weeklyAnalysis, setWeeklyAnalysis] = useState(null)
+  const [adjustmentHistory, setAdjustmentHistory] = useState([])
   const [historyError, setHistoryError] = useState('')
   const [summaryError, setSummaryError] = useState('')
+  const [weeklyAveragesError, setWeeklyAveragesError] = useState('')
+  const [weeklyAnalysisError, setWeeklyAnalysisError] = useState('')
+  const [adjustmentHistoryError, setAdjustmentHistoryError] = useState('')
   const [saveError, setSaveError] = useState('')
   const [saveMessage, setSaveMessage] = useState('')
+  const [applyError, setApplyError] = useState('')
+  const [applyMessage, setApplyMessage] = useState('')
   const [isHistoryLoading, setIsHistoryLoading] = useState(false)
   const [isSummaryLoading, setIsSummaryLoading] = useState(false)
+  const [isWeeklyAveragesLoading, setIsWeeklyAveragesLoading] = useState(false)
+  const [isWeeklyAnalysisLoading, setIsWeeklyAnalysisLoading] = useState(false)
+  const [isAdjustmentHistoryLoading, setIsAdjustmentHistoryLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [isApplyingAdjustment, setIsApplyingAdjustment] = useState(false)
   const [deletingEntryId, setDeletingEntryId] = useState('')
 
   async function loadWeightHistory(activeToken = token) {
@@ -60,10 +76,88 @@ function ProgressPage() {
     }
   }
 
-  async function reloadProgress(activeToken = token) {
+  async function loadWeeklyAverages(activeToken = token) {
+    if (!activeToken) {
+      return []
+    }
+
+    setIsWeeklyAveragesLoading(true)
+    setWeeklyAveragesError('')
+
+    try {
+      const response = await progressApi.getWeeklyAverages(activeToken)
+      setWeeklyAverages(response.averages)
+      return response.averages
+    } catch (error) {
+      setWeeklyAverages([])
+      setWeeklyAveragesError(error.message)
+      return []
+    } finally {
+      setIsWeeklyAveragesLoading(false)
+    }
+  }
+
+  async function loadWeeklyAnalysis(activeToken = token) {
+    if (!activeToken) {
+      return null
+    }
+
+    setIsWeeklyAnalysisLoading(true)
+    setWeeklyAnalysisError('')
+
+    try {
+      const response = await progressApi.getWeeklyAnalysis(activeToken)
+      setWeeklyAnalysis(response)
+      return response
+    } catch (error) {
+      setWeeklyAnalysis(null)
+      setWeeklyAnalysisError(error.message)
+      return null
+    } finally {
+      setIsWeeklyAnalysisLoading(false)
+    }
+  }
+
+  async function loadAdjustmentHistory(activeToken = token) {
+    if (!activeToken) {
+      return []
+    }
+
+    setIsAdjustmentHistoryLoading(true)
+    setAdjustmentHistoryError('')
+
+    try {
+      const response = await progressApi.getAdjustmentHistory(activeToken)
+      setAdjustmentHistory(response.entries)
+      return response.entries
+    } catch (error) {
+      setAdjustmentHistory([])
+      setAdjustmentHistoryError(error.message)
+      return []
+    } finally {
+      setIsAdjustmentHistoryLoading(false)
+    }
+  }
+
+  async function reloadWeightData(activeToken = token) {
     await Promise.all([
       loadWeightHistory(activeToken),
       loadProgressSummary(activeToken),
+    ])
+  }
+
+  async function reloadWeeklyData(activeToken = token) {
+    await Promise.all([
+      loadWeeklyAverages(activeToken),
+      loadWeeklyAnalysis(activeToken),
+      loadAdjustmentHistory(activeToken),
+    ])
+  }
+
+  async function reloadAll(activeToken = token) {
+    await Promise.all([
+      reloadWeightData(activeToken),
+      reloadWeeklyData(activeToken),
     ])
   }
 
@@ -72,7 +166,7 @@ function ProgressPage() {
       return
     }
 
-    reloadProgress(token)
+    reloadAll(token)
   }, [token])
 
   async function handleSave(payload) {
@@ -86,7 +180,7 @@ function ProgressPage() {
 
     try {
       await weightApi.createWeightEntry(token, payload)
-      await reloadProgress(token)
+      await reloadAll(token)
       setSaveMessage('Registro de peso guardado correctamente.')
       return true
     } catch (error) {
@@ -108,11 +202,41 @@ function ProgressPage() {
 
     try {
       await weightApi.deleteWeightEntry(token, entryId)
-      await reloadProgress(token)
+      await reloadAll(token)
     } catch (error) {
       setHistoryError(error.message)
     } finally {
       setDeletingEntryId('')
+    }
+  }
+
+  async function handleApplyAdjustment() {
+    if (!token) {
+      return
+    }
+
+    setIsApplyingAdjustment(true)
+    setApplyError('')
+    setApplyMessage('')
+
+    try {
+      const response = await progressApi.applyWeeklyAdjustment(token)
+      setWeeklyAnalysis(response.analysis)
+      await refreshUser(token)
+      await reloadWeeklyData(token)
+      if (response.analysis.reason.startsWith('Ya existe un analisis guardado')) {
+        setApplyMessage(response.analysis.reason)
+      } else if (response.adjustment?.adjustment_applied) {
+        setApplyMessage('Ajuste semanal aplicado y guardado correctamente.')
+      } else if (response.adjustment) {
+        setApplyMessage('Analisis semanal guardado sin cambios de calorias.')
+      } else {
+        setApplyMessage(response.analysis.reason)
+      }
+    } catch (error) {
+      setApplyError(error.message)
+    } finally {
+      setIsApplyingAdjustment(false)
     }
   }
 
@@ -138,6 +262,29 @@ function ProgressPage() {
         isLoading={isHistoryLoading}
         onDelete={handleDelete}
         deletingEntryId={deletingEntryId}
+      />
+
+      <div className="progress-grid">
+        <WeeklyAveragesCard
+          averages={weeklyAverages}
+          error={weeklyAveragesError}
+          isLoading={isWeeklyAveragesLoading}
+        />
+        <WeeklyAnalysisCard
+          analysis={weeklyAnalysis}
+          applyError={applyError}
+          applyMessage={applyMessage}
+          error={weeklyAnalysisError}
+          isApplying={isApplyingAdjustment}
+          isLoading={isWeeklyAnalysisLoading}
+          onApply={handleApplyAdjustment}
+        />
+      </div>
+
+      <AdjustmentHistory
+        entries={adjustmentHistory}
+        error={adjustmentHistoryError}
+        isLoading={isAdjustmentHistoryLoading}
       />
     </div>
   )

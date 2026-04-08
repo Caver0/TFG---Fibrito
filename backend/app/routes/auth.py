@@ -35,6 +35,7 @@ def register_user(payload: UserCreate) -> UserPublic:
         "current_weight": None,
         "training_days_per_week": None,
         "goal": None,
+        "target_calories": None,
         "preferences": [],
         "restrictions": [],
     }

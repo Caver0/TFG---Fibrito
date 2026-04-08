@@ -81,7 +81,34 @@ def get_missing_nutrition_fields(profile: NutritionCalculationInput | Mapping[st
     return [field_name for field_name in required_fields if data.get(field_name) is None]
 
 
-def build_nutrition_summary(profile: NutritionCalculationInput | Mapping[str, Any] | Any) -> NutritionSummary:
+def get_default_target_calories(
+    profile: NutritionCalculationInput | Mapping[str, Any] | Any,
+) -> float:
+    missing_fields = get_missing_nutrition_fields(profile)
+    if missing_fields:
+        raise NutritionProfileIncompleteError(missing_fields)
+
+    if isinstance(profile, NutritionCalculationInput):
+        input_data = profile
+    elif hasattr(profile, "model_dump"):
+        input_data = NutritionCalculationInput.model_validate(profile.model_dump())
+    else:
+        input_data = NutritionCalculationInput.model_validate(dict(profile))
+
+    bmr = calculate_bmr(
+        age=input_data.age,
+        sex=input_data.sex,
+        height=input_data.height,
+        current_weight=input_data.current_weight,
+    )
+    tdee = calculate_tdee(bmr, input_data.training_days_per_week)
+    return calculate_target_calories(tdee, input_data.goal)
+
+
+def build_nutrition_summary(
+    profile: NutritionCalculationInput | Mapping[str, Any] | Any,
+    target_calories_override: float | None = None,
+) -> NutritionSummary:
     missing_fields = get_missing_nutrition_fields(profile)
     if missing_fields:
         raise NutritionProfileIncompleteError(missing_fields)
@@ -101,7 +128,11 @@ def build_nutrition_summary(profile: NutritionCalculationInput | Mapping[str, An
     )
     activity_factor = get_activity_factor_from_training_days(input_data.training_days_per_week)
     tdee = calculate_tdee(bmr, input_data.training_days_per_week)
-    target_calories = calculate_target_calories(tdee, input_data.goal)
+    target_calories = (
+        target_calories_override
+        if target_calories_override is not None
+        else calculate_target_calories(tdee, input_data.goal)
+    )
     macros = calculate_macros(input_data.current_weight, target_calories)
 
     return NutritionSummary(
