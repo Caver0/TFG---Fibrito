@@ -20,6 +20,9 @@ def connect_to_mongo() -> MongoClient:
         database.calorie_adjustments.create_index(
             [("user_id", ASCENDING), ("created_at", ASCENDING)]
         )
+        database.diets.create_index(
+            [("user_id", ASCENDING), ("created_at", ASCENDING)]
+        )
 
     return _client
 

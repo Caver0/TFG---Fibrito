@@ -1,0 +1,69 @@
+function formatDietTimestamp(value) {
+  if (!value) {
+    return 'Sin fecha'
+  }
+
+  return new Date(value).toLocaleString('es-ES', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
+}
+
+function DietHistory({
+  diets,
+  error,
+  isLoading,
+  onSelect,
+  selectedDietId,
+  viewingDietId,
+}) {
+  return (
+    <section className="profile-section">
+      <div className="section-heading">
+        <span className="eyebrow">Historial de dietas</span>
+        <h2>Dietas generadas</h2>
+        <p>Puedes revisar tus generaciones anteriores y abrir una dieta concreta cuando lo necesites.</p>
+      </div>
+
+      {isLoading ? <p className="info-note">Cargando historial de dietas...</p> : null}
+      {!isLoading && error ? <p className="info-note info-note-warning">{error}</p> : null}
+      {!isLoading && !error && diets.length === 0 ? (
+        <p className="info-note">Todavia no has generado ninguna dieta diaria.</p>
+      ) : null}
+
+      {!isLoading && !error && diets.length > 0 ? (
+        <div className="diet-history-list">
+          {diets.map((diet) => (
+            <article
+              key={diet.id}
+              className={`diet-history-row ${selectedDietId === diet.id ? 'diet-history-row-active' : ''}`}
+            >
+              <div>
+                <span className="history-label">Creada</span>
+                <strong>{formatDietTimestamp(diet.created_at)}</strong>
+              </div>
+              <div>
+                <span className="history-label">Comidas</span>
+                <strong>{diet.meals_count}</strong>
+              </div>
+              <div>
+                <span className="history-label">Calorias</span>
+                <strong>{diet.target_calories} kcal</strong>
+              </div>
+              <button
+                type="button"
+                className="history-action"
+                disabled={viewingDietId === diet.id}
+                onClick={() => onSelect(diet.id)}
+              >
+                {viewingDietId === diet.id ? 'Abriendo...' : 'Ver dieta'}
+              </button>
+            </article>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+export default DietHistory
