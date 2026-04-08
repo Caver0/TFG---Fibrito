@@ -8,6 +8,7 @@ from app.core.config import get_settings
 from app.core.database import connect_to_mongo
 from app.routes.auth import router as auth_router
 from app.routes.users import router as users_router
+from app.routes.weight import router as weight_router
 
 settings = get_settings()
 
@@ -34,6 +35,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(users_router)
+app.include_router(weight_router)
 
 
 @app.get("/")

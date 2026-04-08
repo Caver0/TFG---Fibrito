@@ -14,6 +14,9 @@ def connect_to_mongo() -> MongoClient:
         _client = MongoClient(settings.mongodb_url)
         database = _client[settings.mongo_db_name]
         database.users.create_index([("email", ASCENDING)], unique=True)
+        database.weight_logs.create_index(
+            [("user_id", ASCENDING), ("date", ASCENDING), ("created_at", ASCENDING)]
+        )
 
     return _client
 

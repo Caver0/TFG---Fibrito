@@ -101,6 +101,18 @@ button {
   gap: 24px;
 }
 
+.progress-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.progress-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.95fr) minmax(320px, 1fr);
+  gap: 24px;
+}
+
 .profile-section {
   border-radius: 22px;
   background: #fffaf4;
@@ -109,17 +121,20 @@ button {
 }
 
 .auth-form,
-.profile-form {
+.profile-form,
+.weight-form {
   display: grid;
   gap: 16px;
 }
 
-.profile-form {
+.profile-form,
+.weight-form {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .auth-form label,
-.profile-form label {
+.profile-form label,
+.weight-form label {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -129,7 +144,8 @@ button {
 
 .auth-form input,
 .profile-form input,
-.profile-form select {
+.profile-form select,
+.weight-form input {
   width: 100%;
   border: 1px solid #d8cab8;
   border-radius: 14px;
@@ -139,6 +155,7 @@ button {
 
 .auth-form button,
 .profile-form button,
+.weight-form button,
 .secondary-button {
   border-radius: 999px;
   padding: 14px 18px;
@@ -147,7 +164,8 @@ button {
 }
 
 .auth-form button,
-.profile-form button {
+.profile-form button,
+.weight-form button {
   background: #1c1a17;
   color: #fff8f1;
 }
@@ -158,23 +176,28 @@ button {
 }
 
 .auth-form button:disabled,
-.profile-form button:disabled {
+.profile-form button:disabled,
+.weight-form button:disabled {
   opacity: 0.7;
   cursor: wait;
 }
 
 .auth-form button:hover,
 .profile-form button:hover,
+.weight-form button:hover,
 .secondary-button:hover {
   transform: translateY(-1px);
 }
 
-.profile-form button {
+.profile-form button,
+.weight-form button {
   grid-column: 1 / -1;
 }
 
 .profile-form .form-error,
-.profile-form .form-success {
+.profile-form .form-success,
+.weight-form .form-error,
+.weight-form .form-success {
   grid-column: 1 / -1;
 }
 
@@ -254,8 +277,49 @@ button {
   font-size: 0.95rem;
 }
 
+.weight-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.history-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: #fff4e7;
+}
+
+.history-row strong {
+  word-break: break-word;
+}
+
+.history-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+  color: #8a7b6d;
+}
+
+.history-action {
+  border-radius: 999px;
+  padding: 10px 16px;
+  background: #f4d9cb;
+  color: #7a2e0b;
+  font-weight: 700;
+}
+
+.history-action:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
 @media (max-width: 900px) {
-  .profile-page {
+  .profile-page,
+  .progress-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -272,7 +336,9 @@ button {
   }
 
   .profile-form,
-  .nutrition-grid {
+  .weight-form,
+  .nutrition-grid,
+  .history-row {
     grid-template-columns: 1fr;
   }
 }

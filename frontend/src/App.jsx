@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import ProfilePage from './pages/ProfilePage'
+import ProgressPage from './pages/ProgressPage'
 import { useAuth } from './context/AuthContext'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
@@ -46,6 +47,7 @@ function App() {
         </div>
 
         <ProfilePage />
+        <ProgressPage />
       </section>
     </main>
   )
