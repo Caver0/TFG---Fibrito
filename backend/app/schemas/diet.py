@@ -17,6 +17,10 @@ def _round_decimal(value: float | Decimal | None, precision: Decimal = NUTRITION
     return float(Decimal(str(value)).quantize(precision, rounding=ROUND_HALF_UP))
 
 
+def _calculate_difference(actual_value: float | Decimal, target_value: float | Decimal) -> float:
+    return _round_decimal(Decimal(str(actual_value)) - Decimal(str(target_value)))
+
+
 def _derive_distribution_percentages(document: dict[str, Any]) -> list[float]:
     explicit_distribution = document.get("distribution_percentages")
     if explicit_distribution:
@@ -59,6 +63,25 @@ def _calculate_food_totals(food_documents: list[dict[str, Any]]) -> dict[str, fl
     }
 
 
+def _build_difference_summary(
+    *,
+    target_calories: float,
+    target_protein_grams: float,
+    target_fat_grams: float,
+    target_carb_grams: float,
+    actual_calories: float,
+    actual_protein_grams: float,
+    actual_fat_grams: float,
+    actual_carb_grams: float,
+) -> dict[str, float]:
+    return {
+        "calorie_difference": _calculate_difference(actual_calories, target_calories),
+        "protein_difference": _calculate_difference(actual_protein_grams, target_protein_grams),
+        "fat_difference": _calculate_difference(actual_fat_grams, target_fat_grams),
+        "carb_difference": _calculate_difference(actual_carb_grams, target_carb_grams),
+    }
+
+
 def _derive_meal_actuals(document: dict[str, Any]) -> dict[str, float]:
     if all(document.get(field_name) is not None for field_name in (
         "actual_calories",
@@ -89,6 +112,32 @@ def _derive_meal_actuals(document: dict[str, Any]) -> dict[str, float]:
         "actual_fat_grams": _round_decimal(document.get("target_fat_grams")),
         "actual_carb_grams": _round_decimal(document.get("target_carb_grams")),
     }
+
+
+def _derive_meal_differences(document: dict[str, Any], actuals: dict[str, float]) -> dict[str, float]:
+    if all(document.get(field_name) is not None for field_name in (
+        "calorie_difference",
+        "protein_difference",
+        "fat_difference",
+        "carb_difference",
+    )):
+        return {
+            "calorie_difference": _round_decimal(document.get("calorie_difference")),
+            "protein_difference": _round_decimal(document.get("protein_difference")),
+            "fat_difference": _round_decimal(document.get("fat_difference")),
+            "carb_difference": _round_decimal(document.get("carb_difference")),
+        }
+
+    return _build_difference_summary(
+        target_calories=_round_decimal(document.get("target_calories")),
+        target_protein_grams=_round_decimal(document.get("target_protein_grams")),
+        target_fat_grams=_round_decimal(document.get("target_fat_grams")),
+        target_carb_grams=_round_decimal(document.get("target_carb_grams")),
+        actual_calories=actuals["actual_calories"],
+        actual_protein_grams=actuals["actual_protein_grams"],
+        actual_fat_grams=actuals["actual_fat_grams"],
+        actual_carb_grams=actuals["actual_carb_grams"],
+    )
 
 
 def _derive_food_data_source(document: dict[str, Any]) -> str:
@@ -136,6 +185,10 @@ class DietMeal(BaseModel):
     actual_protein_grams: float = Field(ge=0)
     actual_fat_grams: float = Field(ge=0)
     actual_carb_grams: float = Field(ge=0)
+    calorie_difference: float = 0.0
+    protein_difference: float = 0.0
+    fat_difference: float = 0.0
+    carb_difference: float = 0.0
     foods: list[DietFood] = Field(default_factory=list)
 
 
@@ -149,6 +202,10 @@ class DietBase(BaseModel):
     actual_protein_grams: float = Field(ge=0)
     actual_fat_grams: float = Field(ge=0)
     actual_carb_grams: float = Field(ge=0)
+    calorie_difference: float = 0.0
+    protein_difference: float = 0.0
+    fat_difference: float = 0.0
+    carb_difference: float = 0.0
     distribution_percentages: list[float] = Field(default_factory=list)
     training_time_of_day: TrainingTimeOfDay | None = None
     training_optimization_applied: bool = False
@@ -198,6 +255,7 @@ def serialize_diet_meal(
     meal_distribution_percentage = document.get("distribution_percentage", distribution_percentage)
     foods = [serialize_diet_food(food) for food in document.get("foods", [])]
     actuals = _derive_meal_actuals(document)
+    differences = _derive_meal_differences(document, actuals)
 
     return DietMeal(
         meal_number=document["meal_number"],
@@ -210,6 +268,10 @@ def serialize_diet_meal(
         actual_protein_grams=actuals["actual_protein_grams"],
         actual_fat_grams=actuals["actual_fat_grams"],
         actual_carb_grams=actuals["actual_carb_grams"],
+        calorie_difference=differences["calorie_difference"],
+        protein_difference=differences["protein_difference"],
+        fat_difference=differences["fat_difference"],
+        carb_difference=differences["carb_difference"],
         foods=foods,
     )
 
@@ -244,6 +306,32 @@ def _derive_diet_actuals(document: dict[str, Any], meals: list[DietMeal]) -> dic
     }
 
 
+def _derive_diet_differences(document: dict[str, Any], actuals: dict[str, float]) -> dict[str, float]:
+    if all(document.get(field_name) is not None for field_name in (
+        "calorie_difference",
+        "protein_difference",
+        "fat_difference",
+        "carb_difference",
+    )):
+        return {
+            "calorie_difference": _round_decimal(document.get("calorie_difference")),
+            "protein_difference": _round_decimal(document.get("protein_difference")),
+            "fat_difference": _round_decimal(document.get("fat_difference")),
+            "carb_difference": _round_decimal(document.get("carb_difference")),
+        }
+
+    return _build_difference_summary(
+        target_calories=_round_decimal(document.get("target_calories")),
+        target_protein_grams=_round_decimal(document.get("protein_grams")),
+        target_fat_grams=_round_decimal(document.get("fat_grams")),
+        target_carb_grams=_round_decimal(document.get("carb_grams")),
+        actual_calories=actuals["actual_calories"],
+        actual_protein_grams=actuals["actual_protein_grams"],
+        actual_fat_grams=actuals["actual_fat_grams"],
+        actual_carb_grams=actuals["actual_carb_grams"],
+    )
+
+
 def serialize_daily_diet(document: dict[str, Any]) -> DailyDiet:
     distribution_percentages = _derive_distribution_percentages(document)
     meals = [
@@ -254,6 +342,7 @@ def serialize_daily_diet(document: dict[str, Any]) -> DailyDiet:
         for index, meal in enumerate(document["meals"])
     ]
     actuals = _derive_diet_actuals(document, meals)
+    differences = _derive_diet_differences(document, actuals)
 
     return DailyDiet(
         id=str(document["_id"]),
@@ -267,6 +356,10 @@ def serialize_daily_diet(document: dict[str, Any]) -> DailyDiet:
         actual_protein_grams=actuals["actual_protein_grams"],
         actual_fat_grams=actuals["actual_fat_grams"],
         actual_carb_grams=actuals["actual_carb_grams"],
+        calorie_difference=differences["calorie_difference"],
+        protein_difference=differences["protein_difference"],
+        fat_difference=differences["fat_difference"],
+        carb_difference=differences["carb_difference"],
         distribution_percentages=distribution_percentages,
         training_time_of_day=document.get("training_time_of_day"),
         training_optimization_applied=document.get("training_optimization_applied", False),
@@ -280,6 +373,7 @@ def serialize_diet_list_item(document: dict[str, Any]) -> DietListItem:
     distribution_percentages = _derive_distribution_percentages(document)
     meals = [serialize_diet_meal(meal) for meal in document.get("meals", [])]
     actuals = _derive_diet_actuals(document, meals)
+    differences = _derive_diet_differences(document, actuals)
 
     return DietListItem(
         id=str(document["_id"]),
@@ -293,6 +387,10 @@ def serialize_diet_list_item(document: dict[str, Any]) -> DietListItem:
         actual_protein_grams=actuals["actual_protein_grams"],
         actual_fat_grams=actuals["actual_fat_grams"],
         actual_carb_grams=actuals["actual_carb_grams"],
+        calorie_difference=differences["calorie_difference"],
+        protein_difference=differences["protein_difference"],
+        fat_difference=differences["fat_difference"],
+        carb_difference=differences["carb_difference"],
         distribution_percentages=distribution_percentages,
         training_time_of_day=document.get("training_time_of_day"),
         training_optimization_applied=document.get("training_optimization_applied", False),

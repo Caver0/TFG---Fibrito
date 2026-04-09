@@ -19,6 +19,13 @@ function formatDietKind(diet) {
   return 'Por alimentos'
 }
 
+function formatSignedValue(value, unit = '') {
+  const numericValue = Number(value ?? 0)
+  const normalizedValue = Number.isInteger(numericValue) ? numericValue.toFixed(0) : numericValue.toFixed(1)
+  const prefix = numericValue > 0 ? '+' : ''
+  return `${prefix}${normalizedValue}${unit ? ` ${unit}` : ''}`
+}
+
 function DietHistory({
   diets,
   error,
@@ -59,6 +66,10 @@ function DietHistory({
               <div>
                 <span className="history-label">Calorias</span>
                 <strong>{diet.actual_calories} / {diet.target_calories} kcal</strong>
+              </div>
+              <div>
+                <span className="history-label">Diferencia</span>
+                <strong>{formatSignedValue(diet.calorie_difference, 'kcal')}</strong>
               </div>
               <div>
                 <span className="history-label">Entreno</span>

@@ -442,7 +442,7 @@ button {
 
 .diet-history-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.6fr) minmax(0, 0.8fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.6fr) minmax(0, 0.8fr) minmax(0, 0.8fr) minmax(0, 1fr) auto;
   gap: 16px;
   align-items: center;
   padding: 16px 18px;
@@ -500,6 +500,14 @@ button {
 
 .meal-card p {
   margin: 0 0 8px;
+  color: #5f564d;
+}
+
+.meal-difference-note {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #fffaf4;
+  border: 1px solid rgba(94, 72, 54, 0.08);
   color: #5f564d;
 }
 

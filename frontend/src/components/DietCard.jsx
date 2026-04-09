@@ -43,6 +43,13 @@ function formatFoodSource(value) {
   return value || 'No indicado'
 }
 
+function formatSignedValue(value, unit = '') {
+  const numericValue = Number(value ?? 0)
+  const normalizedValue = Number.isInteger(numericValue) ? numericValue.toFixed(0) : numericValue.toFixed(1)
+  const prefix = numericValue > 0 ? '+' : ''
+  return `${prefix}${normalizedValue}${unit ? ` ${unit}` : ''}`
+}
+
 function DietCard({ description, diet, error, isLoading, title }) {
   return (
     <section className="profile-section">
@@ -88,6 +95,16 @@ function DietCard({ description, diet, error, isLoading, title }) {
             <article className="metric-card">
               <span>Carbohidratos generados</span>
               <strong>{diet.actual_carb_grams} g</strong>
+            </article>
+            <article className="metric-card">
+              <span>Diferencia calorica</span>
+              <strong>{formatSignedValue(diet.calorie_difference, 'kcal')}</strong>
+            </article>
+            <article className="metric-card">
+              <span>Diferencia de macros</span>
+              <strong>
+                P {formatSignedValue(diet.protein_difference)} | G {formatSignedValue(diet.fat_difference)} | C {formatSignedValue(diet.carb_difference)}
+              </strong>
             </article>
             <article className="metric-card">
               <span>Distribucion usada</span>
@@ -137,6 +154,10 @@ function DietCard({ description, diet, error, isLoading, title }) {
                     <strong>{meal.actual_carb_grams} / {meal.target_carb_grams} g</strong>
                   </div>
                 </div>
+
+                <p className="meal-difference-note">
+                  Diferencia: {formatSignedValue(meal.calorie_difference, 'kcal')} | P {formatSignedValue(meal.protein_difference)} | G {formatSignedValue(meal.fat_difference)} | C {formatSignedValue(meal.carb_difference)}
+                </p>
 
                 {meal.foods?.length ? (
                   <div className="food-list">
