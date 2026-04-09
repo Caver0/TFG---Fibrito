@@ -11,6 +11,14 @@ function formatDietTimestamp(value) {
   })
 }
 
+function formatDietKind(diet) {
+  if (diet.food_data_source === 'legacy_structural') {
+    return 'Estructural antigua'
+  }
+
+  return 'Por alimentos'
+}
+
 function DietHistory({
   diets,
   error,
@@ -24,7 +32,7 @@ function DietHistory({
       <div className="section-heading">
         <span className="eyebrow">Historial de dietas</span>
         <h2>Dietas generadas</h2>
-        <p>Puedes revisar tus generaciones anteriores y abrir una dieta concreta cuando lo necesites.</p>
+        <p>Puedes revisar tus generaciones anteriores y abrir el detalle completo de cualquier dieta guardada.</p>
       </div>
 
       {isLoading ? <p className="info-note">Cargando historial de dietas...</p> : null}
@@ -45,12 +53,12 @@ function DietHistory({
                 <strong>{formatDietTimestamp(diet.created_at)}</strong>
               </div>
               <div>
-                <span className="history-label">Comidas</span>
-                <strong>{diet.meals_count}</strong>
+                <span className="history-label">Tipo</span>
+                <strong>{formatDietKind(diet)}</strong>
               </div>
               <div>
                 <span className="history-label">Calorias</span>
-                <strong>{diet.target_calories} kcal</strong>
+                <strong>{diet.actual_calories} / {diet.target_calories} kcal</strong>
               </div>
               <div>
                 <span className="history-label">Entreno</span>

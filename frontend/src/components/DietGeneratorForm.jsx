@@ -66,8 +66,8 @@ function DietGeneratorForm({ error, isGenerating, message, onGenerate }) {
     <section className="profile-section">
       <div className="section-heading">
         <span className="eyebrow">Generador de dieta</span>
-        <h2>Crea una dieta diaria base</h2>
-        <p>Partimos de una plantilla por comidas y puedes ajustarla antes de generar la estructura diaria.</p>
+        <h2>Crea una dieta diaria por alimentos</h2>
+        <p>Partimos de tu distribucion por comidas y la convertimos en alimentos reales con cantidades aproximadas.</p>
       </div>
 
       <form className="diet-form" onSubmit={handleSubmit}>
@@ -162,7 +162,7 @@ function DietGeneratorForm({ error, isGenerating, message, onGenerate }) {
           type="submit"
           disabled={isGenerating || !validation.isValid || Boolean(trainingValidationError)}
         >
-          {isGenerating ? 'Generando dieta...' : 'Generar dieta'}
+          {isGenerating ? 'Generando dieta...' : 'Generar dieta por alimentos'}
         </button>
       </form>
     </section>

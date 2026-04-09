@@ -1,4 +1,4 @@
-"""Schemas for generated daily diets."""
+"""Schemas and serialization helpers for food-based daily diets."""
 from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Literal
@@ -7,16 +7,20 @@ from pydantic import BaseModel, ConfigDict, Field
 
 TrainingTimeOfDay = Literal["manana", "mediodia", "tarde", "noche"]
 PERCENTAGE_PRECISION = Decimal("0.1")
+NUTRITION_PRECISION = Decimal("0.1")
 
 
-def _round_percentage(value: float | Decimal) -> float:
-    return float(Decimal(str(value)).quantize(PERCENTAGE_PRECISION, rounding=ROUND_HALF_UP))
+def _round_decimal(value: float | Decimal | None, precision: Decimal = NUTRITION_PRECISION) -> float:
+    if value is None:
+        value = 0.0
+
+    return float(Decimal(str(value)).quantize(precision, rounding=ROUND_HALF_UP))
 
 
 def _derive_distribution_percentages(document: dict[str, Any]) -> list[float]:
     explicit_distribution = document.get("distribution_percentages")
     if explicit_distribution:
-        return [_round_percentage(value) for value in explicit_distribution]
+        return [_round_decimal(value, PERCENTAGE_PRECISION) for value in explicit_distribution]
 
     meals = document.get("meals", [])
     total_calories = document.get("target_calories")
@@ -44,10 +48,81 @@ def _derive_distribution_percentages(document: dict[str, Any]) -> list[float]:
     return derived_percentages
 
 
+def _calculate_food_totals(food_documents: list[dict[str, Any]]) -> dict[str, float]:
+    return {
+        "calories": _round_decimal(sum(Decimal(str(food.get("calories", 0))) for food in food_documents)),
+        "protein_grams": _round_decimal(
+            sum(Decimal(str(food.get("protein_grams", 0))) for food in food_documents)
+        ),
+        "fat_grams": _round_decimal(sum(Decimal(str(food.get("fat_grams", 0))) for food in food_documents)),
+        "carb_grams": _round_decimal(sum(Decimal(str(food.get("carb_grams", 0))) for food in food_documents)),
+    }
+
+
+def _derive_meal_actuals(document: dict[str, Any]) -> dict[str, float]:
+    if all(document.get(field_name) is not None for field_name in (
+        "actual_calories",
+        "actual_protein_grams",
+        "actual_fat_grams",
+        "actual_carb_grams",
+    )):
+        return {
+            "actual_calories": _round_decimal(document.get("actual_calories")),
+            "actual_protein_grams": _round_decimal(document.get("actual_protein_grams")),
+            "actual_fat_grams": _round_decimal(document.get("actual_fat_grams")),
+            "actual_carb_grams": _round_decimal(document.get("actual_carb_grams")),
+        }
+
+    foods = document.get("foods") or []
+    if foods:
+        totals = _calculate_food_totals(foods)
+        return {
+            "actual_calories": totals["calories"],
+            "actual_protein_grams": totals["protein_grams"],
+            "actual_fat_grams": totals["fat_grams"],
+            "actual_carb_grams": totals["carb_grams"],
+        }
+
+    return {
+        "actual_calories": _round_decimal(document.get("target_calories")),
+        "actual_protein_grams": _round_decimal(document.get("target_protein_grams")),
+        "actual_fat_grams": _round_decimal(document.get("target_fat_grams")),
+        "actual_carb_grams": _round_decimal(document.get("target_carb_grams")),
+    }
+
+
+def _derive_food_data_source(document: dict[str, Any]) -> str:
+    if document.get("food_data_source"):
+        return str(document["food_data_source"])
+
+    meals = document.get("meals") or []
+    for meal in meals:
+        foods = meal.get("foods") or []
+        for food in foods:
+            if food.get("source"):
+                return str(food["source"])
+
+    return "legacy_structural"
+
+
 class DietGenerateRequest(BaseModel):
     meals_count: int = Field(ge=3, le=6)
     custom_percentages: list[float] | None = None
     training_time_of_day: TrainingTimeOfDay | None = None
+
+
+class DietFood(BaseModel):
+    food_code: str | None = None
+    source: str = "internal_catalog"
+    name: str
+    category: str
+    quantity: float = Field(gt=0)
+    unit: str
+    grams: float | None = Field(default=None, ge=0)
+    calories: float = Field(ge=0)
+    protein_grams: float = Field(ge=0)
+    fat_grams: float = Field(ge=0)
+    carb_grams: float = Field(ge=0)
 
 
 class DietMeal(BaseModel):
@@ -57,6 +132,11 @@ class DietMeal(BaseModel):
     target_protein_grams: float = Field(ge=0)
     target_fat_grams: float = Field(ge=0)
     target_carb_grams: float = Field(ge=0)
+    actual_calories: float = Field(ge=0)
+    actual_protein_grams: float = Field(ge=0)
+    actual_fat_grams: float = Field(ge=0)
+    actual_carb_grams: float = Field(ge=0)
+    foods: list[DietFood] = Field(default_factory=list)
 
 
 class DietBase(BaseModel):
@@ -65,9 +145,15 @@ class DietBase(BaseModel):
     protein_grams: float = Field(ge=0)
     fat_grams: float = Field(ge=0)
     carb_grams: float = Field(ge=0)
+    actual_calories: float = Field(ge=0)
+    actual_protein_grams: float = Field(ge=0)
+    actual_fat_grams: float = Field(ge=0)
+    actual_carb_grams: float = Field(ge=0)
     distribution_percentages: list[float] = Field(default_factory=list)
     training_time_of_day: TrainingTimeOfDay | None = None
     training_optimization_applied: bool = False
+    food_data_source: str = "internal_catalog"
+    food_catalog_version: str | None = None
 
 
 class DailyDiet(DietBase):
@@ -89,19 +175,73 @@ class DietListResponse(BaseModel):
     diets: list[DietListItem]
 
 
+def serialize_diet_food(document: dict[str, Any]) -> DietFood:
+    return DietFood(
+        food_code=document.get("food_code") or document.get("code"),
+        source=document.get("source", "internal_catalog"),
+        name=document["name"],
+        category=document.get("category", "otros"),
+        quantity=_round_decimal(document["quantity"]),
+        unit=document["unit"],
+        grams=_round_decimal(document["grams"]) if document.get("grams") is not None else None,
+        calories=_round_decimal(document.get("calories")),
+        protein_grams=_round_decimal(document.get("protein_grams")),
+        fat_grams=_round_decimal(document.get("fat_grams")),
+        carb_grams=_round_decimal(document.get("carb_grams")),
+    )
+
+
 def serialize_diet_meal(
     document: dict[str, Any],
     distribution_percentage: float | None = None,
 ) -> DietMeal:
     meal_distribution_percentage = document.get("distribution_percentage", distribution_percentage)
+    foods = [serialize_diet_food(food) for food in document.get("foods", [])]
+    actuals = _derive_meal_actuals(document)
+
     return DietMeal(
         meal_number=document["meal_number"],
         distribution_percentage=meal_distribution_percentage,
-        target_calories=document["target_calories"],
-        target_protein_grams=document["target_protein_grams"],
-        target_fat_grams=document["target_fat_grams"],
-        target_carb_grams=document["target_carb_grams"],
+        target_calories=_round_decimal(document["target_calories"]),
+        target_protein_grams=_round_decimal(document["target_protein_grams"]),
+        target_fat_grams=_round_decimal(document["target_fat_grams"]),
+        target_carb_grams=_round_decimal(document["target_carb_grams"]),
+        actual_calories=actuals["actual_calories"],
+        actual_protein_grams=actuals["actual_protein_grams"],
+        actual_fat_grams=actuals["actual_fat_grams"],
+        actual_carb_grams=actuals["actual_carb_grams"],
+        foods=foods,
     )
+
+
+def _derive_diet_actuals(document: dict[str, Any], meals: list[DietMeal]) -> dict[str, float]:
+    if all(document.get(field_name) is not None for field_name in (
+        "actual_calories",
+        "actual_protein_grams",
+        "actual_fat_grams",
+        "actual_carb_grams",
+    )):
+        return {
+            "actual_calories": _round_decimal(document.get("actual_calories")),
+            "actual_protein_grams": _round_decimal(document.get("actual_protein_grams")),
+            "actual_fat_grams": _round_decimal(document.get("actual_fat_grams")),
+            "actual_carb_grams": _round_decimal(document.get("actual_carb_grams")),
+        }
+
+    if meals:
+        return {
+            "actual_calories": _round_decimal(sum(meal.actual_calories for meal in meals)),
+            "actual_protein_grams": _round_decimal(sum(meal.actual_protein_grams for meal in meals)),
+            "actual_fat_grams": _round_decimal(sum(meal.actual_fat_grams for meal in meals)),
+            "actual_carb_grams": _round_decimal(sum(meal.actual_carb_grams for meal in meals)),
+        }
+
+    return {
+        "actual_calories": _round_decimal(document.get("target_calories")),
+        "actual_protein_grams": _round_decimal(document.get("protein_grams")),
+        "actual_fat_grams": _round_decimal(document.get("fat_grams")),
+        "actual_carb_grams": _round_decimal(document.get("carb_grams")),
+    }
 
 
 def serialize_daily_diet(document: dict[str, Any]) -> DailyDiet:
@@ -113,33 +253,49 @@ def serialize_daily_diet(document: dict[str, Any]) -> DailyDiet:
         )
         for index, meal in enumerate(document["meals"])
     ]
+    actuals = _derive_diet_actuals(document, meals)
 
     return DailyDiet(
         id=str(document["_id"]),
         created_at=document["created_at"],
         meals_count=document["meals_count"],
-        target_calories=document["target_calories"],
-        protein_grams=document["protein_grams"],
-        fat_grams=document["fat_grams"],
-        carb_grams=document["carb_grams"],
+        target_calories=_round_decimal(document["target_calories"]),
+        protein_grams=_round_decimal(document["protein_grams"]),
+        fat_grams=_round_decimal(document["fat_grams"]),
+        carb_grams=_round_decimal(document["carb_grams"]),
+        actual_calories=actuals["actual_calories"],
+        actual_protein_grams=actuals["actual_protein_grams"],
+        actual_fat_grams=actuals["actual_fat_grams"],
+        actual_carb_grams=actuals["actual_carb_grams"],
         distribution_percentages=distribution_percentages,
         training_time_of_day=document.get("training_time_of_day"),
         training_optimization_applied=document.get("training_optimization_applied", False),
+        food_data_source=_derive_food_data_source(document),
+        food_catalog_version=document.get("food_catalog_version"),
         meals=meals,
     )
 
 
 def serialize_diet_list_item(document: dict[str, Any]) -> DietListItem:
     distribution_percentages = _derive_distribution_percentages(document)
+    meals = [serialize_diet_meal(meal) for meal in document.get("meals", [])]
+    actuals = _derive_diet_actuals(document, meals)
+
     return DietListItem(
         id=str(document["_id"]),
         created_at=document["created_at"],
         meals_count=document["meals_count"],
-        target_calories=document["target_calories"],
-        protein_grams=document["protein_grams"],
-        fat_grams=document["fat_grams"],
-        carb_grams=document["carb_grams"],
+        target_calories=_round_decimal(document["target_calories"]),
+        protein_grams=_round_decimal(document["protein_grams"]),
+        fat_grams=_round_decimal(document["fat_grams"]),
+        carb_grams=_round_decimal(document["carb_grams"]),
+        actual_calories=actuals["actual_calories"],
+        actual_protein_grams=actuals["actual_protein_grams"],
+        actual_fat_grams=actuals["actual_fat_grams"],
+        actual_carb_grams=actuals["actual_carb_grams"],
         distribution_percentages=distribution_percentages,
         training_time_of_day=document.get("training_time_of_day"),
         training_optimization_applied=document.get("training_optimization_applied", False),
+        food_data_source=_derive_food_data_source(document),
+        food_catalog_version=document.get("food_catalog_version"),
     )

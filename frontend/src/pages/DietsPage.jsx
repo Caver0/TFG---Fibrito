@@ -93,7 +93,7 @@ function DietsPage() {
       setLatestDiet(createdDiet)
       setSelectedDiet(createdDiet)
       await loadDietHistory(token)
-      setGenerateMessage('Dieta diaria generada y guardada correctamente.')
+      setGenerateMessage('Dieta diaria por alimentos generada y guardada correctamente.')
       return true
     } catch (error) {
       setGenerateError(error.message)
@@ -132,7 +132,7 @@ function DietsPage() {
         />
         <DietCard
           title="Ultima dieta disponible"
-          description="Mostramos la ultima dieta generada o la que selecciones desde el historial."
+          description="Mostramos la ultima dieta generada o la que selecciones desde el historial, ya convertida en alimentos y cantidades."
           diet={selectedDiet ?? latestDiet}
           error={selectedDietError || latestDietError}
           isLoading={isLatestDietLoading || Boolean(viewingDietId)}

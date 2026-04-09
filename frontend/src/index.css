@@ -486,15 +486,69 @@ button {
   border-radius: 18px;
   padding: 18px;
   background: #fff4e7;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .meal-card-header {
-  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
 }
 
 .meal-card p {
   margin: 0 0 8px;
   color: #5f564d;
+}
+
+.meal-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.meal-summary-item,
+.food-row {
+  border-radius: 16px;
+  background: #fffaf4;
+  border: 1px solid rgba(94, 72, 54, 0.08);
+  padding: 14px 16px;
+}
+
+.meal-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.meal-summary-item span,
+.food-row-meta {
+  color: #6b6258;
+}
+
+.food-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.food-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.food-row-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.food-row-meta {
+  margin: 0;
 }
 
 @media (max-width: 900px) {
@@ -519,6 +573,7 @@ button {
   .weight-form,
   .diet-form,
   .nutrition-grid,
+  .meal-summary-grid,
   .history-row,
   .weekly-average-row,
   .diet-history-row,

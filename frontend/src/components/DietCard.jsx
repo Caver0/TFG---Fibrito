@@ -19,6 +19,30 @@ function formatDistribution(percentages) {
   return percentages.map((value) => `${value}%`).join(' / ')
 }
 
+function formatFoodQuantity(food) {
+  const quantity = Number.isInteger(food.quantity) ? food.quantity.toFixed(0) : String(food.quantity)
+  const unit = food.unit === 'unidad' ? (food.quantity === 1 ? 'unidad' : 'unidades') : food.unit
+  const quantityLabel = `${quantity} ${unit}`
+
+  if (!food.grams || food.unit === 'g') {
+    return quantityLabel
+  }
+
+  return `${quantityLabel} (${food.grams} g aprox.)`
+}
+
+function formatFoodSource(value) {
+  if (value === 'legacy_structural') {
+    return 'Dieta estructural antigua'
+  }
+
+  if (value === 'internal_catalog') {
+    return 'Catalogo interno'
+  }
+
+  return value || 'No indicado'
+}
+
 function DietCard({ description, diet, error, isLoading, title }) {
   return (
     <section className="profile-section">
@@ -46,24 +70,32 @@ function DietCard({ description, diet, error, isLoading, title }) {
               <strong>{diet.meals_count}</strong>
             </article>
             <article className="metric-card">
-              <span>Calorias totales</span>
+              <span>Calorias generadas</span>
+              <strong>{diet.actual_calories} kcal</strong>
+            </article>
+            <article className="metric-card">
+              <span>Objetivo diario</span>
               <strong>{diet.target_calories} kcal</strong>
             </article>
             <article className="metric-card">
-              <span>Proteina total</span>
-              <strong>{diet.protein_grams} g</strong>
+              <span>Proteina generada</span>
+              <strong>{diet.actual_protein_grams} g</strong>
             </article>
             <article className="metric-card">
-              <span>Grasas totales</span>
-              <strong>{diet.fat_grams} g</strong>
+              <span>Grasas generadas</span>
+              <strong>{diet.actual_fat_grams} g</strong>
             </article>
             <article className="metric-card">
-              <span>Carbohidratos totales</span>
-              <strong>{diet.carb_grams} g</strong>
+              <span>Carbohidratos generados</span>
+              <strong>{diet.actual_carb_grams} g</strong>
             </article>
             <article className="metric-card">
               <span>Distribucion usada</span>
               <strong>{formatDistribution(diet.distribution_percentages)}</strong>
+            </article>
+            <article className="metric-card">
+              <span>Fuente de alimentos</span>
+              <strong>{formatFoodSource(diet.food_data_source)}</strong>
             </article>
             <article className="metric-card">
               <span>Optimizacion por entreno</span>
@@ -73,6 +105,10 @@ function DietCard({ description, diet, error, isLoading, title }) {
               <span>Momento de entreno</span>
               <strong>{formatTrainingTimeOfDay(diet.training_time_of_day)}</strong>
             </article>
+            <article className="metric-card">
+              <span>Version del catalogo</span>
+              <strong>{diet.food_catalog_version ?? 'No aplica'}</strong>
+            </article>
           </div>
 
           <div className="meal-list">
@@ -80,12 +116,45 @@ function DietCard({ description, diet, error, isLoading, title }) {
               <article key={meal.meal_number} className="meal-card">
                 <div className="meal-card-header">
                   <strong>Comida {meal.meal_number}</strong>
+                  <span>{meal.distribution_percentage ?? 'Sin dato'}%</span>
                 </div>
-                <p>Porcentaje usado: {meal.distribution_percentage ?? 'Sin dato'}%</p>
-                <p>Calorias objetivo: {meal.target_calories} kcal</p>
-                <p>Proteina objetivo: {meal.target_protein_grams} g</p>
-                <p>Grasas objetivo: {meal.target_fat_grams} g</p>
-                <p>Carbohidratos objetivo: {meal.target_carb_grams} g</p>
+
+                <div className="meal-summary-grid">
+                  <div className="meal-summary-item">
+                    <span>Calorias</span>
+                    <strong>{meal.actual_calories} / {meal.target_calories} kcal</strong>
+                  </div>
+                  <div className="meal-summary-item">
+                    <span>Proteina</span>
+                    <strong>{meal.actual_protein_grams} / {meal.target_protein_grams} g</strong>
+                  </div>
+                  <div className="meal-summary-item">
+                    <span>Grasas</span>
+                    <strong>{meal.actual_fat_grams} / {meal.target_fat_grams} g</strong>
+                  </div>
+                  <div className="meal-summary-item">
+                    <span>Carbohidratos</span>
+                    <strong>{meal.actual_carb_grams} / {meal.target_carb_grams} g</strong>
+                  </div>
+                </div>
+
+                {meal.foods?.length ? (
+                  <div className="food-list">
+                    {meal.foods.map((food) => (
+                      <article key={`${meal.meal_number}-${food.food_code ?? food.name}`} className="food-row">
+                        <div className="food-row-header">
+                          <strong>{food.name}</strong>
+                          <span>{formatFoodQuantity(food)}</span>
+                        </div>
+                        <p className="food-row-meta">
+                          {food.calories} kcal | P {food.protein_grams} g | G {food.fat_grams} g | C {food.carb_grams} g
+                        </p>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="info-note">Esta dieta no tiene alimentos concretos guardados.</p>
+                )}
               </article>
             ))}
           </div>

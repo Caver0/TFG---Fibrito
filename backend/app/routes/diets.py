@@ -1,4 +1,4 @@
-"""Routes for generating and retrieving user diets."""
+"""Routes for generating and retrieving user food-based diets."""
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.database import get_database
@@ -6,7 +6,7 @@ from app.core.security import get_current_user
 from app.schemas.diet import DailyDiet, DietGenerateRequest, DietListResponse
 from app.schemas.user import UserPublic
 from app.services.diet_service import (
-    generate_daily_diet,
+    generate_food_based_diet,
     get_latest_user_diet,
     get_user_diet_by_id,
     list_user_diets,
@@ -25,7 +25,7 @@ def create_daily_diet(
     database = get_database()
 
     try:
-        diet_payload = generate_daily_diet(
+        diet_payload = generate_food_based_diet(
             current_user,
             payload.meals_count,
             custom_percentages=payload.custom_percentages,
