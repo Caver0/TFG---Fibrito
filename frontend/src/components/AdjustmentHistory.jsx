@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   formatDirectionStatus,
   formatProgressMetric,
@@ -5,12 +6,26 @@ import {
 } from '../utils/progressFormat'
 
 function AdjustmentHistory({ entries, error, isLoading }) {
+  const [isExpanded, setIsExpanded] = useState(false)
+
   return (
     <section className="profile-section">
-      <div className="section-heading">
-        <span className="eyebrow">Historial de ajustes</span>
-        <h2>Analisis realizados</h2>
-        <p>Cada registro explica el cambio semanal detectado y si se ajustaron o no las calorias.</p>
+      <div className="collapsible-section-header">
+        <div className="section-heading">
+          <span className="eyebrow">Historial de ajustes</span>
+          <h2>Analisis realizados</h2>
+          <p>Cada registro explica el cambio semanal detectado y si se ajustaron o no las calorias.</p>
+        </div>
+
+        {entries.length > 0 ? (
+          <button
+            type="button"
+            className="secondary-button collapsible-toggle"
+            onClick={() => setIsExpanded((currentValue) => !currentValue)}
+          >
+            {isExpanded ? 'Ocultar historial' : `Ver historial (${entries.length})`}
+          </button>
+        ) : null}
       </div>
 
       {isLoading ? <p className="info-note">Cargando historial de ajustes...</p> : null}
@@ -19,7 +34,7 @@ function AdjustmentHistory({ entries, error, isLoading }) {
         <p className="info-note">Todavia no se ha guardado ningun analisis semanal.</p>
       ) : null}
 
-      {!isLoading && !error && entries.length > 0 ? (
+      {!isLoading && !error && entries.length > 0 && isExpanded ? (
         <div className="adjustment-history-list">
           {entries.map((entry) => (
             <article key={entry.id} className="adjustment-card">

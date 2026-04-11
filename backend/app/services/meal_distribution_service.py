@@ -25,6 +25,10 @@ TRAINING_TIME_POSITIONS = {
 }
 
 
+def calculate_macro_calories(protein_grams: float, fat_grams: float, carb_grams: float) -> float:
+    return (protein_grams * 4.0) + (fat_grams * 9.0) + (carb_grams * 4.0)
+
+
 def round_distribution_value(value: float | Decimal) -> float:
     return float(Decimal(str(value)).quantize(DIET_PRECISION, rounding=ROUND_HALF_UP))
 
@@ -264,18 +268,28 @@ def distribute_macros_across_meals(
             carb_target = max(carb_target, Decimal("0.0"))
 
         remaining_carb_grams -= carb_target
+        rounded_protein_target = round_distribution_value(float(protein_target))
+        rounded_fat_target = round_distribution_value(float(fat_target))
+        rounded_carb_target = round_distribution_value(float(carb_target))
+        rounded_target_calories = round_distribution_value(
+            calculate_macro_calories(
+                rounded_protein_target,
+                rounded_fat_target,
+                rounded_carb_target,
+            )
+        )
         meals.append(
             DietMeal(
                 meal_number=meal["meal_number"],
                 distribution_percentage=meal["distribution_percentage"],
-                target_calories=meal["target_calories"],
-                target_protein_grams=float(protein_target),
-                target_fat_grams=float(fat_target),
-                target_carb_grams=float(carb_target),
-                actual_calories=round_distribution_value(meal["target_calories"]),
-                actual_protein_grams=round_distribution_value(float(protein_target)),
-                actual_fat_grams=round_distribution_value(float(fat_target)),
-                actual_carb_grams=round_distribution_value(float(carb_target)),
+                target_calories=rounded_target_calories,
+                target_protein_grams=rounded_protein_target,
+                target_fat_grams=rounded_fat_target,
+                target_carb_grams=rounded_carb_target,
+                actual_calories=rounded_target_calories,
+                actual_protein_grams=rounded_protein_target,
+                actual_fat_grams=rounded_fat_target,
+                actual_carb_grams=rounded_carb_target,
                 calorie_difference=0.0,
                 protein_difference=0.0,
                 fat_difference=0.0,
@@ -320,18 +334,22 @@ def generate_meal_distribution_targets(
         training_optimization_applied=training_optimization_applied,
         focus_indexes=focus_indexes,
     )
+    target_calories = round_distribution_value(sum(meal.target_calories for meal in meals))
+    target_protein_grams = round_distribution_value(sum(meal.target_protein_grams for meal in meals))
+    target_fat_grams = round_distribution_value(sum(meal.target_fat_grams for meal in meals))
+    target_carb_grams = round_distribution_value(sum(meal.target_carb_grams for meal in meals))
 
     return (
         {
             "meals_count": meals_count,
-            "target_calories": nutrition.target_calories,
-            "protein_grams": nutrition.protein_grams,
-            "fat_grams": nutrition.fat_grams,
-            "carb_grams": nutrition.carb_grams,
-            "actual_calories": nutrition.target_calories,
-            "actual_protein_grams": nutrition.protein_grams,
-            "actual_fat_grams": nutrition.fat_grams,
-            "actual_carb_grams": nutrition.carb_grams,
+            "target_calories": target_calories,
+            "protein_grams": target_protein_grams,
+            "fat_grams": target_fat_grams,
+            "carb_grams": target_carb_grams,
+            "actual_calories": target_calories,
+            "actual_protein_grams": target_protein_grams,
+            "actual_fat_grams": target_fat_grams,
+            "actual_carb_grams": target_carb_grams,
             "calorie_difference": 0.0,
             "protein_difference": 0.0,
             "fat_difference": 0.0,

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { formatTrainingTimeOfDay } from '../utils/dietDistribution'
 
 function formatDietTimestamp(value) {
@@ -19,6 +20,10 @@ function formatDietKind(diet) {
   return 'Por alimentos'
 }
 
+function formatNumber(value, decimals = 1) {
+  return Number(value ?? 0).toFixed(decimals)
+}
+
 function formatSignedValue(value, unit = '') {
   const numericValue = Number(value ?? 0)
   const normalizedValue = Number.isInteger(numericValue) ? numericValue.toFixed(0) : numericValue.toFixed(1)
@@ -34,12 +39,26 @@ function DietHistory({
   selectedDietId,
   viewingDietId,
 }) {
+  const [isExpanded, setIsExpanded] = useState(false)
+
   return (
     <section className="profile-section">
-      <div className="section-heading">
-        <span className="eyebrow">Historial de dietas</span>
-        <h2>Dietas generadas</h2>
-        <p>Puedes revisar tus generaciones anteriores y abrir el detalle completo de cualquier dieta guardada.</p>
+      <div className="collapsible-section-header">
+        <div className="section-heading">
+          <span className="eyebrow">Historial de dietas</span>
+          <h2>Dietas generadas</h2>
+          <p>Puedes revisar tus generaciones anteriores y abrir el detalle completo de cualquier dieta guardada.</p>
+        </div>
+
+        {diets.length > 0 ? (
+          <button
+            type="button"
+            className="secondary-button collapsible-toggle"
+            onClick={() => setIsExpanded((currentValue) => !currentValue)}
+          >
+            {isExpanded ? 'Ocultar historial' : `Ver historial (${diets.length})`}
+          </button>
+        ) : null}
       </div>
 
       {isLoading ? <p className="info-note">Cargando historial de dietas...</p> : null}
@@ -48,7 +67,7 @@ function DietHistory({
         <p className="info-note">Todavia no has generado ninguna dieta diaria.</p>
       ) : null}
 
-      {!isLoading && !error && diets.length > 0 ? (
+      {!isLoading && !error && diets.length > 0 && isExpanded ? (
         <div className="diet-history-list">
           {diets.map((diet) => (
             <article
@@ -65,7 +84,7 @@ function DietHistory({
               </div>
               <div>
                 <span className="history-label">Calorias</span>
-                <strong>{diet.actual_calories} / {diet.target_calories} kcal</strong>
+                <strong>{formatNumber(diet.actual_calories)} / {formatNumber(diet.target_calories)} kcal</strong>
               </div>
               <div>
                 <span className="history-label">Diferencia</span>

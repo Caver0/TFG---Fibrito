@@ -2,6 +2,7 @@ import { useState } from 'react'
 import DietsPage from './pages/DietsPage'
 import ProfilePage from './pages/ProfilePage'
 import ProgressPage from './pages/ProgressPage'
+import SidebarMenu from './components/SidebarMenu'
 import { useAuth } from './context/AuthContext'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
@@ -34,24 +35,30 @@ function App() {
 
   return (
     <main className="app-shell app-shell-wide">
-      <section className="card dashboard-card">
-        <div className="dashboard-header">
-          <div>
-            <span className="eyebrow">Sesion activa</span>
-            <h1>Perfil de {user.name}</h1>
-            <p className="profile-email">{user.email}</p>
-            <p className="profile-email">Planifica nutricion, progreso y dieta diaria por alimentos en un mismo panel.</p>
+      <div className="dashboard-layout">
+        <SidebarMenu onLogout={logout} />
+
+        <section className="card dashboard-card">
+          <div className="dashboard-header">
+            <div>
+              <span className="eyebrow">Sesion activa</span>
+              <h1>Perfil de {user.name}</h1>
+              <p className="profile-email">{user.email}</p>
+              <p className="profile-email">Planifica nutricion, progreso y dieta diaria por alimentos en un mismo panel.</p>
+            </div>
           </div>
 
-          <button type="button" className="secondary-button" onClick={logout}>
-            Cerrar sesion
-          </button>
-        </div>
+          <section id="panel-perfil" className="dashboard-scroll-section">
+            <ProfilePage />
+          </section>
 
-        <ProfilePage />
-        <ProgressPage />
-        <DietsPage />
-      </section>
+          <ProgressPage />
+
+          <section id="panel-generar-dietas" className="dashboard-scroll-section">
+            <DietsPage />
+          </section>
+        </section>
+      </div>
     </main>
   )
 }

@@ -19,16 +19,23 @@ function formatDistribution(percentages) {
   return percentages.map((value) => `${value}%`).join(' / ')
 }
 
+function formatNumber(value, decimals = 1) {
+  return Number(value ?? 0).toFixed(decimals)
+}
+
 function formatFoodQuantity(food) {
-  const quantity = Number.isInteger(food.quantity) ? food.quantity.toFixed(0) : String(food.quantity)
-  const unit = food.unit === 'unidad' ? (food.quantity === 1 ? 'unidad' : 'unidades') : food.unit
-  const quantityLabel = `${quantity} ${unit}`
+  const quantity = Number(food.quantity ?? 0)
+  const quantityLabel = Number.isInteger(quantity)
+    ? quantity.toFixed(0)
+    : quantity.toFixed(quantity < 1 ? 2 : 1)
+  const unit = food.unit === 'unidad' ? (quantity === 1 ? 'unidad' : 'unidades') : food.unit
+  const baseLabel = `${quantityLabel} ${unit}`
 
   if (!food.grams || food.unit === 'g') {
-    return quantityLabel
+    return baseLabel
   }
 
-  return `${quantityLabel} (${food.grams} g aprox.)`
+  return `${baseLabel} (${formatNumber(food.grams, 1)} g aprox.)`
 }
 
 function formatFoodSource(value) {
@@ -41,13 +48,6 @@ function formatFoodSource(value) {
   }
 
   return value || 'No indicado'
-}
-
-function formatSignedValue(value, unit = '') {
-  const numericValue = Number(value ?? 0)
-  const normalizedValue = Number.isInteger(numericValue) ? numericValue.toFixed(0) : numericValue.toFixed(1)
-  const prefix = numericValue > 0 ? '+' : ''
-  return `${prefix}${normalizedValue}${unit ? ` ${unit}` : ''}`
 }
 
 function DietCard({ description, diet, error, isLoading, title }) {
@@ -78,33 +78,27 @@ function DietCard({ description, diet, error, isLoading, title }) {
             </article>
             <article className="metric-card">
               <span>Calorias generadas</span>
-              <strong>{diet.actual_calories} kcal</strong>
+              <strong>{formatNumber(diet.actual_calories)} kcal</strong>
             </article>
             <article className="metric-card">
               <span>Objetivo diario</span>
-              <strong>{diet.target_calories} kcal</strong>
+              <strong>{formatNumber(diet.target_calories)} kcal</strong>
             </article>
             <article className="metric-card">
               <span>Proteina generada</span>
-              <strong>{diet.actual_protein_grams} g</strong>
+              <strong>{formatNumber(diet.actual_protein_grams)} g</strong>
             </article>
             <article className="metric-card">
               <span>Grasas generadas</span>
-              <strong>{diet.actual_fat_grams} g</strong>
+              <strong>{formatNumber(diet.actual_fat_grams)} g</strong>
             </article>
             <article className="metric-card">
               <span>Carbohidratos generados</span>
-              <strong>{diet.actual_carb_grams} g</strong>
+              <strong>{formatNumber(diet.actual_carb_grams)} g</strong>
             </article>
             <article className="metric-card">
               <span>Diferencia calorica</span>
-              <strong>{formatSignedValue(diet.calorie_difference, 'kcal')}</strong>
-            </article>
-            <article className="metric-card">
-              <span>Diferencia de macros</span>
-              <strong>
-                P {formatSignedValue(diet.protein_difference)} | G {formatSignedValue(diet.fat_difference)} | C {formatSignedValue(diet.carb_difference)}
-              </strong>
+              <strong>{formatNumber(diet.calorie_difference)} kcal</strong>
             </article>
             <article className="metric-card">
               <span>Distribucion usada</span>
@@ -139,25 +133,21 @@ function DietCard({ description, diet, error, isLoading, title }) {
                 <div className="meal-summary-grid">
                   <div className="meal-summary-item">
                     <span>Calorias</span>
-                    <strong>{meal.actual_calories} / {meal.target_calories} kcal</strong>
+                    <strong>{formatNumber(meal.actual_calories)} / {formatNumber(meal.target_calories)} kcal</strong>
                   </div>
                   <div className="meal-summary-item">
                     <span>Proteina</span>
-                    <strong>{meal.actual_protein_grams} / {meal.target_protein_grams} g</strong>
+                    <strong>{formatNumber(meal.actual_protein_grams)} / {formatNumber(meal.target_protein_grams)} g</strong>
                   </div>
                   <div className="meal-summary-item">
                     <span>Grasas</span>
-                    <strong>{meal.actual_fat_grams} / {meal.target_fat_grams} g</strong>
+                    <strong>{formatNumber(meal.actual_fat_grams)} / {formatNumber(meal.target_fat_grams)} g</strong>
                   </div>
                   <div className="meal-summary-item">
                     <span>Carbohidratos</span>
-                    <strong>{meal.actual_carb_grams} / {meal.target_carb_grams} g</strong>
+                    <strong>{formatNumber(meal.actual_carb_grams)} / {formatNumber(meal.target_carb_grams)} g</strong>
                   </div>
                 </div>
-
-                <p className="meal-difference-note">
-                  Diferencia: {formatSignedValue(meal.calorie_difference, 'kcal')} | P {formatSignedValue(meal.protein_difference)} | G {formatSignedValue(meal.fat_difference)} | C {formatSignedValue(meal.carb_difference)}
-                </p>
 
                 {meal.foods?.length ? (
                   <div className="food-list">
@@ -168,7 +158,7 @@ function DietCard({ description, diet, error, isLoading, title }) {
                           <span>{formatFoodQuantity(food)}</span>
                         </div>
                         <p className="food-row-meta">
-                          {food.calories} kcal | P {food.protein_grams} g | G {food.fat_grams} g | C {food.carb_grams} g
+                          {formatNumber(food.calories, 2)} kcal | P {formatNumber(food.protein_grams, 2)} g | G {formatNumber(food.fat_grams, 2)} g | C {formatNumber(food.carb_grams, 2)} g
                         </p>
                       </article>
                     ))}

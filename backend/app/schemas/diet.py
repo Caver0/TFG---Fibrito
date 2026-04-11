@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 TrainingTimeOfDay = Literal["manana", "mediodia", "tarde", "noche"]
 PERCENTAGE_PRECISION = Decimal("0.1")
 NUTRITION_PRECISION = Decimal("0.1")
+FOOD_PRECISION = Decimal("0.01")
 
 
 def _round_decimal(value: float | Decimal | None, precision: Decimal = NUTRITION_PRECISION) -> float:
@@ -238,13 +239,13 @@ def serialize_diet_food(document: dict[str, Any]) -> DietFood:
         source=document.get("source", "internal_catalog"),
         name=document["name"],
         category=document.get("category", "otros"),
-        quantity=_round_decimal(document["quantity"]),
+        quantity=_round_decimal(document["quantity"], FOOD_PRECISION),
         unit=document["unit"],
-        grams=_round_decimal(document["grams"]) if document.get("grams") is not None else None,
-        calories=_round_decimal(document.get("calories")),
-        protein_grams=_round_decimal(document.get("protein_grams")),
-        fat_grams=_round_decimal(document.get("fat_grams")),
-        carb_grams=_round_decimal(document.get("carb_grams")),
+        grams=_round_decimal(document["grams"], FOOD_PRECISION) if document.get("grams") is not None else None,
+        calories=_round_decimal(document.get("calories"), FOOD_PRECISION),
+        protein_grams=_round_decimal(document.get("protein_grams"), FOOD_PRECISION),
+        fat_grams=_round_decimal(document.get("fat_grams"), FOOD_PRECISION),
+        carb_grams=_round_decimal(document.get("carb_grams"), FOOD_PRECISION),
     )
 
 

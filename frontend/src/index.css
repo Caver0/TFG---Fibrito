@@ -6,6 +6,10 @@
     linear-gradient(180deg, #fff7ef 0%, #f6f1e8 100%);
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -34,7 +38,8 @@ button {
 }
 
 .app-shell-wide {
-  align-items: start;
+  display: block;
+  padding: 24px;
 }
 
 .card,
@@ -49,10 +54,19 @@ button {
 }
 
 .dashboard-card {
-  width: min(100%, 1080px);
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 28px;
+}
+
+.dashboard-layout {
+  width: min(100%, 1460px);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
 }
 
 .dashboard-header {
@@ -60,6 +74,10 @@ button {
   justify-content: space-between;
   align-items: flex-start;
   gap: 20px;
+}
+
+.dashboard-scroll-section {
+  scroll-margin-top: 28px;
 }
 
 .dashboard-header h1,
@@ -102,6 +120,12 @@ button {
 }
 
 .progress-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.progress-section {
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -262,6 +286,102 @@ button {
   font-size: 1rem;
 }
 
+.sidebar-menu {
+  position: sticky;
+  top: 24px;
+  width: 100%;
+  align-self: start;
+}
+
+.sidebar-menu-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  max-height: calc(100vh - 48px);
+  padding: 28px 22px;
+  border-radius: 24px;
+  background: rgba(255, 250, 244, 0.98);
+  border: 1px solid rgba(94, 72, 54, 0.18);
+  box-shadow: 0 24px 60px rgba(73, 54, 39, 0.12);
+  overflow: auto;
+}
+
+.sidebar-menu-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sidebar-menu-heading h2 {
+  margin: 0;
+  font-size: 1.9rem;
+  line-height: 1;
+}
+
+.sidebar-menu-heading p {
+  margin: 0;
+  color: #5f564d;
+}
+
+.sidebar-menu-links {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sidebar-menu-link {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 20px;
+  text-decoration: none;
+  color: #3f372f;
+  background: #f4eadf;
+  border: 1px solid rgba(94, 72, 54, 0.1);
+  transition: transform 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.sidebar-menu-link:hover {
+  transform: translateY(-1px);
+  background: #eadbc9;
+}
+
+.sidebar-menu-link-active {
+  background: #1c1a17;
+  color: #fff8f1;
+  box-shadow: 0 14px 28px rgba(28, 26, 23, 0.18);
+}
+
+.sidebar-menu-link-line {
+  width: 42px;
+  height: 4px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.9;
+  flex-shrink: 0;
+}
+
+.sidebar-menu-link-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-menu-link-copy strong {
+  font-size: 1rem;
+}
+
+.sidebar-menu-link-copy small {
+  color: inherit;
+  opacity: 0.72;
+}
+
+.sidebar-menu-logout {
+  width: 100%;
+  margin-top: auto;
+}
+
 .nutrition-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -292,6 +412,17 @@ button {
   gap: 12px;
   color: #5f564d;
   font-size: 0.95rem;
+}
+
+.collapsible-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.collapsible-toggle {
+  flex-shrink: 0;
 }
 
 .weekly-averages-list,
@@ -503,14 +634,6 @@ button {
   color: #5f564d;
 }
 
-.meal-difference-note {
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: #fffaf4;
-  border: 1px solid rgba(94, 72, 54, 0.08);
-  color: #5f564d;
-}
-
 .meal-summary-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -560,9 +683,24 @@ button {
 }
 
 @media (max-width: 900px) {
+  .dashboard-layout,
   .profile-page,
   .progress-grid {
     grid-template-columns: 1fr;
+  }
+
+  .sidebar-menu {
+    position: static;
+    top: auto;
+  }
+
+  .dashboard-layout {
+    gap: 24px;
+  }
+
+  .sidebar-menu-panel {
+    max-height: none;
+    overflow: visible;
   }
 }
 
@@ -574,6 +712,10 @@ button {
   }
 
   .dashboard-header {
+    flex-direction: column;
+  }
+
+  .collapsible-section-header {
     flex-direction: column;
   }
 
@@ -592,5 +734,13 @@ button {
   .distribution-card-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .sidebar-menu-panel {
+    padding: 22px 18px;
+  }
+
+  .sidebar-menu-links {
+    gap: 10px;
   }
 }

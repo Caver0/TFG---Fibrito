@@ -1,6 +1,6 @@
 """Small internal food catalog used to validate food-based diet generation."""
 
-CATALOG_VERSION = "internal-v1"
+CATALOG_VERSION = "internal-v2"
 
 FOOD_CATALOG = (
     {
@@ -128,7 +128,7 @@ FOOD_CATALOG = (
         "carb_grams": 28.0,
         "default_quantity": 150.0,
         "min_quantity": 60.0,
-        "max_quantity": 600.0,
+        "max_quantity": 900.0,
         "step": 10.0,
     },
     {
@@ -144,7 +144,7 @@ FOOD_CATALOG = (
         "carb_grams": 30.9,
         "default_quantity": 140.0,
         "min_quantity": 60.0,
-        "max_quantity": 500.0,
+        "max_quantity": 800.0,
         "step": 10.0,
     },
     {
@@ -192,7 +192,7 @@ FOOD_CATALOG = (
         "carb_grams": 20.0,
         "default_quantity": 180.0,
         "min_quantity": 100.0,
-        "max_quantity": 650.0,
+        "max_quantity": 900.0,
         "step": 10.0,
     },
     {

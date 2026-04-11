@@ -242,50 +242,54 @@ function ProgressPage() {
 
   return (
     <div className="progress-page">
-      <div className="progress-grid">
-        <WeightForm
-          error={saveError}
-          isSaving={isSaving}
-          message={saveMessage}
-          onSave={handleSave}
-        />
-        <ProgressSummary
-          error={summaryError}
-          isLoading={isSummaryLoading}
-          summary={summary}
-        />
-      </div>
+      <section id="panel-registro-peso" className="dashboard-scroll-section progress-section">
+        <div className="progress-grid">
+          <WeightForm
+            error={saveError}
+            isSaving={isSaving}
+            message={saveMessage}
+            onSave={handleSave}
+          />
+          <ProgressSummary
+            error={summaryError}
+            isLoading={isSummaryLoading}
+            summary={summary}
+          />
+        </div>
 
-      <WeightHistory
-        entries={entries}
-        error={historyError}
-        isLoading={isHistoryLoading}
-        onDelete={handleDelete}
-        deletingEntryId={deletingEntryId}
-      />
-
-      <div className="progress-grid">
-        <WeeklyAveragesCard
-          averages={weeklyAverages}
-          error={weeklyAveragesError}
-          isLoading={isWeeklyAveragesLoading}
+        <WeightHistory
+          entries={entries}
+          error={historyError}
+          isLoading={isHistoryLoading}
+          onDelete={handleDelete}
+          deletingEntryId={deletingEntryId}
         />
-        <WeeklyAnalysisCard
-          analysis={weeklyAnalysis}
-          applyError={applyError}
-          applyMessage={applyMessage}
-          error={weeklyAnalysisError}
-          isApplying={isApplyingAdjustment}
-          isLoading={isWeeklyAnalysisLoading}
-          onApply={handleApplyAdjustment}
-        />
-      </div>
+      </section>
 
-      <AdjustmentHistory
-        entries={adjustmentHistory}
-        error={adjustmentHistoryError}
-        isLoading={isAdjustmentHistoryLoading}
-      />
+      <section id="panel-analisis-progreso" className="dashboard-scroll-section progress-section">
+        <div className="progress-grid">
+          <WeeklyAveragesCard
+            averages={weeklyAverages}
+            error={weeklyAveragesError}
+            isLoading={isWeeklyAveragesLoading}
+          />
+          <WeeklyAnalysisCard
+            analysis={weeklyAnalysis}
+            applyError={applyError}
+            applyMessage={applyMessage}
+            error={weeklyAnalysisError}
+            isApplying={isApplyingAdjustment}
+            isLoading={isWeeklyAnalysisLoading}
+            onApply={handleApplyAdjustment}
+          />
+        </div>
+
+        <AdjustmentHistory
+          entries={adjustmentHistory}
+          error={adjustmentHistoryError}
+          isLoading={isAdjustmentHistoryLoading}
+        />
+      </section>
     </div>
   )
 }

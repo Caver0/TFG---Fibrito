@@ -1,10 +1,26 @@
+import { useState } from 'react'
+
 function WeightHistory({ entries, error, isLoading, onDelete, deletingEntryId }) {
+  const [isExpanded, setIsExpanded] = useState(false)
+
   return (
     <section className="profile-section">
-      <div className="section-heading">
-        <span className="eyebrow">Historial</span>
-        <h2>Entradas registradas</h2>
-        <p>El historial se muestra ordenado por fecha ascendente para seguir el progreso en el tiempo.</p>
+      <div className="collapsible-section-header">
+        <div className="section-heading">
+          <span className="eyebrow">Historial</span>
+          <h2>Entradas registradas</h2>
+          <p>El historial se muestra ordenado por fecha ascendente para seguir el progreso en el tiempo.</p>
+        </div>
+
+        {entries.length > 0 ? (
+          <button
+            type="button"
+            className="secondary-button collapsible-toggle"
+            onClick={() => setIsExpanded((currentValue) => !currentValue)}
+          >
+            {isExpanded ? 'Ocultar historial' : `Ver historial (${entries.length})`}
+          </button>
+        ) : null}
       </div>
 
       {isLoading ? <p className="info-note">Cargando historial de peso...</p> : null}
@@ -14,7 +30,7 @@ function WeightHistory({ entries, error, isLoading, onDelete, deletingEntryId })
         <p className="info-note">Todavia no hay registros de peso.</p>
       ) : null}
 
-      {!isLoading && !error && entries.length > 0 ? (
+      {!isLoading && !error && entries.length > 0 && isExpanded ? (
         <div className="weight-history-list">
           {entries.map((entry) => (
             <article key={entry.id} className="history-row">
