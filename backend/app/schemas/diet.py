@@ -142,6 +142,14 @@ def _derive_meal_differences(document: dict[str, Any], actuals: dict[str, float]
 
 
 def _derive_food_data_source(document: dict[str, Any]) -> str:
+    explicit_sources = document.get("food_data_sources")
+    if explicit_sources:
+        normalized_sources = [str(source) for source in explicit_sources if source]
+        if len(normalized_sources) == 1:
+            return normalized_sources[0]
+        if normalized_sources:
+            return "mixed"
+
     if document.get("food_data_source"):
         return str(document["food_data_source"])
 
@@ -155,6 +163,29 @@ def _derive_food_data_source(document: dict[str, Any]) -> str:
     return "legacy_structural"
 
 
+def _derive_food_data_sources(document: dict[str, Any]) -> list[str]:
+    explicit_sources = document.get("food_data_sources")
+    if explicit_sources:
+        return [str(source) for source in explicit_sources if source]
+
+    collected_sources: list[str] = []
+    seen_sources: set[str] = set()
+    meals = document.get("meals") or []
+    for meal in meals:
+        for food in meal.get("foods") or []:
+            source = str(food.get("source") or "")
+            if not source or source in seen_sources:
+                continue
+
+            collected_sources.append(source)
+            seen_sources.add(source)
+
+    if collected_sources:
+        return collected_sources
+
+    return [_derive_food_data_source(document)]
+
+
 class DietGenerateRequest(BaseModel):
     meals_count: int = Field(ge=3, le=6)
     custom_percentages: list[float] | None = None
@@ -164,6 +195,8 @@ class DietGenerateRequest(BaseModel):
 class DietFood(BaseModel):
     food_code: str | None = None
     source: str = "internal_catalog"
+    origin_source: str = "internal_catalog"
+    spoonacular_id: int | None = None
     name: str
     category: str
     quantity: float = Field(gt=0)
@@ -211,6 +244,7 @@ class DietBase(BaseModel):
     training_time_of_day: TrainingTimeOfDay | None = None
     training_optimization_applied: bool = False
     food_data_source: str = "internal_catalog"
+    food_data_sources: list[str] = Field(default_factory=list)
     food_catalog_version: str | None = None
 
 
@@ -237,6 +271,8 @@ def serialize_diet_food(document: dict[str, Any]) -> DietFood:
     return DietFood(
         food_code=document.get("food_code") or document.get("code"),
         source=document.get("source", "internal_catalog"),
+        origin_source=document.get("origin_source", document.get("source", "internal_catalog")),
+        spoonacular_id=document.get("spoonacular_id"),
         name=document["name"],
         category=document.get("category", "otros"),
         quantity=_round_decimal(document["quantity"], FOOD_PRECISION),
@@ -335,6 +371,8 @@ def _derive_diet_differences(document: dict[str, Any], actuals: dict[str, float]
 
 def serialize_daily_diet(document: dict[str, Any]) -> DailyDiet:
     distribution_percentages = _derive_distribution_percentages(document)
+    food_data_source = _derive_food_data_source(document)
+    food_data_sources = _derive_food_data_sources(document)
     meals = [
         serialize_diet_meal(
             meal,
@@ -364,7 +402,8 @@ def serialize_daily_diet(document: dict[str, Any]) -> DailyDiet:
         distribution_percentages=distribution_percentages,
         training_time_of_day=document.get("training_time_of_day"),
         training_optimization_applied=document.get("training_optimization_applied", False),
-        food_data_source=_derive_food_data_source(document),
+        food_data_source=food_data_source,
+        food_data_sources=food_data_sources,
         food_catalog_version=document.get("food_catalog_version"),
         meals=meals,
     )
@@ -372,6 +411,8 @@ def serialize_daily_diet(document: dict[str, Any]) -> DailyDiet:
 
 def serialize_diet_list_item(document: dict[str, Any]) -> DietListItem:
     distribution_percentages = _derive_distribution_percentages(document)
+    food_data_source = _derive_food_data_source(document)
+    food_data_sources = _derive_food_data_sources(document)
     meals = [serialize_diet_meal(meal) for meal in document.get("meals", [])]
     actuals = _derive_diet_actuals(document, meals)
     differences = _derive_diet_differences(document, actuals)
@@ -395,6 +436,7 @@ def serialize_diet_list_item(document: dict[str, Any]) -> DietListItem:
         distribution_percentages=distribution_percentages,
         training_time_of_day=document.get("training_time_of_day"),
         training_optimization_applied=document.get("training_optimization_applied", False),
-        food_data_source=_derive_food_data_source(document),
+        food_data_source=food_data_source,
+        food_data_sources=food_data_sources,
         food_catalog_version=document.get("food_catalog_version"),
     )

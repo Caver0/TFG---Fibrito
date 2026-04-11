@@ -1,6 +1,6 @@
 """Small internal food catalog used to validate food-based diet generation."""
 
-CATALOG_VERSION = "internal-v2"
+CATALOG_VERSION = "internal-v3"
 
 FOOD_CATALOG = (
     {
@@ -18,6 +18,9 @@ FOOD_CATALOG = (
         "min_quantity": 60.0,
         "max_quantity": 300.0,
         "step": 5.0,
+        "aliases": ["pechuga de pollo", "pollo", "chicken breast"],
+        "spoonacular_queries": ["chicken breast"],
+        "external_search_enabled": True,
     },
     {
         "code": "turkey_breast",
@@ -34,6 +37,9 @@ FOOD_CATALOG = (
         "min_quantity": 60.0,
         "max_quantity": 300.0,
         "step": 5.0,
+        "aliases": ["pechuga de pavo", "pavo", "turkey breast"],
+        "spoonacular_queries": ["turkey breast"],
+        "external_search_enabled": True,
     },
     {
         "code": "eggs",
@@ -50,6 +56,9 @@ FOOD_CATALOG = (
         "min_quantity": 1.0,
         "max_quantity": 4.0,
         "step": 1.0,
+        "aliases": ["huevos", "huevo", "egg", "eggs"],
+        "spoonacular_queries": ["egg"],
+        "external_search_enabled": False,
     },
     {
         "code": "egg_whites",
@@ -66,6 +75,9 @@ FOOD_CATALOG = (
         "min_quantity": 80.0,
         "max_quantity": 320.0,
         "step": 10.0,
+        "aliases": ["claras de huevo", "claras", "egg whites"],
+        "spoonacular_queries": ["egg whites"],
+        "external_search_enabled": True,
     },
     {
         "code": "tuna",
@@ -82,6 +94,9 @@ FOOD_CATALOG = (
         "min_quantity": 60.0,
         "max_quantity": 220.0,
         "step": 10.0,
+        "aliases": ["atun al natural", "atun", "tuna"],
+        "spoonacular_queries": ["canned tuna in water"],
+        "external_search_enabled": True,
     },
     {
         "code": "greek_yogurt",
@@ -98,6 +113,9 @@ FOOD_CATALOG = (
         "min_quantity": 1.0,
         "max_quantity": 3.0,
         "step": 1.0,
+        "aliases": ["yogur griego natural", "yogur griego", "greek yogurt"],
+        "spoonacular_queries": ["plain greek yogurt"],
+        "external_search_enabled": False,
     },
     {
         "code": "semi_skimmed_milk",
@@ -114,6 +132,9 @@ FOOD_CATALOG = (
         "min_quantity": 125.0,
         "max_quantity": 500.0,
         "step": 125.0,
+        "aliases": ["leche semidesnatada", "leche", "semi skimmed milk", "milk"],
+        "spoonacular_queries": ["reduced fat milk"],
+        "external_search_enabled": True,
     },
     {
         "code": "rice",
@@ -130,6 +151,9 @@ FOOD_CATALOG = (
         "min_quantity": 60.0,
         "max_quantity": 900.0,
         "step": 10.0,
+        "aliases": ["arroz cocido", "arroz", "cooked rice", "rice"],
+        "spoonacular_queries": ["cooked white rice"],
+        "external_search_enabled": True,
     },
     {
         "code": "pasta",
@@ -146,6 +170,9 @@ FOOD_CATALOG = (
         "min_quantity": 60.0,
         "max_quantity": 800.0,
         "step": 10.0,
+        "aliases": ["pasta cocida", "pasta", "cooked pasta"],
+        "spoonacular_queries": ["cooked pasta"],
+        "external_search_enabled": True,
     },
     {
         "code": "oats",
@@ -162,6 +189,9 @@ FOOD_CATALOG = (
         "min_quantity": 30.0,
         "max_quantity": 120.0,
         "step": 5.0,
+        "aliases": ["avena", "oats", "rolled oats"],
+        "spoonacular_queries": ["rolled oats"],
+        "external_search_enabled": True,
     },
     {
         "code": "whole_wheat_bread",
@@ -178,6 +208,9 @@ FOOD_CATALOG = (
         "min_quantity": 40.0,
         "max_quantity": 220.0,
         "step": 10.0,
+        "aliases": ["pan integral", "whole wheat bread"],
+        "spoonacular_queries": ["whole wheat bread"],
+        "external_search_enabled": True,
     },
     {
         "code": "potato",
@@ -194,6 +227,9 @@ FOOD_CATALOG = (
         "min_quantity": 100.0,
         "max_quantity": 900.0,
         "step": 10.0,
+        "aliases": ["patata cocida", "patata", "boiled potato", "potato"],
+        "spoonacular_queries": ["boiled potato"],
+        "external_search_enabled": True,
     },
     {
         "code": "olive_oil",
@@ -210,6 +246,9 @@ FOOD_CATALOG = (
         "min_quantity": 5.0,
         "max_quantity": 25.0,
         "step": 1.0,
+        "aliases": ["aceite de oliva", "olive oil"],
+        "spoonacular_queries": ["olive oil"],
+        "external_search_enabled": True,
     },
     {
         "code": "avocado",
@@ -226,6 +265,9 @@ FOOD_CATALOG = (
         "min_quantity": 40.0,
         "max_quantity": 200.0,
         "step": 10.0,
+        "aliases": ["aguacate", "avocado"],
+        "spoonacular_queries": ["avocado"],
+        "external_search_enabled": True,
     },
     {
         "code": "mixed_nuts",
@@ -242,6 +284,9 @@ FOOD_CATALOG = (
         "min_quantity": 10.0,
         "max_quantity": 50.0,
         "step": 5.0,
+        "aliases": ["frutos secos", "mixed nuts", "nuts"],
+        "spoonacular_queries": ["mixed nuts"],
+        "external_search_enabled": True,
     },
     {
         "code": "banana",
@@ -258,6 +303,9 @@ FOOD_CATALOG = (
         "min_quantity": 0.5,
         "max_quantity": 2.0,
         "step": 0.5,
+        "aliases": ["platano", "banana"],
+        "spoonacular_queries": ["banana"],
+        "external_search_enabled": False,
     },
     {
         "code": "mixed_vegetables",
@@ -274,5 +322,8 @@ FOOD_CATALOG = (
         "min_quantity": 80.0,
         "max_quantity": 250.0,
         "step": 10.0,
+        "aliases": ["verduras variadas", "mixed vegetables", "vegetables"],
+        "spoonacular_queries": ["mixed vegetables"],
+        "external_search_enabled": True,
     },
 )

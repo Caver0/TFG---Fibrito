@@ -7,10 +7,10 @@ from fastapi import HTTPException, status
 
 from app.schemas.diet import DailyDiet, DietListItem, DietMeal, TrainingTimeOfDay, serialize_daily_diet, serialize_diet_list_item
 from app.schemas.user import UserPublic
-from app.services.food_catalog_service import get_food_catalog_version, get_food_lookup
+from app.services.food_catalog_service import get_food_catalog_version, get_internal_food_lookup, resolve_foods_by_codes
 from app.services.meal_distribution_service import generate_meal_distribution_targets, round_distribution_value
 
-FOOD_DATA_SOURCE = "internal_catalog"
+DEFAULT_FOOD_DATA_SOURCE = "internal_catalog"
 EXACT_SOLVER_TOLERANCE = 1e-6
 FOOD_VALUE_PRECISION = 2
 FOOD_OMIT_THRESHOLD = {
@@ -161,13 +161,12 @@ def get_role_candidate_codes(
     }
 
 
-def get_support_options(
+def get_support_option_specs(
     *,
     meal: DietMeal,
     meal_index: int,
     meals_count: int,
     training_focus: bool,
-    food_lookup: dict[str, dict],
 ) -> list[list[dict]]:
     meal_slot = get_meal_slot(meal_index, meals_count)
     support_options: list[list[dict]] = [[]]
@@ -177,7 +176,7 @@ def get_support_options(
             [
                 {
                     "role": "vegetable",
-                    "food": food_lookup["mixed_vegetables"],
+                    "food_code": "mixed_vegetables",
                     "quantity": 80.0 if meal.target_calories < 520 else 120.0,
                 }
             ]
@@ -188,7 +187,7 @@ def get_support_options(
             [
                 {
                     "role": "fruit",
-                    "food": food_lookup["banana"],
+                    "food_code": "banana",
                     "quantity": 0.5 if meal.target_carb_grams < 80 else 1.0,
                 }
             ]
@@ -199,7 +198,7 @@ def get_support_options(
             [
                 {
                     "role": "dairy",
-                    "food": food_lookup["greek_yogurt"],
+                    "food_code": "greek_yogurt",
                     "quantity": 1.0,
                 }
             ]
@@ -233,11 +232,13 @@ def build_precise_food_values(food: dict, quantity: float) -> dict[str, float]:
     }
 
 
-def build_food_portion(food: dict, quantity: float, source: str) -> dict:
+def build_food_portion(food: dict, quantity: float) -> dict:
     precise_values = build_precise_food_values(food, quantity)
     return {
         "food_code": food["code"],
-        "source": source,
+        "source": food.get("source", DEFAULT_FOOD_DATA_SOURCE),
+        "origin_source": food.get("origin_source", food.get("source", DEFAULT_FOOD_DATA_SOURCE)),
+        "spoonacular_id": food.get("spoonacular_id"),
         "name": food["name"],
         "category": food["category"],
         "quantity": round_food_value(precise_values["quantity"]),
@@ -250,16 +251,19 @@ def build_food_portion(food: dict, quantity: float, source: str) -> dict:
     }
 
 
-def calculate_support_totals(support_foods: list[dict]) -> dict[str, float]:
+def calculate_support_totals(
+    support_food_specs: list[dict],
+    food_lookup: dict[str, dict],
+) -> dict[str, float]:
     totals = {
         "calories": 0.0,
         "protein_grams": 0.0,
         "fat_grams": 0.0,
         "carb_grams": 0.0,
     }
-    for support_food in support_foods:
+    for support_food in support_food_specs:
         precise_values = build_precise_food_values(
-            support_food["food"],
+            food_lookup[support_food["food_code"]],
             float(support_food["quantity"]),
         )
         for field_name in totals:
@@ -357,9 +361,9 @@ def build_exact_meal_solution(
     *,
     meal: DietMeal,
     role_foods: dict[str, dict],
-    support_foods: list[dict],
+    support_food_specs: list[dict],
     candidate_indexes: dict[str, int],
-    food_data_source: str,
+    food_lookup: dict[str, dict],
     training_focus: bool,
     meal_slot: str,
 ) -> dict | None:
@@ -367,12 +371,12 @@ def build_exact_meal_solution(
         role_foods["protein"]["code"],
         role_foods["carb"]["code"],
         role_foods["fat"]["code"],
-        *[support_food["food"]["code"] for support_food in support_foods],
+        *[support_food["food_code"] for support_food in support_food_specs],
     ]
     if len(set(all_codes)) != len(all_codes):
         return None
 
-    support_totals = calculate_support_totals(support_foods)
+    support_totals = calculate_support_totals(support_food_specs, food_lookup)
     remaining_targets = {
         "protein_grams": meal.target_protein_grams - support_totals["protein_grams"],
         "fat_grams": meal.target_fat_grams - support_totals["fat_grams"],
@@ -416,18 +420,17 @@ def build_exact_meal_solution(
             foods.append(
                 {
                     "role": role,
-                    **build_food_portion(food, quantity, food_data_source),
+                    **build_food_portion(food, quantity),
                 }
             )
 
-    for support_food in support_foods:
+    for support_food in support_food_specs:
         foods.append(
             {
                 "role": support_food["role"],
                 **build_food_portion(
-                    support_food["food"],
+                    food_lookup[support_food["food_code"]],
                     float(support_food["quantity"]),
-                    food_data_source,
                 ),
             }
         )
@@ -451,10 +454,19 @@ def build_exact_meal_solution(
 
     return {
         "foods": [{key: value for key, value in food.items() if key != "role"} for food in foods],
+        "selected_role_codes": {role: food["code"] for role, food in role_foods.items()},
+        "support_food_specs": [
+            {
+                "role": support_food["role"],
+                "food_code": support_food["food_code"],
+                "quantity": float(support_food["quantity"]),
+            }
+            for support_food in support_food_specs
+        ],
         "score": build_solution_score(
             role_foods=role_foods,
             role_quantities=role_quantities,
-            support_foods=support_foods,
+            support_foods=support_food_specs,
             candidate_indexes=candidate_indexes,
             training_focus=training_focus,
             meal_slot=meal_slot,
@@ -470,7 +482,6 @@ def find_exact_solution_for_meal(
     meals_count: int,
     training_focus: bool,
     food_lookup: dict[str, dict],
-    food_data_source: str,
 ) -> dict:
     candidate_codes = get_role_candidate_codes(
         meal=meal,
@@ -478,12 +489,11 @@ def find_exact_solution_for_meal(
         meals_count=meals_count,
         training_focus=training_focus,
     )
-    support_options = get_support_options(
+    support_options = get_support_option_specs(
         meal=meal,
         meal_index=meal_index,
         meals_count=meals_count,
         training_focus=training_focus,
-        food_lookup=food_lookup,
     )
     meal_slot = get_meal_slot(meal_index, meals_count)
 
@@ -492,7 +502,7 @@ def find_exact_solution_for_meal(
     def evaluate_candidate_sets(role_codes: dict[str, list[str]], extra_support_options: list[list[dict]]) -> None:
         nonlocal best_solution
 
-        for support_foods in extra_support_options:
+        for support_food_specs in extra_support_options:
             for protein_index, carb_index, fat_index in product(
                 range(len(role_codes["protein"])),
                 range(len(role_codes["carb"])),
@@ -511,9 +521,9 @@ def find_exact_solution_for_meal(
                 candidate_solution = build_exact_meal_solution(
                     meal=meal,
                     role_foods=role_foods,
-                    support_foods=support_foods,
+                    support_food_specs=support_food_specs,
                     candidate_indexes=candidate_indexes,
-                    food_data_source=food_data_source,
+                    food_lookup=food_lookup,
                     training_focus=training_focus,
                     meal_slot=meal_slot,
                 )
@@ -581,17 +591,26 @@ def generate_food_based_meal(
     meal_index: int,
     meals_count: int,
     training_focus: bool,
+    meal_plan: dict,
     food_lookup: dict[str, dict],
-    food_data_source: str,
 ) -> dict:
-    meal_fit = find_exact_solution_for_meal(
+    meal_slot = get_meal_slot(meal_index, meals_count)
+    selected_role_codes = meal_plan.get("selected_role_codes", {})
+    selected_role_foods = {
+        role: food_lookup[food_code]
+        for role, food_code in selected_role_codes.items()
+    }
+    meal_fit = build_exact_meal_solution(
         meal=meal,
-        meal_index=meal_index,
-        meals_count=meals_count,
-        training_focus=training_focus,
+        role_foods=selected_role_foods,
+        support_food_specs=meal_plan.get("support_food_specs", []),
+        candidate_indexes={"protein": 0, "carb": 0, "fat": 0},
         food_lookup=food_lookup,
-        food_data_source=food_data_source,
+        training_focus=training_focus,
+        meal_slot=meal_slot,
     )
+    if meal_fit is None:
+        meal_fit = meal_plan
 
     return {
         "meal_number": meal.meal_number,
@@ -610,6 +629,44 @@ def generate_food_based_meal(
         "carb_difference": meal_fit["carb_difference"],
         "foods": meal_fit["foods"],
     }
+
+
+def collect_selected_food_codes(meal_plans: list[dict]) -> list[str]:
+    selected_codes: list[str] = []
+    seen_codes: set[str] = set()
+
+    def add_code(food_code: str) -> None:
+        if food_code in seen_codes:
+            return
+
+        seen_codes.add(food_code)
+        selected_codes.append(food_code)
+
+    for meal_plan in meal_plans:
+        for food_code in meal_plan.get("selected_role_codes", {}).values():
+            add_code(food_code)
+
+        for support_food in meal_plan.get("support_food_specs", []):
+            add_code(support_food["food_code"])
+
+    return selected_codes
+
+
+def summarize_food_sources(meals: list[dict]) -> tuple[str, list[str]]:
+    source_order = [DEFAULT_FOOD_DATA_SOURCE, "local_cache", "spoonacular"]
+    used_sources = {
+        food.get("source", DEFAULT_FOOD_DATA_SOURCE)
+        for meal in meals
+        for food in meal.get("foods", [])
+    }
+    ordered_sources = [source for source in source_order if source in used_sources]
+    if not ordered_sources:
+        ordered_sources = [DEFAULT_FOOD_DATA_SOURCE]
+
+    return (
+        ordered_sources[0] if len(ordered_sources) == 1 else "mixed",
+        ordered_sources,
+    )
 
 
 def calculate_daily_totals_from_meals(
@@ -644,6 +701,7 @@ def calculate_daily_totals_from_meals(
 
 
 def generate_food_based_diet(
+    database,
     user: UserPublic,
     meals_count: int,
     custom_percentages: list[float] | None = None,
@@ -655,18 +713,38 @@ def generate_food_based_diet(
         custom_percentages=custom_percentages,
         training_time_of_day=training_time_of_day,
     )
-    food_lookup = get_food_lookup()
+    internal_food_lookup = get_internal_food_lookup()
+    planned_meals = [
+        find_exact_solution_for_meal(
+            meal=DietMeal.model_validate(meal),
+            meal_index=meal_index,
+            meals_count=meals_count,
+            training_focus=meal_distribution["training_optimization_applied"] and meal_index in focus_indexes,
+            food_lookup=internal_food_lookup,
+        )
+        for meal_index, meal in enumerate(meal_distribution["meals"])
+    ]
+    selected_food_codes = collect_selected_food_codes(planned_meals)
+    resolved_food_lookup, lookup_metadata = resolve_foods_by_codes(
+        database,
+        selected_food_codes,
+    )
+    food_lookup = {
+        **internal_food_lookup,
+        **resolved_food_lookup,
+    }
     generated_meals = [
         generate_food_based_meal(
             meal=DietMeal.model_validate(meal),
             meal_index=meal_index,
             meals_count=meals_count,
             training_focus=meal_distribution["training_optimization_applied"] and meal_index in focus_indexes,
+            meal_plan=planned_meals[meal_index],
             food_lookup=food_lookup,
-            food_data_source=FOOD_DATA_SOURCE,
         )
         for meal_index, meal in enumerate(meal_distribution["meals"])
     ]
+    food_data_source, food_data_sources = summarize_food_sources(generated_meals)
     daily_totals = calculate_daily_totals_from_meals(
         target_calories=meal_distribution["target_calories"],
         target_protein_grams=meal_distribution["protein_grams"],
@@ -692,19 +770,22 @@ def generate_food_based_diet(
         "distribution_percentages": meal_distribution["distribution_percentages"],
         "training_time_of_day": meal_distribution["training_time_of_day"],
         "training_optimization_applied": meal_distribution["training_optimization_applied"],
-        "food_data_source": FOOD_DATA_SOURCE,
-        "food_catalog_version": get_food_catalog_version(),
+        "food_data_source": food_data_source,
+        "food_data_sources": food_data_sources,
+        "food_catalog_version": lookup_metadata.get("food_catalog_version", get_food_catalog_version()),
         "meals": generated_meals,
     }
 
 
 def generate_daily_diet(
+    database,
     user: UserPublic,
     meals_count: int,
     custom_percentages: list[float] | None = None,
     training_time_of_day: TrainingTimeOfDay | None = None,
 ) -> dict:
     return generate_food_based_diet(
+        database,
         user=user,
         meals_count=meals_count,
         custom_percentages=custom_percentages,
@@ -734,7 +815,8 @@ def save_diet(database, user_id: str, diet_payload: dict) -> DailyDiet:
         ],
         "training_time_of_day": diet_payload["training_time_of_day"],
         "training_optimization_applied": diet_payload["training_optimization_applied"],
-        "food_data_source": diet_payload.get("food_data_source", FOOD_DATA_SOURCE),
+        "food_data_source": diet_payload.get("food_data_source", DEFAULT_FOOD_DATA_SOURCE),
+        "food_data_sources": diet_payload.get("food_data_sources", [diet_payload.get("food_data_source", DEFAULT_FOOD_DATA_SOURCE)]),
         "food_catalog_version": diet_payload.get("food_catalog_version"),
         "meals": [
             {
@@ -755,7 +837,9 @@ def save_diet(database, user_id: str, diet_payload: dict) -> DailyDiet:
                 "foods": [
                     {
                         "food_code": food.get("food_code"),
-                        "source": food.get("source", FOOD_DATA_SOURCE),
+                        "source": food.get("source", DEFAULT_FOOD_DATA_SOURCE),
+                        "origin_source": food.get("origin_source", food.get("source", DEFAULT_FOOD_DATA_SOURCE)),
+                        "spoonacular_id": food.get("spoonacular_id"),
                         "name": food["name"],
                         "category": food["category"],
                         "quantity": round_food_value(float(food["quantity"])),

@@ -67,7 +67,7 @@ function DietGeneratorForm({ error, isGenerating, message, onGenerate }) {
       <div className="section-heading">
         <span className="eyebrow">Generador de dieta</span>
         <h2>Crea una dieta diaria por alimentos</h2>
-        <p>Partimos de tu distribucion por comidas y la convertimos en alimentos reales con cantidades aproximadas.</p>
+        <p>Partimos de tu distribucion por comidas y la convertimos en alimentos reales reutilizando cache local, catalogo interno y Spoonacular solo cuando aporta valor.</p>
       </div>
 
       <form className="diet-form" onSubmit={handleSubmit}>

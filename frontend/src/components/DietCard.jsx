@@ -43,11 +43,36 @@ function formatFoodSource(value) {
     return 'Dieta estructural antigua'
   }
 
+  if (value === 'mixed') {
+    return 'Mixta'
+  }
+
   if (value === 'internal_catalog') {
     return 'Catalogo interno'
   }
 
+  if (value === 'local_cache') {
+    return 'Cache local'
+  }
+
+  if (value === 'spoonacular') {
+    return 'Spoonacular'
+  }
+
   return value || 'No indicado'
+}
+
+function formatFoodSources(values, fallbackValue) {
+  const normalizedValues = values?.length ? values : [fallbackValue]
+  return normalizedValues.map((value) => formatFoodSource(value)).join(' + ')
+}
+
+function formatFoodLineage(food) {
+  if (food.source === 'local_cache' && food.origin_source === 'spoonacular') {
+    return 'Cache local (Spoonacular)'
+  }
+
+  return formatFoodSource(food.source)
 }
 
 function DietCard({ description, diet, error, isLoading, title }) {
@@ -109,6 +134,10 @@ function DietCard({ description, diet, error, isLoading, title }) {
               <strong>{formatFoodSource(diet.food_data_source)}</strong>
             </article>
             <article className="metric-card">
+              <span>Fuentes usadas</span>
+              <strong>{formatFoodSources(diet.food_data_sources, diet.food_data_source)}</strong>
+            </article>
+            <article className="metric-card">
               <span>Optimizacion por entreno</span>
               <strong>{diet.training_optimization_applied ? 'Si' : 'No'}</strong>
             </article>
@@ -158,7 +187,7 @@ function DietCard({ description, diet, error, isLoading, title }) {
                           <span>{formatFoodQuantity(food)}</span>
                         </div>
                         <p className="food-row-meta">
-                          {formatNumber(food.calories, 2)} kcal | P {formatNumber(food.protein_grams, 2)} g | G {formatNumber(food.fat_grams, 2)} g | C {formatNumber(food.carb_grams, 2)} g
+                          {formatNumber(food.calories, 2)} kcal | P {formatNumber(food.protein_grams, 2)} g | G {formatNumber(food.fat_grams, 2)} g | C {formatNumber(food.carb_grams, 2)} g | {formatFoodLineage(food)}
                         </p>
                       </article>
                     ))}

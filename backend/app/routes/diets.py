@@ -26,6 +26,7 @@ def create_daily_diet(
 
     try:
         diet_payload = generate_food_based_diet(
+            database,
             current_user,
             payload.meals_count,
             custom_percentages=payload.custom_percentages,
