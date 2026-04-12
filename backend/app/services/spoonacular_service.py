@@ -67,7 +67,13 @@ def _request_json(path: str, params: dict[str, Any] | None = None) -> tuple[Any,
         **(params or {}),
     }
     request_url = f"{settings.spoonacular_base_url}{path}?{urlencode(query_params, doseq=True)}"
-    request = Request(request_url, headers={"Accept": "application/json"})
+    request = Request(
+        request_url,
+        headers={
+            "Accept": "application/json",
+            "User-Agent": settings.spoonacular_user_agent,
+        },
+    )
 
     try:
         with urlopen(request, timeout=settings.spoonacular_timeout_seconds) as response:

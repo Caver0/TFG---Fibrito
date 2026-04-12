@@ -9,6 +9,15 @@ TrainingTimeOfDay = Literal["manana", "mediodia", "tarde", "noche"]
 PERCENTAGE_PRECISION = Decimal("0.1")
 NUTRITION_PRECISION = Decimal("0.1")
 FOOD_PRECISION = Decimal("0.01")
+DEFAULT_DIET_SOURCE = "internal"
+DIET_SOURCE_MAP = {
+    "internal_catalog": DEFAULT_DIET_SOURCE,
+    "local_cache": "cache",
+    "spoonacular": "spoonacular",
+    DEFAULT_DIET_SOURCE: DEFAULT_DIET_SOURCE,
+    "cache": "cache",
+}
+DEFAULT_CATALOG_SOURCE_STRATEGY = "internal_catalog_with_optional_spoonacular_enrichment"
 
 
 def _round_decimal(value: float | Decimal | None, precision: Decimal = NUTRITION_PRECISION) -> float:
@@ -20,6 +29,14 @@ def _round_decimal(value: float | Decimal | None, precision: Decimal = NUTRITION
 
 def _calculate_difference(actual_value: float | Decimal, target_value: float | Decimal) -> float:
     return _round_decimal(Decimal(str(actual_value)) - Decimal(str(target_value)))
+
+
+def _normalize_diet_source(value: str | None) -> str:
+    normalized_value = str(value or "").strip()
+    if normalized_value in {"mixed", "legacy_structural"}:
+        return normalized_value
+
+    return DIET_SOURCE_MAP.get(normalized_value, DEFAULT_DIET_SOURCE)
 
 
 def _derive_distribution_percentages(document: dict[str, Any]) -> list[float]:
@@ -144,21 +161,21 @@ def _derive_meal_differences(document: dict[str, Any], actuals: dict[str, float]
 def _derive_food_data_source(document: dict[str, Any]) -> str:
     explicit_sources = document.get("food_data_sources")
     if explicit_sources:
-        normalized_sources = [str(source) for source in explicit_sources if source]
+        normalized_sources = [_normalize_diet_source(source) for source in explicit_sources if source]
         if len(normalized_sources) == 1:
             return normalized_sources[0]
         if normalized_sources:
             return "mixed"
 
     if document.get("food_data_source"):
-        return str(document["food_data_source"])
+        return _normalize_diet_source(document["food_data_source"])
 
     meals = document.get("meals") or []
     for meal in meals:
         foods = meal.get("foods") or []
         for food in foods:
             if food.get("source"):
-                return str(food["source"])
+                return _normalize_diet_source(food["source"])
 
     return "legacy_structural"
 
@@ -166,14 +183,14 @@ def _derive_food_data_source(document: dict[str, Any]) -> str:
 def _derive_food_data_sources(document: dict[str, Any]) -> list[str]:
     explicit_sources = document.get("food_data_sources")
     if explicit_sources:
-        return [str(source) for source in explicit_sources if source]
+        return [_normalize_diet_source(source) for source in explicit_sources if source]
 
     collected_sources: list[str] = []
     seen_sources: set[str] = set()
     meals = document.get("meals") or []
     for meal in meals:
         for food in meal.get("foods") or []:
-            source = str(food.get("source") or "")
+            source = _normalize_diet_source(food.get("source"))
             if not source or source in seen_sources:
                 continue
 
@@ -186,6 +203,26 @@ def _derive_food_data_sources(document: dict[str, Any]) -> list[str]:
     return [_derive_food_data_source(document)]
 
 
+def _derive_resolution_counters(document: dict[str, Any]) -> dict[str, int]:
+    counters = {
+        "spoonacular_hits": 0,
+        "cache_hits": 0,
+        "internal_fallbacks": 0,
+    }
+
+    for meal in document.get("meals") or []:
+        for food in meal.get("foods") or []:
+            source = _normalize_diet_source(food.get("source"))
+            if source == "spoonacular":
+                counters["spoonacular_hits"] += 1
+            elif source == "cache":
+                counters["cache_hits"] += 1
+            else:
+                counters["internal_fallbacks"] += 1
+
+    return counters
+
+
 class DietGenerateRequest(BaseModel):
     meals_count: int = Field(ge=3, le=6)
     custom_percentages: list[float] | None = None
@@ -194,8 +231,8 @@ class DietGenerateRequest(BaseModel):
 
 class DietFood(BaseModel):
     food_code: str | None = None
-    source: str = "internal_catalog"
-    origin_source: str = "internal_catalog"
+    source: str = DEFAULT_DIET_SOURCE
+    origin_source: str = DEFAULT_DIET_SOURCE
     spoonacular_id: int | None = None
     name: str
     category: str
@@ -243,9 +280,16 @@ class DietBase(BaseModel):
     distribution_percentages: list[float] = Field(default_factory=list)
     training_time_of_day: TrainingTimeOfDay | None = None
     training_optimization_applied: bool = False
-    food_data_source: str = "internal_catalog"
+    food_data_source: str = DEFAULT_DIET_SOURCE
     food_data_sources: list[str] = Field(default_factory=list)
     food_catalog_version: str | None = None
+    catalog_source_strategy: str = DEFAULT_CATALOG_SOURCE_STRATEGY
+    spoonacular_attempted: bool = False
+    spoonacular_attempts: int = Field(default=0, ge=0)
+    spoonacular_hits: int = Field(default=0, ge=0)
+    cache_hits: int = Field(default=0, ge=0)
+    internal_fallbacks: int = Field(default=0, ge=0)
+    resolved_foods_count: int = Field(default=0, ge=0)
 
 
 class DailyDiet(DietBase):
@@ -270,8 +314,8 @@ class DietListResponse(BaseModel):
 def serialize_diet_food(document: dict[str, Any]) -> DietFood:
     return DietFood(
         food_code=document.get("food_code") or document.get("code"),
-        source=document.get("source", "internal_catalog"),
-        origin_source=document.get("origin_source", document.get("source", "internal_catalog")),
+        source=_normalize_diet_source(document.get("source")),
+        origin_source=_normalize_diet_source(document.get("origin_source", document.get("source"))),
         spoonacular_id=document.get("spoonacular_id"),
         name=document["name"],
         category=document.get("category", "otros"),
@@ -373,6 +417,7 @@ def serialize_daily_diet(document: dict[str, Any]) -> DailyDiet:
     distribution_percentages = _derive_distribution_percentages(document)
     food_data_source = _derive_food_data_source(document)
     food_data_sources = _derive_food_data_sources(document)
+    resolution_counters = _derive_resolution_counters(document)
     meals = [
         serialize_diet_meal(
             meal,
@@ -405,6 +450,16 @@ def serialize_daily_diet(document: dict[str, Any]) -> DailyDiet:
         food_data_source=food_data_source,
         food_data_sources=food_data_sources,
         food_catalog_version=document.get("food_catalog_version"),
+        catalog_source_strategy=document.get("catalog_source_strategy", DEFAULT_CATALOG_SOURCE_STRATEGY),
+        spoonacular_attempted=document.get(
+            "spoonacular_attempted",
+            bool(document.get("spoonacular_attempts") or document.get("spoonacular_hits")),
+        ),
+        spoonacular_attempts=document.get("spoonacular_attempts", document.get("spoonacular_hits", 0)),
+        spoonacular_hits=document.get("spoonacular_hits", resolution_counters["spoonacular_hits"]),
+        cache_hits=document.get("cache_hits", resolution_counters["cache_hits"]),
+        internal_fallbacks=document.get("internal_fallbacks", resolution_counters["internal_fallbacks"]),
+        resolved_foods_count=document.get("resolved_foods_count", sum(resolution_counters.values())),
         meals=meals,
     )
 
@@ -413,6 +468,7 @@ def serialize_diet_list_item(document: dict[str, Any]) -> DietListItem:
     distribution_percentages = _derive_distribution_percentages(document)
     food_data_source = _derive_food_data_source(document)
     food_data_sources = _derive_food_data_sources(document)
+    resolution_counters = _derive_resolution_counters(document)
     meals = [serialize_diet_meal(meal) for meal in document.get("meals", [])]
     actuals = _derive_diet_actuals(document, meals)
     differences = _derive_diet_differences(document, actuals)
@@ -439,4 +495,14 @@ def serialize_diet_list_item(document: dict[str, Any]) -> DietListItem:
         food_data_source=food_data_source,
         food_data_sources=food_data_sources,
         food_catalog_version=document.get("food_catalog_version"),
+        catalog_source_strategy=document.get("catalog_source_strategy", DEFAULT_CATALOG_SOURCE_STRATEGY),
+        spoonacular_attempted=document.get(
+            "spoonacular_attempted",
+            bool(document.get("spoonacular_attempts") or document.get("spoonacular_hits")),
+        ),
+        spoonacular_attempts=document.get("spoonacular_attempts", document.get("spoonacular_hits", 0)),
+        spoonacular_hits=document.get("spoonacular_hits", resolution_counters["spoonacular_hits"]),
+        cache_hits=document.get("cache_hits", resolution_counters["cache_hits"]),
+        internal_fallbacks=document.get("internal_fallbacks", resolution_counters["internal_fallbacks"]),
+        resolved_foods_count=document.get("resolved_foods_count", sum(resolution_counters.values())),
     )

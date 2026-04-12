@@ -15,6 +15,7 @@ from app.services.spoonacular_service import (
     autocomplete_ingredients,
     get_ingredient_information,
     get_spoonacular_status,
+    search_ingredients,
 )
 from app.utils.normalization import build_food_aliases, normalize_food_name
 
@@ -38,6 +39,27 @@ NUTRIENT_NAME_MAP = {
     "fat_grams": "Fat",
     "carb_grams": "Carbohydrates",
 }
+
+
+def _build_resolution_summary(
+    *,
+    settings,
+    resolution_details: list[dict[str, Any]],
+) -> dict[str, Any]:
+    spoonacular_attempts = sum(len(detail.get("attempted_queries", [])) for detail in resolution_details)
+    spoonacular_hits = sum(int(detail["final_source"] == SPOONACULAR_FOOD_SOURCE) for detail in resolution_details)
+    cache_hits = sum(int(detail["final_source"] == LOCAL_CACHE_FOOD_SOURCE) for detail in resolution_details)
+    internal_fallbacks = sum(int(detail["final_source"] == INTERNAL_FOOD_SOURCE) for detail in resolution_details)
+
+    return {
+        "catalog_source_strategy": settings.food_resolution_strategy,
+        "spoonacular_attempted": spoonacular_attempts > 0,
+        "spoonacular_attempts": spoonacular_attempts,
+        "spoonacular_hits": spoonacular_hits,
+        "cache_hits": cache_hits,
+        "internal_fallbacks": internal_fallbacks,
+        "resolved_foods_count": len(resolution_details),
+    }
 
 
 def calculate_macro_calories(protein_grams: float, fat_grams: float, carb_grams: float) -> float:
@@ -158,6 +180,34 @@ def _select_best_spoonacular_candidate(
         reverse=True,
     )
     return ranked_candidates[0]
+
+
+def _merge_spoonacular_candidates(*candidate_groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged_candidates: list[dict[str, Any]] = []
+    seen_ids: set[int] = set()
+
+    for candidate_group in candidate_groups:
+        for candidate in candidate_group:
+            candidate_id = candidate.get("id")
+            if candidate_id is None:
+                continue
+
+            normalized_candidate_id = int(candidate_id)
+            if normalized_candidate_id in seen_ids:
+                continue
+
+            seen_ids.add(normalized_candidate_id)
+            merged_candidates.append(candidate)
+
+    return merged_candidates
+
+
+def _build_spoonacular_search_queries(internal_food: dict[str, Any]) -> list[str]:
+    return build_food_aliases(
+        *(internal_food.get("spoonacular_queries") or []),
+        internal_food["name"],
+        *internal_food.get("aliases", []),
+    )
 
 
 def _normalize_spoonacular_food(
@@ -338,7 +388,10 @@ def _fetch_spoonacular_food(
         query,
         *internal_aliases,
     )
-    candidates = autocomplete_ingredients(query, number=5)
+    candidates = _merge_spoonacular_candidates(
+        autocomplete_ingredients(query, number=5),
+        search_ingredients(query, number=5),
+    )
     best_candidate = _select_best_spoonacular_candidate(candidates, aliases)
     if not best_candidate:
         return None
@@ -411,49 +464,74 @@ def resolve_food_candidate(
     internal_food: dict[str, Any],
     *,
     allow_external_enrichment: bool = True,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    settings = get_settings()
+    prefer_spoonacular = settings.prefer_spoonacular_foods
+    resolution_metadata = {
+        "food_code": internal_food["code"],
+        "food_name": internal_food["name"],
+        "spoonacular_attempted": False,
+        "attempted_queries": [],
+        "matched_query": None,
+        "final_source": INTERNAL_FOOD_SOURCE,
+        "origin_source": INTERNAL_FOOD_SOURCE,
+    }
+
     cached_food = get_cached_food(
         database,
         internal_code=internal_food["code"],
         normalized_names=internal_food.get("aliases", []),
     )
     if cached_food:
+        resolution_metadata["final_source"] = LOCAL_CACHE_FOOD_SOURCE
+        resolution_metadata["origin_source"] = cached_food.get("origin_source", SPOONACULAR_FOOD_SOURCE)
         return {
             **cached_food,
             "name": internal_food["name"],
             "display_name": internal_food["name"],
-        }
+        }, resolution_metadata
 
-    settings = get_settings()
     can_use_external = (
         allow_external_enrichment
-        and settings.spoonacular_generation_enrichment_enabled
-        and internal_food.get("external_search_enabled", True)
+        and (prefer_spoonacular or settings.spoonacular_generation_enrichment_enabled)
+        and (prefer_spoonacular or internal_food.get("external_search_enabled", True))
     )
     if not can_use_external:
-        return internal_food
+        return internal_food, resolution_metadata
 
-    search_queries = internal_food.get("spoonacular_queries") or [internal_food["name"]]
+    if prefer_spoonacular:
+        search_queries = _build_spoonacular_search_queries(internal_food)
+    else:
+        search_queries = internal_food.get("spoonacular_queries") or [internal_food["name"]]
+
     for query in search_queries:
+        resolution_metadata["spoonacular_attempted"] = True
+        resolution_metadata["attempted_queries"].append(query)
         try:
             live_food = _fetch_spoonacular_food(query=query, internal_food=internal_food)
-        except SpoonacularUnavailableError:
-            return internal_food
-        except SpoonacularError:
+        except SpoonacularUnavailableError as exc:
+            resolution_metadata["spoonacular_error"] = str(exc)
+            return internal_food, resolution_metadata
+        except SpoonacularError as exc:
+            resolution_metadata["spoonacular_error"] = str(exc)
             continue
 
         if not live_food:
             continue
 
         cached_food = cache_spoonacular_food(database, live_food)
+        resolution_metadata["matched_query"] = query
+        resolution_metadata["final_source"] = SPOONACULAR_FOOD_SOURCE
+        resolution_metadata["origin_source"] = SPOONACULAR_FOOD_SOURCE
+        resolution_metadata.pop("spoonacular_error", None)
         return {
             **cached_food,
             "name": internal_food["name"],
             "display_name": internal_food["name"],
             "source": SPOONACULAR_FOOD_SOURCE,
-        }
+        }, resolution_metadata
 
-    return internal_food
+    return internal_food, resolution_metadata
 
 
 def resolve_foods_by_codes(
@@ -465,16 +543,19 @@ def resolve_foods_by_codes(
     internal_lookup = get_internal_food_lookup()
     resolved_lookup: dict[str, dict[str, Any]] = {}
     used_sources: set[str] = set()
+    resolution_details: list[dict[str, Any]] = []
+    settings = get_settings()
 
     for code in food_codes:
         internal_food = internal_lookup[code]
-        resolved_food = resolve_food_candidate(
+        resolved_food, resolution_metadata = resolve_food_candidate(
             database,
             internal_food,
             allow_external_enrichment=allow_external_enrichment,
         )
         resolved_lookup[code] = resolved_food
         used_sources.add(resolved_food.get("source", INTERNAL_FOOD_SOURCE))
+        resolution_details.append(resolution_metadata)
 
     ordered_sources = [
         source
@@ -488,6 +569,10 @@ def resolve_foods_by_codes(
         "food_data_source": ordered_sources[0] if len(ordered_sources) == 1 else "mixed",
         "food_data_sources": ordered_sources,
         "food_catalog_version": CATALOG_VERSION,
+        **_build_resolution_summary(
+            settings=settings,
+            resolution_details=resolution_details,
+        ),
     }
 
 
@@ -530,9 +615,12 @@ def merge_internal_and_external_food_sources(
 
 
 def get_food_catalog_status(database) -> dict[str, Any]:
+    settings = get_settings()
     spoonacular_status = get_spoonacular_status()
     return {
         "internal_foods_count": len(FOOD_CATALOG),
         "cached_foods_count": database.foods_catalog.count_documents({}),
+        "prefer_spoonacular_foods": settings.prefer_spoonacular_foods,
+        "catalog_source_strategy": settings.food_resolution_strategy,
         **spoonacular_status,
     }

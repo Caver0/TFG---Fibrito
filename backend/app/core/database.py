@@ -24,6 +24,7 @@ def connect_to_mongo() -> MongoClient:
             [("user_id", ASCENDING), ("created_at", ASCENDING)]
         )
         database.foods_catalog.create_index([("normalized_name", ASCENDING)])
+        database.foods_catalog.create_index([("aliases", ASCENDING)])
         database.foods_catalog.create_index([("internal_code", ASCENDING)])
         database.foods_catalog.create_index([("updated_at", ASCENDING)])
         database.foods_catalog.create_index(

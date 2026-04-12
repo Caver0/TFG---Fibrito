@@ -10,7 +10,18 @@ from app.schemas.user import UserPublic
 from app.services.food_catalog_service import get_food_catalog_version, get_internal_food_lookup, resolve_foods_by_codes
 from app.services.meal_distribution_service import generate_meal_distribution_targets, round_distribution_value
 
-DEFAULT_FOOD_DATA_SOURCE = "internal_catalog"
+DEFAULT_FOOD_DATA_SOURCE = "internal"
+CACHE_FOOD_DATA_SOURCE = "cache"
+SPOONACULAR_FOOD_DATA_SOURCE = "spoonacular"
+CATALOG_SOURCE_STRATEGY_DEFAULT = "internal_catalog_with_optional_spoonacular_enrichment"
+DIET_SOURCE_MAP = {
+    "internal_catalog": DEFAULT_FOOD_DATA_SOURCE,
+    "local_cache": CACHE_FOOD_DATA_SOURCE,
+    "spoonacular": SPOONACULAR_FOOD_DATA_SOURCE,
+    DEFAULT_FOOD_DATA_SOURCE: DEFAULT_FOOD_DATA_SOURCE,
+    CACHE_FOOD_DATA_SOURCE: CACHE_FOOD_DATA_SOURCE,
+    SPOONACULAR_FOOD_DATA_SOURCE: SPOONACULAR_FOOD_DATA_SOURCE,
+}
 EXACT_SOLVER_TOLERANCE = 1e-6
 FOOD_VALUE_PRECISION = 2
 FOOD_OMIT_THRESHOLD = {
@@ -37,6 +48,10 @@ MACRO_CALORIE_FACTORS = {
     "fat_grams": 9.0,
     "carb_grams": 4.0,
 }
+
+
+def normalize_diet_food_source(value: str | None) -> str:
+    return DIET_SOURCE_MAP.get(str(value or "").strip(), DEFAULT_FOOD_DATA_SOURCE)
 
 
 def round_diet_value(value: float) -> float:
@@ -234,10 +249,12 @@ def build_precise_food_values(food: dict, quantity: float) -> dict[str, float]:
 
 def build_food_portion(food: dict, quantity: float) -> dict:
     precise_values = build_precise_food_values(food, quantity)
+    food_source = normalize_diet_food_source(food.get("source"))
+    origin_source = normalize_diet_food_source(food.get("origin_source", food.get("source")))
     return {
         "food_code": food["code"],
-        "source": food.get("source", DEFAULT_FOOD_DATA_SOURCE),
-        "origin_source": food.get("origin_source", food.get("source", DEFAULT_FOOD_DATA_SOURCE)),
+        "source": food_source,
+        "origin_source": origin_source,
         "spoonacular_id": food.get("spoonacular_id"),
         "name": food["name"],
         "category": food["category"],
@@ -653,9 +670,9 @@ def collect_selected_food_codes(meal_plans: list[dict]) -> list[str]:
 
 
 def summarize_food_sources(meals: list[dict]) -> tuple[str, list[str]]:
-    source_order = [DEFAULT_FOOD_DATA_SOURCE, "local_cache", "spoonacular"]
+    source_order = [DEFAULT_FOOD_DATA_SOURCE, CACHE_FOOD_DATA_SOURCE, SPOONACULAR_FOOD_DATA_SOURCE]
     used_sources = {
-        food.get("source", DEFAULT_FOOD_DATA_SOURCE)
+        normalize_diet_food_source(food.get("source", DEFAULT_FOOD_DATA_SOURCE))
         for meal in meals
         for food in meal.get("foods", [])
     }
@@ -773,6 +790,13 @@ def generate_food_based_diet(
         "food_data_source": food_data_source,
         "food_data_sources": food_data_sources,
         "food_catalog_version": lookup_metadata.get("food_catalog_version", get_food_catalog_version()),
+        "catalog_source_strategy": lookup_metadata.get("catalog_source_strategy", CATALOG_SOURCE_STRATEGY_DEFAULT),
+        "spoonacular_attempted": lookup_metadata.get("spoonacular_attempted", False),
+        "spoonacular_attempts": lookup_metadata.get("spoonacular_attempts", 0),
+        "spoonacular_hits": lookup_metadata.get("spoonacular_hits", 0),
+        "cache_hits": lookup_metadata.get("cache_hits", 0),
+        "internal_fallbacks": lookup_metadata.get("internal_fallbacks", 0),
+        "resolved_foods_count": lookup_metadata.get("resolved_foods_count", len(selected_food_codes)),
         "meals": generated_meals,
     }
 
@@ -818,6 +842,13 @@ def save_diet(database, user_id: str, diet_payload: dict) -> DailyDiet:
         "food_data_source": diet_payload.get("food_data_source", DEFAULT_FOOD_DATA_SOURCE),
         "food_data_sources": diet_payload.get("food_data_sources", [diet_payload.get("food_data_source", DEFAULT_FOOD_DATA_SOURCE)]),
         "food_catalog_version": diet_payload.get("food_catalog_version"),
+        "catalog_source_strategy": diet_payload.get("catalog_source_strategy", CATALOG_SOURCE_STRATEGY_DEFAULT),
+        "spoonacular_attempted": diet_payload.get("spoonacular_attempted", False),
+        "spoonacular_attempts": diet_payload.get("spoonacular_attempts", 0),
+        "spoonacular_hits": diet_payload.get("spoonacular_hits", 0),
+        "cache_hits": diet_payload.get("cache_hits", 0),
+        "internal_fallbacks": diet_payload.get("internal_fallbacks", 0),
+        "resolved_foods_count": diet_payload.get("resolved_foods_count", 0),
         "meals": [
             {
                 "meal_number": meal["meal_number"],
@@ -837,8 +868,10 @@ def save_diet(database, user_id: str, diet_payload: dict) -> DailyDiet:
                 "foods": [
                     {
                         "food_code": food.get("food_code"),
-                        "source": food.get("source", DEFAULT_FOOD_DATA_SOURCE),
-                        "origin_source": food.get("origin_source", food.get("source", DEFAULT_FOOD_DATA_SOURCE)),
+                        "source": normalize_diet_food_source(food.get("source", DEFAULT_FOOD_DATA_SOURCE)),
+                        "origin_source": normalize_diet_food_source(
+                            food.get("origin_source", food.get("source", DEFAULT_FOOD_DATA_SOURCE))
+                        ),
                         "spoonacular_id": food.get("spoonacular_id"),
                         "name": food["name"],
                         "category": food["category"],

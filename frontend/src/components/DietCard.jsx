@@ -47,11 +47,11 @@ function formatFoodSource(value) {
     return 'Mixta'
   }
 
-  if (value === 'internal_catalog') {
+  if (value === 'internal_catalog' || value === 'internal') {
     return 'Catalogo interno'
   }
 
-  if (value === 'local_cache') {
+  if (value === 'local_cache' || value === 'cache') {
     return 'Cache local'
   }
 
@@ -68,11 +68,39 @@ function formatFoodSources(values, fallbackValue) {
 }
 
 function formatFoodLineage(food) {
-  if (food.source === 'local_cache' && food.origin_source === 'spoonacular') {
-    return 'Cache local (Spoonacular)'
+  const source = food.source
+  const originSource = food.origin_source
+
+  if ((source === 'local_cache' || source === 'cache') && originSource === 'spoonacular') {
+    return 'Cache local reutilizada desde Spoonacular'
   }
 
-  return formatFoodSource(food.source)
+  if (source === 'spoonacular') {
+    return 'Spoonacular en vivo'
+  }
+
+  return formatFoodSource(source)
+}
+
+function formatCatalogSourceStrategy(value) {
+  if (value === 'spoonacular_first_with_cache_fallback') {
+    return 'Spoonacular primero, luego cache local y por ultimo catalogo interno'
+  }
+
+  if (value === 'internal_catalog_with_optional_spoonacular_enrichment') {
+    return 'Catalogo interno con enriquecimiento opcional de Spoonacular'
+  }
+
+  return value || 'Sin estrategia registrada'
+}
+
+function formatResolutionSummary(diet) {
+  const attempts = Number(diet.spoonacular_attempts ?? 0)
+  if (!diet.spoonacular_attempted) {
+    return 'No'
+  }
+
+  return `Si (${attempts} consultas de resolucion)`
 }
 
 function DietCard({ description, diet, error, isLoading, title }) {
@@ -149,6 +177,30 @@ function DietCard({ description, diet, error, isLoading, title }) {
               <span>Version del catalogo</span>
               <strong>{diet.food_catalog_version ?? 'No aplica'}</strong>
             </article>
+            <article className="metric-card">
+              <span>Estrategia usada</span>
+              <strong>{formatCatalogSourceStrategy(diet.catalog_source_strategy)}</strong>
+            </article>
+            <article className="metric-card">
+              <span>Spoonacular intentado</span>
+              <strong>{formatResolutionSummary(diet)}</strong>
+            </article>
+            <article className="metric-card">
+              <span>Aciertos Spoonacular</span>
+              <strong>{diet.spoonacular_hits ?? 0}</strong>
+            </article>
+            <article className="metric-card">
+              <span>Aciertos cache</span>
+              <strong>{diet.cache_hits ?? 0}</strong>
+            </article>
+            <article className="metric-card">
+              <span>Fallback interno</span>
+              <strong>{diet.internal_fallbacks ?? 0}</strong>
+            </article>
+            <article className="metric-card">
+              <span>Alimentos resueltos</span>
+              <strong>{diet.resolved_foods_count ?? 0}</strong>
+            </article>
           </div>
 
           <div className="meal-list">
@@ -187,7 +239,7 @@ function DietCard({ description, diet, error, isLoading, title }) {
                           <span>{formatFoodQuantity(food)}</span>
                         </div>
                         <p className="food-row-meta">
-                          {formatNumber(food.calories, 2)} kcal | P {formatNumber(food.protein_grams, 2)} g | G {formatNumber(food.fat_grams, 2)} g | C {formatNumber(food.carb_grams, 2)} g | {formatFoodLineage(food)}
+                          {formatNumber(food.calories, 2)} kcal | P {formatNumber(food.protein_grams, 2)} g | G {formatNumber(food.fat_grams, 2)} g | C {formatNumber(food.carb_grams, 2)} g | {formatFoodLineage(food)}{food.spoonacular_id ? ` | Spoonacular ID ${food.spoonacular_id}` : ''}
                         </p>
                       </article>
                     ))}

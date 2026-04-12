@@ -20,7 +20,12 @@ class Settings(BaseSettings):
     spoonacular_base_url: str = Field(default="https://api.spoonacular.com", validation_alias="SPOONACULAR_BASE_URL")
     spoonacular_timeout_seconds: int = Field(default=10, validation_alias="SPOONACULAR_TIMEOUT_SECONDS")
     spoonacular_rate_limit_cooldown_seconds: int = Field(default=90, validation_alias="SPOONACULAR_RATE_LIMIT_COOLDOWN_SECONDS")
+    spoonacular_user_agent: str = Field(
+        default="Fibrito/0.1 (backend integration; contact=local)",
+        validation_alias="SPOONACULAR_USER_AGENT",
+    )
     spoonacular_generation_enrichment_enabled: bool = Field(default=True, validation_alias="SPOONACULAR_GENERATION_ENRICHMENT_ENABLED")
+    prefer_spoonacular_foods: bool = Field(default=False, validation_alias="PREFER_SPOONACULAR_FOODS")
     frontend_url: str = Field(default="http://localhost:5173", validation_alias="FRONTEND_URL")
 
     model_config = SettingsConfigDict(
@@ -40,6 +45,13 @@ class Settings(BaseSettings):
     @property
     def spoonacular_enabled(self) -> bool:
         return bool(self.spoonacular_api_key.strip())
+
+    @property
+    def food_resolution_strategy(self) -> str:
+        if self.prefer_spoonacular_foods:
+            return "spoonacular_first_with_cache_fallback"
+
+        return "internal_catalog_with_optional_spoonacular_enrichment"
 
 
 @lru_cache

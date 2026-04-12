@@ -55,6 +55,8 @@ class FoodCatalogStatusResponse(BaseModel):
     cached_foods_count: int = Field(ge=0)
     spoonacular_enabled: bool = False
     spoonacular_temporarily_blocked: bool = False
+    prefer_spoonacular_foods: bool = False
+    catalog_source_strategy: str = "internal_catalog_with_optional_spoonacular_enrichment"
     quota_blocked_until: datetime | None = None
     last_error: str | None = None
 
