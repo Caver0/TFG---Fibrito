@@ -11,20 +11,6 @@ COMMON_DIETARY_RESTRICTIONS = (
     "vegano",
     "sin_lactosa",
     "sin_gluten",
-    "halal",
-    "kosher",
-)
-COMMON_ALLERGIES = (
-    "frutos_secos",
-    "marisco",
-    "huevo",
-    "lacteos",
-    "gluten",
-    "pescado",
-)
-HALAL_KOSHER_WARNING = (
-    "Las restricciones halal y kosher se aplican de forma conservadora: "
-    "solo se aprueban alimentos claramente vegetales o etiquetados de forma explicita."
 )
 DIETARY_RESTRICTION_ALIASES = {
     "vegetariano": "vegetariano",
@@ -39,8 +25,6 @@ DIETARY_RESTRICTION_ALIASES = {
     "sin_gluten": "sin_gluten",
     "gluten free": "sin_gluten",
     "gluten_free": "sin_gluten",
-    "halal": "halal",
-    "kosher": "kosher",
 }
 ALLERGY_ALIASES = {
     "frutos secos": "frutos_secos",
@@ -69,43 +53,43 @@ INTERNAL_FOOD_COMPATIBILITY: dict[str, dict[str, list[str]]] = {
     "greek_yogurt": {"dietary_tags": ["vegetariano", "sin_gluten"], "allergen_tags": ["lacteos"]},
     "semi_skimmed_milk": {"dietary_tags": ["vegetariano", "sin_gluten"], "allergen_tags": ["lacteos"]},
     "rice": {
-        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten", "halal", "kosher"],
+        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten"],
         "allergen_tags": [],
     },
     "pasta": {
-        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "halal", "kosher"],
+        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa"],
         "allergen_tags": ["gluten"],
     },
     "oats": {
-        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "halal", "kosher"],
+        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa"],
         "allergen_tags": ["gluten"],
     },
     "whole_wheat_bread": {
-        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "halal", "kosher"],
+        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa"],
         "allergen_tags": ["gluten"],
     },
     "potato": {
-        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten", "halal", "kosher"],
+        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten"],
         "allergen_tags": [],
     },
     "olive_oil": {
-        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten", "halal", "kosher"],
+        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten"],
         "allergen_tags": [],
     },
     "avocado": {
-        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten", "halal", "kosher"],
+        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten"],
         "allergen_tags": [],
     },
     "mixed_nuts": {
-        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten", "halal", "kosher"],
+        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten"],
         "allergen_tags": ["frutos_secos"],
     },
     "banana": {
-        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten", "halal", "kosher"],
+        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten"],
         "allergen_tags": [],
     },
     "mixed_vegetables": {
-        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten", "halal", "kosher"],
+        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten"],
         "allergen_tags": [],
     },
 }
@@ -170,10 +154,7 @@ def sanitize_user_food_preferences(payload: Any) -> dict[str, list[str]]:
             raw_payload.get("dietary_restrictions"),
             DIETARY_RESTRICTION_ALIASES,
         ),
-        "allergies": _normalize_with_alias_map(
-            raw_payload.get("allergies"),
-            ALLERGY_ALIASES,
-        ),
+        "allergies": _normalize_list(raw_payload.get("allergies")),
     }
 
 
@@ -192,18 +173,19 @@ def build_user_food_preferences_profile(user: Any) -> dict[str, Any]:
             "allergies": user_data.get("allergies") or [],
         }
     )
-    warnings: list[str] = []
-    if any(restriction in {"halal", "kosher"} for restriction in serialized_preferences["dietary_restrictions"]):
-        warnings.append(HALAL_KOSHER_WARNING)
-
     return {
         **serialized_preferences,
         "normalized_preferred_foods": set(serialized_preferences["preferred_foods"]),
         "normalized_disliked_foods": set(serialized_preferences["disliked_foods"]),
         "dietary_restriction_set": set(serialized_preferences["dietary_restrictions"]),
         "allergy_set": set(serialized_preferences["allergies"]),
+        "allergy_tag_set": {
+            ALLERGY_ALIASES[allergy]
+            for allergy in serialized_preferences["allergies"]
+            if allergy in ALLERGY_ALIASES
+        },
         "has_preferences": any(serialized_preferences.values()),
-        "warnings": warnings,
+        "warnings": [],
     }
 
 
@@ -252,7 +234,7 @@ def _derive_food_compatibility_from_heuristics(food: dict[str, Any]) -> tuple[li
     if not any((contains_meat, contains_fish, contains_shellfish)):
         dietary_tags.add("vegetariano")
     if plant_based:
-        dietary_tags.update({"vegano", "halal", "kosher"})
+        dietary_tags.add("vegano")
 
     if contains_nuts:
         allergen_tags.add("frutos_secos")
@@ -342,8 +324,13 @@ def is_food_allowed_for_user(food: dict[str, Any], profile: dict[str, Any]) -> t
             reasons.append(f"marcado como no deseado: {disliked_food}")
 
     for allergy in profile["allergy_set"]:
-        if allergy in annotated_food.get("allergen_tags", []):
-            reasons.append(f"incompatible con alergia o intolerancia: {allergy}")
+        if _matches_food_label(annotated_food, allergy):
+            reasons.append(f"marcado como alergia o exclusion sensible: {allergy}")
+            continue
+
+    for allergy_tag in profile.get("allergy_tag_set", set()):
+        if allergy_tag in annotated_food.get("allergen_tags", []):
+            reasons.append(f"incompatible con alergia o intolerancia: {allergy_tag}")
 
     for restriction in profile["dietary_restriction_set"]:
         if restriction not in annotated_food.get("dietary_tags", []):

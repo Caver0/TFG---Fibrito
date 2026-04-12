@@ -237,6 +237,13 @@ button {
   grid-column: 1 / -1;
 }
 
+.input-helper {
+  display: block;
+  margin-top: 6px;
+  color: #6f6459;
+  font-size: 0.9rem;
+}
+
 .profile-form .form-error,
 .profile-form .form-success,
 .weight-form .form-error,

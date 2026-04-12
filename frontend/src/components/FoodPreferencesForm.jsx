@@ -5,25 +5,20 @@ const dietaryRestrictionOptions = [
   { value: 'vegano', label: 'Vegano' },
   { value: 'sin_lactosa', label: 'Sin lactosa' },
   { value: 'sin_gluten', label: 'Sin gluten' },
-  { value: 'halal', label: 'Halal' },
-  { value: 'kosher', label: 'Kosher' },
 ]
 
-const allergyOptions = [
-  { value: 'frutos_secos', label: 'Frutos secos' },
-  { value: 'marisco', label: 'Marisco' },
-  { value: 'huevo', label: 'Huevo' },
-  { value: 'lacteos', label: 'Lacteos' },
-  { value: 'gluten', label: 'Gluten' },
-  { value: 'pescado', label: 'Pescado' },
-]
+const supportedDietaryRestrictionValues = new Set(
+  dietaryRestrictionOptions.map((option) => option.value),
+)
 
 function buildFormState(preferences) {
   return {
     preferredFoods: (preferences?.preferred_foods ?? []).join(', '),
     dislikedFoods: (preferences?.disliked_foods ?? []).join(', '),
-    dietaryRestrictions: preferences?.dietary_restrictions ?? [],
-    allergies: preferences?.allergies ?? [],
+    dietaryRestrictions: (preferences?.dietary_restrictions ?? []).filter((value) =>
+      supportedDietaryRestrictionValues.has(value),
+    ),
+    allergiesText: (preferences?.allergies ?? []).join(', '),
   }
 }
 
@@ -48,7 +43,12 @@ function formatPreferenceList(values, options) {
   }
 
   const labelMap = new Map(options.map((option) => [option.value, option.label]))
-  return values.map((value) => labelMap.get(value) ?? value).join(', ')
+  const supportedValues = values.filter((value) => labelMap.has(value))
+  if (!supportedValues.length) {
+    return 'Sin configurar'
+  }
+
+  return supportedValues.map((value) => labelMap.get(value)).join(', ')
 }
 
 function FoodPreferencesForm({
@@ -84,7 +84,7 @@ function FoodPreferencesForm({
       preferred_foods: parseCommaSeparatedList(form.preferredFoods),
       disliked_foods: parseCommaSeparatedList(form.dislikedFoods),
       dietary_restrictions: form.dietaryRestrictions,
-      allergies: form.allergies,
+      allergies: parseCommaSeparatedList(form.allergiesText),
     })
   }
 
@@ -137,21 +137,17 @@ function FoodPreferencesForm({
           </div>
         </div>
 
-        <div className="preference-option-group profile-form-full">
-          <span>Alergias o intolerancias</span>
-          <div className="preference-options-grid">
-            {allergyOptions.map((option) => (
-              <label key={option.value} className="diet-toggle preference-toggle">
-                <input
-                  type="checkbox"
-                  checked={form.allergies.includes(option.value)}
-                  onChange={() => handleToggle('allergies', option.value)}
-                />
-                <span>{option.label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
+        <label className="profile-form-full">
+          <span>Alergias o exclusiones sensibles</span>
+          <input
+            name="allergiesText"
+            type="text"
+            value={form.allergiesText}
+            onChange={handleTextChange}
+            placeholder="Ejemplo: huevo, atun, marisco"
+          />
+          <small className="input-helper">Escribe tus alergias o exclusiones separadas por comas. Se trataran como alimentos sensibles a evitar.</small>
+        </label>
 
         <div className="distribution-card">
           <div>
@@ -168,7 +164,7 @@ function FoodPreferencesForm({
           </div>
           <div>
             <span className="history-label">Alergias activas</span>
-            <strong>{formatPreferenceList(preferences?.allergies, allergyOptions)}</strong>
+            <strong>{preferences?.allergies?.join(', ') || 'Sin configurar'}</strong>
           </div>
         </div>
 

@@ -26,7 +26,7 @@ def read_current_user(current_user: UserPublic = Depends(get_current_user)) -> U
 def read_current_user_food_preferences(
     current_user: UserPublic = Depends(get_current_user),
 ) -> FoodPreferencesProfile:
-    return current_user.food_preferences
+    return FoodPreferencesProfile(**sanitize_user_food_preferences(current_user.food_preferences))
 
 
 @router.put("/me/preferences", response_model=FoodPreferencesProfile)
