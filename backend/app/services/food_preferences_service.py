@@ -315,6 +315,11 @@ def _count_preferred_matches(food: dict[str, Any], profile: dict[str, Any]) -> i
     )
 
 
+def count_food_preference_matches(food: dict[str, Any], profile: dict[str, Any]) -> int:
+    annotated_food = food if food.get("preference_labels") else annotate_food_compatibility(food)
+    return _count_preferred_matches(annotated_food, profile)
+
+
 def is_food_allowed_for_user(food: dict[str, Any], profile: dict[str, Any]) -> tuple[bool, list[str]]:
     annotated_food = annotate_food_compatibility(food)
     reasons: list[str] = []
@@ -383,14 +388,13 @@ def apply_user_food_preferences(foods: list[dict[str, Any]], profile: dict[str, 
         }
 
     allowed_foods, blocked_foods = filter_allowed_foods(foods, profile)
-    prioritized_foods = prioritize_preferred_foods(allowed_foods, profile)
     preferred_matches = sum(
         1
-        for food in prioritized_foods
-        if _count_preferred_matches(food, profile) > 0
+        for food in allowed_foods
+        if count_food_preference_matches(food, profile) > 0
     )
     return {
-        "foods": prioritized_foods,
+        "foods": allowed_foods,
         "blocked_foods": blocked_foods,
         "preferred_matches": preferred_matches,
     }
@@ -401,5 +405,5 @@ def count_preferred_food_matches_in_meals(meals: list[dict[str, Any]], profile: 
         1
         for meal in meals
         for food in meal.get("foods", [])
-        if _count_preferred_matches(annotate_food_compatibility(food), profile) > 0
+        if count_food_preference_matches(food, profile) > 0
     )

@@ -287,6 +287,8 @@ class DietBase(BaseModel):
     applied_dietary_restrictions: list[str] = Field(default_factory=list)
     applied_allergies: list[str] = Field(default_factory=list)
     preferred_food_matches: int = Field(default=0, ge=0)
+    diversity_strategy_applied: bool = False
+    food_usage_summary: dict[str, int] = Field(default_factory=dict)
     food_filter_warnings: list[str] = Field(default_factory=list)
     catalog_source_strategy: str = DEFAULT_CATALOG_SOURCE_STRATEGY
     spoonacular_attempted: bool = False
@@ -459,6 +461,8 @@ def serialize_daily_diet(document: dict[str, Any]) -> DailyDiet:
         applied_dietary_restrictions=document.get("applied_dietary_restrictions", []),
         applied_allergies=document.get("applied_allergies", []),
         preferred_food_matches=document.get("preferred_food_matches", 0),
+        diversity_strategy_applied=document.get("diversity_strategy_applied", False),
+        food_usage_summary=document.get("food_usage_summary", {}),
         food_filter_warnings=document.get("food_filter_warnings", []),
         catalog_source_strategy=document.get("catalog_source_strategy", DEFAULT_CATALOG_SOURCE_STRATEGY),
         spoonacular_attempted=document.get(
@@ -509,6 +513,8 @@ def serialize_diet_list_item(document: dict[str, Any]) -> DietListItem:
         applied_dietary_restrictions=document.get("applied_dietary_restrictions", []),
         applied_allergies=document.get("applied_allergies", []),
         preferred_food_matches=document.get("preferred_food_matches", 0),
+        diversity_strategy_applied=document.get("diversity_strategy_applied", False),
+        food_usage_summary=document.get("food_usage_summary", {}),
         food_filter_warnings=document.get("food_filter_warnings", []),
         catalog_source_strategy=document.get("catalog_source_strategy", DEFAULT_CATALOG_SOURCE_STRATEGY),
         spoonacular_attempted=document.get(

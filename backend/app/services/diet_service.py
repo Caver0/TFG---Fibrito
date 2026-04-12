@@ -12,6 +12,7 @@ from app.services.food_preferences_service import (
     FoodPreferenceConflictError,
     apply_user_food_preferences,
     build_user_food_preferences_profile,
+    count_food_preference_matches,
     count_preferred_food_matches_in_meals,
 )
 from app.services.meal_distribution_service import generate_meal_distribution_targets, round_distribution_value
@@ -78,6 +79,32 @@ MACRO_CALORIE_FACTORS = {
     "fat_grams": 9.0,
     "carb_grams": 4.0,
 }
+CANDIDATE_INDEX_WEIGHT = 0.08
+PREFERRED_FOOD_BONUS_BY_ROLE = {
+    "protein": 0.42,
+    "carb": 0.34,
+    "fat": 0.12,
+    "fruit": 0.18,
+    "vegetable": 0.14,
+    "dairy": 0.22,
+}
+REPEAT_PENALTY_BY_ROLE = {
+    "protein": 0.85,
+    "carb": 0.72,
+    "fat": 0.28,
+    "fruit": 0.18,
+    "vegetable": 0.12,
+    "dairy": 0.24,
+}
+REPEAT_ESCALATION_BY_ROLE = {
+    "protein": 0.75,
+    "carb": 0.55,
+    "fat": 0.18,
+    "fruit": 0.12,
+    "vegetable": 0.08,
+    "dairy": 0.18,
+}
+REPEATED_MAIN_PAIR_PENALTY = 0.5
 
 
 def normalize_diet_food_source(value: str | None) -> str:
@@ -257,6 +284,107 @@ def rotate_codes(codes: list[str], rotation_seed: int) -> list[str]:
 
     shift = rotation_seed % len(codes)
     return codes[shift:] + codes[:shift]
+
+
+def create_daily_food_usage_tracker() -> dict[str, dict]:
+    return {
+        "food_counts": {},
+        "role_counts": {},
+        "main_pair_counts": {},
+    }
+
+
+def track_food_usage_across_day(daily_food_usage: dict[str, dict], meal_plan: dict) -> None:
+    selected_role_codes = meal_plan.get("selected_role_codes", {})
+    protein_code = selected_role_codes.get("protein")
+    carb_code = selected_role_codes.get("carb")
+
+    def add_usage(food_code: str | None, role: str) -> None:
+        if not food_code:
+            return
+
+        daily_food_usage["food_counts"][food_code] = daily_food_usage["food_counts"].get(food_code, 0) + 1
+        role_counts = daily_food_usage["role_counts"].setdefault(role, {})
+        role_counts[food_code] = role_counts.get(food_code, 0) + 1
+
+    for role, food_code in selected_role_codes.items():
+        add_usage(food_code, role)
+
+    for support_food in meal_plan.get("support_food_specs", []):
+        add_usage(support_food.get("food_code"), support_food.get("role", "support"))
+
+    if protein_code and carb_code:
+        pair_key = f"{protein_code}::{carb_code}"
+        daily_food_usage["main_pair_counts"][pair_key] = daily_food_usage["main_pair_counts"].get(pair_key, 0) + 1
+
+
+def get_food_usage_summary_from_meals(meals: list[dict]) -> dict[str, int]:
+    food_usage_summary: dict[str, int] = {}
+
+    for meal in meals:
+        for food in meal.get("foods", []):
+            food_name = str(food.get("name") or "").strip()
+            if not food_name:
+                continue
+
+            food_usage_summary[food_name] = food_usage_summary.get(food_name, 0) + 1
+
+    return dict(sorted(food_usage_summary.items()))
+
+
+def apply_preference_priority(
+    food: dict,
+    *,
+    role: str,
+    preference_profile: dict | None,
+    daily_food_usage: dict | None,
+) -> float:
+    if not preference_profile or not preference_profile.get("normalized_preferred_foods"):
+        return 0.0
+
+    preferred_matches = count_food_preference_matches(food, preference_profile)
+    if preferred_matches <= 0:
+        return 0.0
+
+    usage_count = 0
+    if daily_food_usage:
+        usage_count = int(daily_food_usage.get("food_counts", {}).get(food["code"], 0))
+
+    usage_modifier = max(0.35, 1.0 - (0.45 * usage_count))
+    return PREFERRED_FOOD_BONUS_BY_ROLE.get(role, 0.16) * preferred_matches * usage_modifier
+
+
+def apply_repeat_penalty(
+    food_code: str,
+    *,
+    role: str,
+    daily_food_usage: dict | None,
+) -> float:
+    if not daily_food_usage:
+        return 0.0
+
+    usage_count = int(daily_food_usage.get("food_counts", {}).get(food_code, 0))
+    if usage_count <= 0:
+        return 0.0
+
+    base_penalty = REPEAT_PENALTY_BY_ROLE.get(role, 0.15) * usage_count
+    escalation_penalty = REPEAT_ESCALATION_BY_ROLE.get(role, 0.08) * max(0, usage_count - 1)
+    return base_penalty + escalation_penalty
+
+
+def apply_main_pair_repeat_penalty(
+    role_foods: dict[str, dict],
+    *,
+    daily_food_usage: dict | None,
+) -> float:
+    if not daily_food_usage:
+        return 0.0
+
+    protein_code = role_foods["protein"]["code"]
+    carb_code = role_foods["carb"]["code"]
+    pair_key = f"{protein_code}::{carb_code}"
+    pair_count = int(daily_food_usage.get("main_pair_counts", {}).get(pair_key, 0))
+    return pair_count * REPEATED_MAIN_PAIR_PENALTY
 
 
 def get_role_candidate_codes(
@@ -485,6 +613,8 @@ def build_solution_score(
     candidate_indexes: dict[str, int],
     training_focus: bool,
     meal_slot: str,
+    preference_profile: dict | None = None,
+    daily_food_usage: dict | None = None,
 ) -> float:
     score = 0.0
 
@@ -493,8 +623,19 @@ def build_solution_score(
         preferred_quantity = float(food["default_quantity"])
         soft_minimum = get_soft_role_minimum(food, role)
 
-        score += candidate_indexes[role] * 0.12
+        score += candidate_indexes[role] * CANDIDATE_INDEX_WEIGHT
         score += abs(quantity - preferred_quantity) / max(preferred_quantity, 1.0) * 0.3
+        score -= apply_preference_priority(
+            food,
+            role=role,
+            preference_profile=preference_profile,
+            daily_food_usage=daily_food_usage,
+        )
+        score += apply_repeat_penalty(
+            food["code"],
+            role=role,
+            daily_food_usage=daily_food_usage,
+        )
 
         if quantity < soft_minimum:
             score += ((soft_minimum - quantity) / max(soft_minimum, 1.0)) * 2.2
@@ -511,6 +652,11 @@ def build_solution_score(
         if role == "protein" and meal_slot == "early" and food["code"] in {"egg_whites", "greek_yogurt"}:
             score -= 0.1
 
+    score += apply_main_pair_repeat_penalty(
+        role_foods,
+        daily_food_usage=daily_food_usage,
+    )
+
     if support_foods:
         score += 0.15 * len(support_foods)
 
@@ -518,6 +664,19 @@ def build_solution_score(
             score -= 0.05
         if training_focus and support_foods[0]["role"] == "fruit":
             score -= 0.05
+
+        for support_food in support_foods:
+            score -= apply_preference_priority(
+                support_food,
+                role=support_food["role"],
+                preference_profile=preference_profile,
+                daily_food_usage=daily_food_usage,
+            )
+            score += apply_repeat_penalty(
+                support_food["code"],
+                role=support_food["role"],
+                daily_food_usage=daily_food_usage,
+            )
 
     return score
 
@@ -531,6 +690,8 @@ def build_exact_meal_solution(
     food_lookup: dict[str, dict],
     training_focus: bool,
     meal_slot: str,
+    preference_profile: dict | None = None,
+    daily_food_usage: dict | None = None,
 ) -> dict | None:
     all_codes = [
         role_foods["protein"]["code"],
@@ -616,6 +777,13 @@ def build_exact_meal_solution(
         "fat_difference": 0.0,
         "carb_difference": 0.0,
     }
+    resolved_support_foods = [
+        {
+            **food_lookup[support_food["food_code"]],
+            "role": support_food["role"],
+        }
+        for support_food in support_food_specs
+    ]
 
     return {
         "foods": [{key: value for key, value in food.items() if key != "role"} for food in foods],
@@ -631,10 +799,12 @@ def build_exact_meal_solution(
         "score": build_solution_score(
             role_foods=role_foods,
             role_quantities=role_quantities,
-            support_foods=support_food_specs,
+            support_foods=resolved_support_foods,
             candidate_indexes=candidate_indexes,
             training_focus=training_focus,
             meal_slot=meal_slot,
+            preference_profile=preference_profile,
+            daily_food_usage=daily_food_usage,
         ),
         **exact_actuals,
     }
@@ -648,6 +818,7 @@ def find_exact_solution_for_meal(
     training_focus: bool,
     food_lookup: dict[str, dict],
     preference_profile: dict | None = None,
+    daily_food_usage: dict | None = None,
 ) -> dict:
     candidate_codes = get_role_candidate_codes(
         meal=meal,
@@ -699,6 +870,8 @@ def find_exact_solution_for_meal(
                     food_lookup=food_lookup,
                     training_focus=training_focus,
                     meal_slot=meal_slot,
+                    preference_profile=preference_profile,
+                    daily_food_usage=daily_food_usage,
                 )
                 if not candidate_solution:
                     continue
@@ -880,17 +1053,20 @@ def generate_food_based_diet(
         training_time_of_day=training_time_of_day,
     )
     internal_food_lookup = get_internal_food_lookup()
-    planned_meals = [
-        find_exact_solution_for_meal(
+    daily_food_usage = create_daily_food_usage_tracker()
+    planned_meals: list[dict] = []
+    for meal_index, meal in enumerate(meal_distribution["meals"]):
+        planned_meal = find_exact_solution_for_meal(
             meal=DietMeal.model_validate(meal),
             meal_index=meal_index,
             meals_count=meals_count,
             training_focus=meal_distribution["training_optimization_applied"] and meal_index in focus_indexes,
             food_lookup=internal_food_lookup,
             preference_profile=preference_profile,
+            daily_food_usage=daily_food_usage,
         )
-        for meal_index, meal in enumerate(meal_distribution["meals"])
-    ]
+        planned_meals.append(planned_meal)
+        track_food_usage_across_day(daily_food_usage, planned_meal)
     selected_food_codes = collect_selected_food_codes(planned_meals)
     resolved_food_lookup, lookup_metadata = resolve_foods_by_codes(
         database,
@@ -913,6 +1089,7 @@ def generate_food_based_diet(
     ]
     food_data_source, food_data_sources = summarize_food_sources(generated_meals)
     preferred_food_matches = count_preferred_food_matches_in_meals(generated_meals, preference_profile)
+    food_usage_summary = get_food_usage_summary_from_meals(generated_meals)
     daily_totals = calculate_daily_totals_from_meals(
         target_calories=meal_distribution["target_calories"],
         target_protein_grams=meal_distribution["protein_grams"],
@@ -945,6 +1122,8 @@ def generate_food_based_diet(
         "applied_dietary_restrictions": preference_profile.get("dietary_restrictions", []),
         "applied_allergies": preference_profile.get("allergies", []),
         "preferred_food_matches": preferred_food_matches,
+        "diversity_strategy_applied": True,
+        "food_usage_summary": food_usage_summary,
         "food_filter_warnings": preference_profile.get("warnings", []),
         "catalog_source_strategy": lookup_metadata.get("catalog_source_strategy", CATALOG_SOURCE_STRATEGY_DEFAULT),
         "spoonacular_attempted": lookup_metadata.get("spoonacular_attempted", False),
@@ -1002,6 +1181,8 @@ def save_diet(database, user_id: str, diet_payload: dict) -> DailyDiet:
         "applied_dietary_restrictions": diet_payload.get("applied_dietary_restrictions", []),
         "applied_allergies": diet_payload.get("applied_allergies", []),
         "preferred_food_matches": diet_payload.get("preferred_food_matches", 0),
+        "diversity_strategy_applied": diet_payload.get("diversity_strategy_applied", False),
+        "food_usage_summary": diet_payload.get("food_usage_summary", {}),
         "food_filter_warnings": diet_payload.get("food_filter_warnings", []),
         "catalog_source_strategy": diet_payload.get("catalog_source_strategy", CATALOG_SOURCE_STRATEGY_DEFAULT),
         "spoonacular_attempted": diet_payload.get("spoonacular_attempted", False),
