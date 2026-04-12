@@ -1,3 +1,7 @@
+import { useState } from 'react'
+
+import FoodReplacementModal from './FoodReplacementModal'
+import MealCard from './MealCard'
 import { formatTrainingTimeOfDay } from '../utils/dietDistribution'
 
 function formatDietTimestamp(value) {
@@ -21,21 +25,6 @@ function formatDistribution(percentages) {
 
 function formatNumber(value, decimals = 1) {
   return Number(value ?? 0).toFixed(decimals)
-}
-
-function formatFoodQuantity(food) {
-  const quantity = Number(food.quantity ?? 0)
-  const quantityLabel = Number.isInteger(quantity)
-    ? quantity.toFixed(0)
-    : quantity.toFixed(quantity < 1 ? 2 : 1)
-  const unit = food.unit === 'unidad' ? (quantity === 1 ? 'unidad' : 'unidades') : food.unit
-  const baseLabel = `${quantityLabel} ${unit}`
-
-  if (!food.grams || food.unit === 'g') {
-    return baseLabel
-  }
-
-  return `${baseLabel} (${formatNumber(food.grams, 1)} g aprox.)`
 }
 
 function formatFoodSource(value) {
@@ -67,21 +56,6 @@ function formatFoodSources(values, fallbackValue) {
   return normalizedValues.map((value) => formatFoodSource(value)).join(' + ')
 }
 
-function formatFoodLineage(food) {
-  const source = food.source
-  const originSource = food.origin_source
-
-  if ((source === 'local_cache' || source === 'cache') && originSource === 'spoonacular') {
-    return 'Cache local reutilizada desde Spoonacular'
-  }
-
-  if (source === 'spoonacular') {
-    return 'Spoonacular en vivo'
-  }
-
-  return formatFoodSource(source)
-}
-
 function formatCatalogSourceStrategy(value) {
   if (value === 'spoonacular_first_with_cache_fallback') {
     return 'Spoonacular primero, luego cache local y por ultimo catalogo interno'
@@ -103,7 +77,43 @@ function formatResolutionSummary(diet) {
   return `Si (${attempts} consultas de resolucion)`
 }
 
-function DietCard({ description, diet, error, isLoading, title }) {
+function DietCard({
+  actionError,
+  actionMessage,
+  actionSummary,
+  activeFoodCode,
+  activeMealNumber,
+  description,
+  diet,
+  error,
+  isLoading,
+  isMealActionLoading,
+  onRegenerateMeal,
+  onReplaceFood,
+  onSearchFoods,
+  title,
+}) {
+  const [replacementTarget, setReplacementTarget] = useState(null)
+
+  async function handleSubmitReplacement(payload) {
+    if (!diet?.id || !replacementTarget) {
+      return
+    }
+
+    const wasSuccessful = await onReplaceFood(diet.id, replacementTarget.mealNumber, payload)
+    if (wasSuccessful) {
+      setReplacementTarget(null)
+    }
+  }
+
+  async function handleRegenerate(mealNumber) {
+    if (!diet?.id) {
+      return
+    }
+
+    await onRegenerateMeal(diet.id, mealNumber)
+  }
+
   return (
     <section className="profile-section">
       <div className="section-heading">
@@ -114,6 +124,21 @@ function DietCard({ description, diet, error, isLoading, title }) {
 
       {isLoading ? <p className="info-note">Cargando dieta...</p> : null}
       {!isLoading && error ? <p className="info-note info-note-warning">{error}</p> : null}
+      {!isLoading && !error && actionError ? <p className="info-note info-note-warning">{actionError}</p> : null}
+      {!isLoading && !error && actionMessage ? <p className="info-note">{actionMessage}</p> : null}
+      {!isLoading && !error && actionSummary ? (
+        <article className="diet-action-summary">
+          <strong>Ultimo cambio aplicado</strong>
+          <p>{actionSummary.message}</p>
+          {actionSummary.strategy_notes?.length ? (
+            <ul className="diet-action-list">
+              {actionSummary.strategy_notes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          ) : null}
+        </article>
+      ) : null}
       {!isLoading && !error && !diet ? (
         <p className="info-note">Todavia no hay una dieta generada para mostrar.</p>
       ) : null}
@@ -205,51 +230,27 @@ function DietCard({ description, diet, error, isLoading, title }) {
 
           <div className="meal-list">
             {diet.meals.map((meal) => (
-              <article key={meal.meal_number} className="meal-card">
-                <div className="meal-card-header">
-                  <strong>Comida {meal.meal_number}</strong>
-                  <span>{meal.distribution_percentage ?? 'Sin dato'}%</span>
-                </div>
-
-                <div className="meal-summary-grid">
-                  <div className="meal-summary-item">
-                    <span>Calorias</span>
-                    <strong>{formatNumber(meal.actual_calories)} / {formatNumber(meal.target_calories)} kcal</strong>
-                  </div>
-                  <div className="meal-summary-item">
-                    <span>Proteina</span>
-                    <strong>{formatNumber(meal.actual_protein_grams)} / {formatNumber(meal.target_protein_grams)} g</strong>
-                  </div>
-                  <div className="meal-summary-item">
-                    <span>Grasas</span>
-                    <strong>{formatNumber(meal.actual_fat_grams)} / {formatNumber(meal.target_fat_grams)} g</strong>
-                  </div>
-                  <div className="meal-summary-item">
-                    <span>Carbohidratos</span>
-                    <strong>{formatNumber(meal.actual_carb_grams)} / {formatNumber(meal.target_carb_grams)} g</strong>
-                  </div>
-                </div>
-
-                {meal.foods?.length ? (
-                  <div className="food-list">
-                    {meal.foods.map((food) => (
-                      <article key={`${meal.meal_number}-${food.food_code ?? food.name}`} className="food-row">
-                        <div className="food-row-header">
-                          <strong>{food.name}</strong>
-                          <span>{formatFoodQuantity(food)}</span>
-                        </div>
-                        <p className="food-row-meta">
-                          {formatNumber(food.calories, 2)} kcal | P {formatNumber(food.protein_grams, 2)} g | G {formatNumber(food.fat_grams, 2)} g | C {formatNumber(food.carb_grams, 2)} g | {formatFoodLineage(food)}{food.spoonacular_id ? ` | Spoonacular ID ${food.spoonacular_id}` : ''}
-                        </p>
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="info-note">Esta dieta no tiene alimentos concretos guardados.</p>
-                )}
-              </article>
+              <MealCard
+                key={meal.meal_number}
+                busyFoodCode={isMealActionLoading && activeMealNumber === meal.meal_number ? activeFoodCode : ''}
+                isBusy={isMealActionLoading}
+                isRegenerating={isMealActionLoading && activeMealNumber === meal.meal_number && !activeFoodCode}
+                meal={meal}
+                onOpenReplacement={(mealNumber, food) => setReplacementTarget({ mealNumber, food })}
+                onRegenerate={handleRegenerate}
+              />
             ))}
           </div>
+
+          <FoodReplacementModal
+            food={replacementTarget?.food}
+            isOpen={Boolean(replacementTarget)}
+            isSubmitting={isMealActionLoading}
+            mealNumber={replacementTarget?.mealNumber}
+            onClose={() => setReplacementTarget(null)}
+            onSearchFoods={onSearchFoods}
+            onSubmit={handleSubmitReplacement}
+          />
         </>
       ) : null}
     </section>

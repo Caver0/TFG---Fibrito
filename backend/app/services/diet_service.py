@@ -1,6 +1,7 @@
 """Food-based diet generation and persistence."""
 from datetime import UTC, datetime
 from itertools import product
+from typing import Any
 
 from bson import ObjectId
 from fastapi import HTTPException, status
@@ -227,6 +228,91 @@ def apply_user_food_preferences_to_meal_candidates(
         preference_profile=preference_profile,
     )
     return filtered_candidate_codes, filtered_support_options
+
+
+def apply_meal_candidate_constraints(
+    candidate_codes: dict[str, list[str]],
+    *,
+    food_lookup: dict[str, dict],
+    forced_role_codes: dict[str, str] | None = None,
+    excluded_food_codes: set[str] | None = None,
+) -> dict[str, list[str]]:
+    excluded_codes = set(excluded_food_codes or set())
+    constrained_candidate_codes: dict[str, list[str]] = {}
+
+    for role, role_codes in candidate_codes.items():
+        filtered_codes = [
+            code
+            for code in role_codes
+            if code in food_lookup and code not in excluded_codes
+        ]
+        forced_code = forced_role_codes.get(role) if forced_role_codes else None
+        if forced_code:
+            if forced_code not in food_lookup:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Forced food code '{forced_code}' is not available in the current food lookup",
+                )
+
+            filtered_codes = [forced_code] + [
+                code for code in filtered_codes if code != forced_code
+            ]
+
+        constrained_candidate_codes[role] = filtered_codes
+
+    return constrained_candidate_codes
+
+
+def apply_support_option_constraints(
+    support_options: list[list[dict]],
+    *,
+    food_lookup: dict[str, dict],
+    forced_support_foods: list[dict] | None = None,
+    excluded_food_codes: set[str] | None = None,
+) -> list[list[dict]]:
+    if forced_support_foods is not None:
+        if not forced_support_foods:
+            return [[]]
+
+        for support_food in forced_support_foods:
+            if support_food["food_code"] not in food_lookup:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Support food '{support_food['food_code']}' is not available in the current food lookup",
+                )
+
+        return [[
+            {
+                "role": support_food["role"],
+                "food_code": support_food["food_code"],
+                "quantity": float(support_food["quantity"]),
+            }
+            for support_food in forced_support_foods
+        ]]
+
+    excluded_codes = set(excluded_food_codes or set())
+    filtered_support_options: list[list[dict]] = []
+
+    for support_option in support_options:
+        if any(
+            support_food["food_code"] not in food_lookup or support_food["food_code"] in excluded_codes
+            for support_food in support_option
+        ):
+            continue
+
+        filtered_support_options.append([
+            {
+                "role": support_food["role"],
+                "food_code": support_food["food_code"],
+                "quantity": float(support_food["quantity"]),
+            }
+            for support_food in support_option
+        ])
+
+    if [] not in filtered_support_options:
+        filtered_support_options.insert(0, [])
+
+    return filtered_support_options or [[]]
 
 
 def round_diet_value(value: float) -> float:
@@ -819,6 +905,9 @@ def find_exact_solution_for_meal(
     food_lookup: dict[str, dict],
     preference_profile: dict | None = None,
     daily_food_usage: dict | None = None,
+    forced_role_codes: dict[str, str] | None = None,
+    forced_support_foods: list[dict] | None = None,
+    excluded_food_codes: set[str] | None = None,
 ) -> dict:
     candidate_codes = get_role_candidate_codes(
         meal=meal,
@@ -839,6 +928,18 @@ def find_exact_solution_for_meal(
             food_lookup=food_lookup,
             preference_profile=preference_profile,
         )
+    candidate_codes = apply_meal_candidate_constraints(
+        candidate_codes,
+        food_lookup=food_lookup,
+        forced_role_codes=forced_role_codes,
+        excluded_food_codes=excluded_food_codes,
+    )
+    support_options = apply_support_option_constraints(
+        support_options,
+        food_lookup=food_lookup,
+        forced_support_foods=forced_support_foods,
+        excluded_food_codes=excluded_food_codes,
+    )
     meal_slot = get_meal_slot(meal_index, meals_count)
 
     best_solution: dict | None = None
@@ -894,7 +995,19 @@ def find_exact_solution_for_meal(
         "carb": ROLE_FALLBACK_CODE_POOLS["carb"],
         "fat": ROLE_FALLBACK_CODE_POOLS["fat"],
     }
-    evaluate_candidate_sets(fallback_role_codes, [[]])
+    fallback_role_codes = apply_meal_candidate_constraints(
+        fallback_role_codes,
+        food_lookup=food_lookup,
+        forced_role_codes=forced_role_codes,
+        excluded_food_codes=excluded_food_codes,
+    )
+    fallback_support_options = apply_support_option_constraints(
+        [[]],
+        food_lookup=food_lookup,
+        forced_support_foods=forced_support_foods,
+        excluded_food_codes=excluded_food_codes,
+    )
+    evaluate_candidate_sets(fallback_role_codes, fallback_support_options)
 
     if best_solution:
         return best_solution
@@ -1038,6 +1151,140 @@ def calculate_daily_totals_from_meals(
     }
 
 
+def calculate_resolution_counters_from_meals(meals: list[dict]) -> dict[str, int]:
+    unique_food_codes: set[str] = set()
+    counters = {
+        "spoonacular_hits": 0,
+        "cache_hits": 0,
+        "internal_fallbacks": 0,
+        "resolved_foods_count": 0,
+    }
+
+    for meal in meals:
+        for food in meal.get("foods", []):
+            food_code = str(food.get("food_code") or food.get("name") or "").strip()
+            if food_code:
+                unique_food_codes.add(food_code)
+
+            source = normalize_diet_food_source(food.get("source", DEFAULT_FOOD_DATA_SOURCE))
+            if source == SPOONACULAR_FOOD_DATA_SOURCE:
+                counters["spoonacular_hits"] += 1
+            elif source == CACHE_FOOD_DATA_SOURCE:
+                counters["cache_hits"] += 1
+            else:
+                counters["internal_fallbacks"] += 1
+
+    counters["resolved_foods_count"] = len(unique_food_codes)
+    return counters
+
+
+def build_updated_diet_payload(
+    *,
+    existing_diet: DailyDiet,
+    meals: list[dict],
+    preference_profile: dict | None = None,
+    metadata_overrides: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    metadata = metadata_overrides or {}
+    food_data_source, food_data_sources = summarize_food_sources(meals)
+    preferred_food_matches = (
+        count_preferred_food_matches_in_meals(meals, preference_profile)
+        if preference_profile is not None
+        else existing_diet.preferred_food_matches
+    )
+    food_usage_summary = get_food_usage_summary_from_meals(meals)
+    daily_totals = calculate_daily_totals_from_meals(
+        target_calories=existing_diet.target_calories,
+        target_protein_grams=existing_diet.protein_grams,
+        target_fat_grams=existing_diet.fat_grams,
+        target_carb_grams=existing_diet.carb_grams,
+        meals=meals,
+    )
+    resolution_counters = calculate_resolution_counters_from_meals(meals)
+
+    spoonacular_hits = int(metadata.get("spoonacular_hits", resolution_counters["spoonacular_hits"]))
+    cache_hits = int(metadata.get("cache_hits", resolution_counters["cache_hits"]))
+    internal_fallbacks = int(metadata.get("internal_fallbacks", resolution_counters["internal_fallbacks"]))
+    resolved_foods_count = int(metadata.get("resolved_foods_count", resolution_counters["resolved_foods_count"]))
+    spoonacular_attempted = bool(
+        metadata.get(
+            "spoonacular_attempted",
+            existing_diet.spoonacular_attempted or spoonacular_hits > 0,
+        )
+    )
+    spoonacular_attempts = int(
+        metadata.get(
+            "spoonacular_attempts",
+            max(existing_diet.spoonacular_attempts, spoonacular_hits),
+        )
+    )
+
+    return {
+        "meals_count": existing_diet.meals_count,
+        "target_calories": existing_diet.target_calories,
+        "protein_grams": existing_diet.protein_grams,
+        "fat_grams": existing_diet.fat_grams,
+        "carb_grams": existing_diet.carb_grams,
+        "actual_calories": daily_totals["actual_calories"],
+        "actual_protein_grams": daily_totals["actual_protein_grams"],
+        "actual_fat_grams": daily_totals["actual_fat_grams"],
+        "actual_carb_grams": daily_totals["actual_carb_grams"],
+        "calorie_difference": daily_totals["calorie_difference"],
+        "protein_difference": daily_totals["protein_difference"],
+        "fat_difference": daily_totals["fat_difference"],
+        "carb_difference": daily_totals["carb_difference"],
+        "distribution_percentages": list(existing_diet.distribution_percentages),
+        "training_time_of_day": existing_diet.training_time_of_day,
+        "training_optimization_applied": existing_diet.training_optimization_applied,
+        "food_data_source": food_data_source,
+        "food_data_sources": food_data_sources,
+        "food_catalog_version": metadata.get("food_catalog_version", existing_diet.food_catalog_version or get_food_catalog_version()),
+        "food_preferences_applied": bool(
+            metadata.get(
+                "food_preferences_applied",
+                preference_profile.get("has_preferences", existing_diet.food_preferences_applied)
+                if preference_profile is not None
+                else existing_diet.food_preferences_applied,
+            )
+        ),
+        "applied_dietary_restrictions": list(
+            metadata.get(
+                "applied_dietary_restrictions",
+                preference_profile.get("dietary_restrictions", existing_diet.applied_dietary_restrictions)
+                if preference_profile is not None
+                else existing_diet.applied_dietary_restrictions,
+            )
+        ),
+        "applied_allergies": list(
+            metadata.get(
+                "applied_allergies",
+                preference_profile.get("allergies", existing_diet.applied_allergies)
+                if preference_profile is not None
+                else existing_diet.applied_allergies,
+            )
+        ),
+        "preferred_food_matches": preferred_food_matches,
+        "diversity_strategy_applied": bool(metadata.get("diversity_strategy_applied", existing_diet.diversity_strategy_applied)),
+        "food_usage_summary": food_usage_summary,
+        "food_filter_warnings": list(
+            metadata.get(
+                "food_filter_warnings",
+                preference_profile.get("warnings", existing_diet.food_filter_warnings)
+                if preference_profile is not None
+                else existing_diet.food_filter_warnings,
+            )
+        ),
+        "catalog_source_strategy": metadata.get("catalog_source_strategy", existing_diet.catalog_source_strategy),
+        "spoonacular_attempted": spoonacular_attempted,
+        "spoonacular_attempts": spoonacular_attempts,
+        "spoonacular_hits": spoonacular_hits,
+        "cache_hits": cache_hits,
+        "internal_fallbacks": internal_fallbacks,
+        "resolved_foods_count": resolved_foods_count,
+        "meals": meals,
+    }
+
+
 def generate_food_based_diet(
     database,
     user: UserPublic,
@@ -1152,10 +1399,51 @@ def generate_daily_diet(
     )
 
 
-def save_diet(database, user_id: str, diet_payload: dict) -> DailyDiet:
-    diet_document = {
-        "user_id": ObjectId(user_id),
-        "created_at": datetime.now(UTC),
+def _build_persistable_food_payload(food: dict) -> dict[str, Any]:
+    return {
+        "food_code": food.get("food_code"),
+        "source": normalize_diet_food_source(food.get("source", DEFAULT_FOOD_DATA_SOURCE)),
+        "origin_source": normalize_diet_food_source(
+            food.get("origin_source", food.get("source", DEFAULT_FOOD_DATA_SOURCE))
+        ),
+        "spoonacular_id": food.get("spoonacular_id"),
+        "name": food["name"],
+        "category": food["category"],
+        "quantity": round_food_value(float(food["quantity"])),
+        "unit": food["unit"],
+        "grams": round_food_value(float(food["grams"])) if food.get("grams") is not None else None,
+        "calories": round_food_value(float(food["calories"])),
+        "protein_grams": round_food_value(float(food["protein_grams"])),
+        "fat_grams": round_food_value(float(food["fat_grams"])),
+        "carb_grams": round_food_value(float(food["carb_grams"])),
+    }
+
+
+def _build_persistable_meal_payload(meal: dict) -> dict[str, Any]:
+    return {
+        "meal_number": meal["meal_number"],
+        "distribution_percentage": round_diet_value(meal["distribution_percentage"]),
+        "target_calories": round_diet_value(meal["target_calories"]),
+        "target_protein_grams": round_diet_value(meal["target_protein_grams"]),
+        "target_fat_grams": round_diet_value(meal["target_fat_grams"]),
+        "target_carb_grams": round_diet_value(meal["target_carb_grams"]),
+        "actual_calories": round_diet_value(meal["actual_calories"]),
+        "actual_protein_grams": round_diet_value(meal["actual_protein_grams"]),
+        "actual_fat_grams": round_diet_value(meal["actual_fat_grams"]),
+        "actual_carb_grams": round_diet_value(meal["actual_carb_grams"]),
+        "calorie_difference": round_diet_value(meal["calorie_difference"]),
+        "protein_difference": round_diet_value(meal["protein_difference"]),
+        "fat_difference": round_diet_value(meal["fat_difference"]),
+        "carb_difference": round_diet_value(meal["carb_difference"]),
+        "foods": [
+            _build_persistable_food_payload(food)
+            for food in meal.get("foods", [])
+        ],
+    }
+
+
+def _build_persistable_diet_fields(diet_payload: dict[str, Any]) -> dict[str, Any]:
+    return {
         "meals_count": diet_payload["meals_count"],
         "target_calories": round_diet_value(diet_payload["target_calories"]),
         "protein_grams": round_diet_value(diet_payload["protein_grams"]),
@@ -1175,7 +1463,10 @@ def save_diet(database, user_id: str, diet_payload: dict) -> DailyDiet:
         "training_time_of_day": diet_payload["training_time_of_day"],
         "training_optimization_applied": diet_payload["training_optimization_applied"],
         "food_data_source": diet_payload.get("food_data_source", DEFAULT_FOOD_DATA_SOURCE),
-        "food_data_sources": diet_payload.get("food_data_sources", [diet_payload.get("food_data_source", DEFAULT_FOOD_DATA_SOURCE)]),
+        "food_data_sources": diet_payload.get(
+            "food_data_sources",
+            [diet_payload.get("food_data_source", DEFAULT_FOOD_DATA_SOURCE)],
+        ),
         "food_catalog_version": diet_payload.get("food_catalog_version"),
         "food_preferences_applied": diet_payload.get("food_preferences_applied", False),
         "applied_dietary_restrictions": diet_payload.get("applied_dietary_restrictions", []),
@@ -1192,44 +1483,17 @@ def save_diet(database, user_id: str, diet_payload: dict) -> DailyDiet:
         "internal_fallbacks": diet_payload.get("internal_fallbacks", 0),
         "resolved_foods_count": diet_payload.get("resolved_foods_count", 0),
         "meals": [
-            {
-                "meal_number": meal["meal_number"],
-                "distribution_percentage": round_diet_value(meal["distribution_percentage"]),
-                "target_calories": round_diet_value(meal["target_calories"]),
-                "target_protein_grams": round_diet_value(meal["target_protein_grams"]),
-                "target_fat_grams": round_diet_value(meal["target_fat_grams"]),
-                "target_carb_grams": round_diet_value(meal["target_carb_grams"]),
-                "actual_calories": round_diet_value(meal["actual_calories"]),
-                "actual_protein_grams": round_diet_value(meal["actual_protein_grams"]),
-                "actual_fat_grams": round_diet_value(meal["actual_fat_grams"]),
-                "actual_carb_grams": round_diet_value(meal["actual_carb_grams"]),
-                "calorie_difference": round_diet_value(meal["calorie_difference"]),
-                "protein_difference": round_diet_value(meal["protein_difference"]),
-                "fat_difference": round_diet_value(meal["fat_difference"]),
-                "carb_difference": round_diet_value(meal["carb_difference"]),
-                "foods": [
-                    {
-                        "food_code": food.get("food_code"),
-                        "source": normalize_diet_food_source(food.get("source", DEFAULT_FOOD_DATA_SOURCE)),
-                        "origin_source": normalize_diet_food_source(
-                            food.get("origin_source", food.get("source", DEFAULT_FOOD_DATA_SOURCE))
-                        ),
-                        "spoonacular_id": food.get("spoonacular_id"),
-                        "name": food["name"],
-                        "category": food["category"],
-                        "quantity": round_food_value(float(food["quantity"])),
-                        "unit": food["unit"],
-                        "grams": round_food_value(float(food["grams"])) if food.get("grams") is not None else None,
-                        "calories": round_food_value(float(food["calories"])),
-                        "protein_grams": round_food_value(float(food["protein_grams"])),
-                        "fat_grams": round_food_value(float(food["fat_grams"])),
-                        "carb_grams": round_food_value(float(food["carb_grams"])),
-                    }
-                    for food in meal.get("foods", [])
-                ],
-            }
+            _build_persistable_meal_payload(meal)
             for meal in diet_payload["meals"]
         ],
+    }
+
+
+def save_diet(database, user_id: str, diet_payload: dict) -> DailyDiet:
+    diet_document = {
+        "user_id": ObjectId(user_id),
+        "created_at": datetime.now(UTC),
+        **_build_persistable_diet_fields(diet_payload),
     }
     inserted = database.diets.insert_one(diet_document)
     created_diet = database.diets.find_one({"_id": inserted.inserted_id})
@@ -1241,7 +1505,7 @@ def list_user_diets(database, user_id: str) -> list[DietListItem]:
     return [serialize_diet_list_item(document) for document in documents]
 
 
-def get_user_diet_by_id(database, user_id: str, diet_id: str) -> DailyDiet:
+def get_user_diet_document_by_id(database, user_id: str, diet_id: str) -> dict[str, Any]:
     if not ObjectId.is_valid(diet_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -1260,7 +1524,26 @@ def get_user_diet_by_id(database, user_id: str, diet_id: str) -> DailyDiet:
             detail="Diet not found",
         )
 
-    return serialize_daily_diet(document)
+    return document
+
+
+def update_diet(database, user_id: str, diet_id: str, diet_payload: dict[str, Any]) -> DailyDiet:
+    existing_document = get_user_diet_document_by_id(database, user_id, diet_id)
+    database.diets.update_one(
+        {
+            "_id": existing_document["_id"],
+            "user_id": ObjectId(user_id),
+        },
+        {
+            "$set": _build_persistable_diet_fields(diet_payload),
+        },
+    )
+    updated_document = database.diets.find_one({"_id": existing_document["_id"]})
+    return serialize_daily_diet(updated_document)
+
+
+def get_user_diet_by_id(database, user_id: str, diet_id: str) -> DailyDiet:
+    return serialize_daily_diet(get_user_diet_document_by_id(database, user_id, diet_id))
 
 
 def get_latest_user_diet(database, user_id: str) -> DailyDiet | None:

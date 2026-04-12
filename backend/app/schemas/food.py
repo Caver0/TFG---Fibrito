@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 FoodSource = Literal["internal_catalog", "local_cache", "spoonacular"]
 FoodOriginSource = Literal["internal_catalog", "spoonacular"]
+FoodFunctionalGroup = Literal["protein", "carb", "fat", "fruit", "vegetable", "dairy", "other"]
 FOOD_PRECISION = Decimal("0.01")
 
 
@@ -19,6 +20,28 @@ def _round_food_value(value: float | Decimal | None) -> float:
     return float(Decimal(str(value)).quantize(FOOD_PRECISION, rounding=ROUND_HALF_UP))
 
 
+def _derive_functional_group(document: dict) -> FoodFunctionalGroup:
+    explicit_group = str(document.get("functional_group") or "").strip().lower()
+    if explicit_group in {"protein", "carb", "fat", "fruit", "vegetable", "dairy", "other"}:
+        return explicit_group  # type: ignore[return-value]
+
+    category = str(document.get("category") or "").strip().lower()
+    if category == "proteinas":
+        return "protein"
+    if category == "carbohidratos":
+        return "carb"
+    if category == "grasas":
+        return "fat"
+    if category == "frutas":
+        return "fruit"
+    if category == "vegetales":
+        return "vegetable"
+    if category == "lacteos":
+        return "dairy"
+
+    return "other"
+
+
 class FoodCatalogItem(BaseModel):
     code: str
     internal_code: str | None = None
@@ -26,6 +49,7 @@ class FoodCatalogItem(BaseModel):
     original_name: str
     display_name: str
     category: str
+    functional_group: FoodFunctionalGroup = "other"
     source: FoodSource
     origin_source: FoodOriginSource = "internal_catalog"
     spoonacular_id: int | None = None
@@ -72,6 +96,7 @@ def serialize_food_catalog_item(document: dict) -> FoodCatalogItem:
         original_name=document.get("original_name", document.get("name", document["normalized_name"])),
         display_name=document.get("display_name", document.get("name", document["normalized_name"])),
         category=document.get("category", "otros"),
+        functional_group=_derive_functional_group(document),
         source=document.get("source", "internal_catalog"),
         origin_source=document.get("origin_source", "internal_catalog"),
         spoonacular_id=document.get("spoonacular_id"),

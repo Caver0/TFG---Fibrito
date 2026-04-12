@@ -229,6 +229,13 @@ class DietGenerateRequest(BaseModel):
     training_time_of_day: TrainingTimeOfDay | None = None
 
 
+class ReplaceFoodRequest(BaseModel):
+    current_food_name: str = Field(min_length=2, max_length=120)
+    current_food_code: str | None = None
+    replacement_food_name: str | None = Field(default=None, min_length=2, max_length=120)
+    replacement_food_code: str | None = None
+
+
 class DietFood(BaseModel):
     food_code: str | None = None
     source: str = DEFAULT_DIET_SOURCE
@@ -305,6 +312,22 @@ class DailyDiet(DietBase):
     meals: list[DietMeal]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DietMutationSummary(BaseModel):
+    action: Literal["meal_regenerated", "food_replaced"]
+    meal_number: int = Field(ge=1)
+    message: str
+    current_food_name: str | None = None
+    replacement_food_name: str | None = None
+    preserved_meal_numbers: list[int] = Field(default_factory=list)
+    changed_food_names: list[str] = Field(default_factory=list)
+    strategy_notes: list[str] = Field(default_factory=list)
+
+
+class DietMutationResponse(BaseModel):
+    diet: DailyDiet
+    summary: DietMutationSummary
 
 
 class DietListItem(DietBase):

@@ -29,6 +29,11 @@ GENERIC_DEFAULT_QUANTITY = 100.0
 GENERIC_MIN_QUANTITY = 50.0
 GENERIC_MAX_QUANTITY = 350.0
 GENERIC_STEP = 5.0
+DEFAULT_STEP_BY_UNIT = {
+    "g": 5.0,
+    "ml": 25.0,
+    "unidad": 0.5,
+}
 MACRO_CALORIE_FACTORS = {
     "protein_grams": 4.0,
     "fat_grams": 9.0,
@@ -310,6 +315,151 @@ def get_food_lookup() -> dict[str, dict[str, Any]]:
 def get_foods_by_codes(codes: list[str]) -> list[dict[str, Any]]:
     lookup = get_internal_food_lookup()
     return [lookup[code] for code in codes if code in lookup]
+
+
+def _get_default_step_for_unit(unit: str) -> float:
+    return DEFAULT_STEP_BY_UNIT.get(unit, GENERIC_STEP)
+
+
+def build_catalog_food_from_diet_food(food_document: dict[str, Any]) -> dict[str, Any]:
+    quantity = float(food_document.get("quantity") or food_document.get("grams") or GENERIC_DEFAULT_QUANTITY)
+    unit = str(food_document.get("unit") or DEFAULT_EXTERNAL_REFERENCE_UNIT)
+    grams = food_document.get("grams")
+    grams_per_reference = float(
+        grams
+        if grams is not None
+        else quantity
+    )
+    step = _get_default_step_for_unit(unit)
+    min_quantity = max(step, quantity * 0.45)
+    max_quantity = max(quantity + step, quantity * 2.5, min_quantity + step)
+    food_code = str(
+        food_document.get("food_code")
+        or food_document.get("code")
+        or _build_external_food_code(
+            str(food_document.get("name") or "food"),
+            food_document.get("spoonacular_id"),
+        )
+    )
+    name = str(food_document.get("name") or food_code.replace("_", " "))
+    source = str(food_document.get("source") or INTERNAL_FOOD_SOURCE)
+    origin_source = str(food_document.get("origin_source") or source)
+
+    return annotate_food_compatibility({
+        "code": food_code,
+        "internal_code": food_document.get("internal_code"),
+        "normalized_name": normalize_food_name(name),
+        "original_name": str(food_document.get("original_name") or name),
+        "name": name,
+        "display_name": name,
+        "category": str(food_document.get("category") or "otros"),
+        "source": source,
+        "origin_source": origin_source,
+        "spoonacular_id": food_document.get("spoonacular_id"),
+        "reference_amount": quantity,
+        "reference_unit": unit,
+        "grams_per_reference": grams_per_reference,
+        "calories": float(food_document.get("calories") or 0.0),
+        "protein_grams": float(food_document.get("protein_grams") or 0.0),
+        "fat_grams": float(food_document.get("fat_grams") or 0.0),
+        "carb_grams": float(food_document.get("carb_grams") or 0.0),
+        "default_quantity": quantity,
+        "min_quantity": min_quantity,
+        "max_quantity": max_quantity,
+        "step": step,
+        "matched_query": None,
+        "image": food_document.get("image"),
+        "aliases": build_food_aliases(
+            name,
+            str(food_document.get("display_name") or ""),
+            str(food_document.get("original_name") or ""),
+            food_code.replace("_", " "),
+        ),
+    })
+
+
+def get_food_by_code(database, code: str) -> dict[str, Any] | None:
+    internal_lookup = get_internal_food_lookup()
+    if code in internal_lookup:
+        return internal_lookup[code]
+
+    collection = database.foods_catalog
+    document = collection.find_one(
+        {
+            "$or": [
+                {"code": code},
+                {"internal_code": code},
+            ]
+        }
+    )
+    if not document:
+        return None
+
+    return _serialize_cached_food(document)
+
+
+def _score_food_match(food: dict[str, Any], normalized_query: str) -> tuple[int, int, int]:
+    aliases = build_food_aliases(
+        food.get("name", ""),
+        food.get("display_name", ""),
+        food.get("original_name", ""),
+        str(food.get("code", "")).replace("_", " "),
+        str(food.get("internal_code", "")).replace("_", " "),
+        *(food.get("aliases") or []),
+    )
+    if normalized_query in aliases:
+        match_score = 3
+    elif any(alias.startswith(normalized_query) for alias in aliases):
+        match_score = 2
+    elif any(normalized_query in alias for alias in aliases):
+        match_score = 1
+    else:
+        match_score = 0
+
+    source_priority = {
+        INTERNAL_FOOD_SOURCE: 3,
+        LOCAL_CACHE_FOOD_SOURCE: 2,
+        SPOONACULAR_FOOD_SOURCE: 1,
+    }.get(str(food.get("source") or INTERNAL_FOOD_SOURCE), 0)
+
+    return (
+        match_score,
+        source_priority,
+        -len(str(food.get("name") or "")),
+    )
+
+
+def find_food_by_code_or_name(
+    database,
+    *,
+    food_code: str | None = None,
+    food_name: str | None = None,
+    include_external: bool = True,
+) -> dict[str, Any] | None:
+    if food_code:
+        matched_food = get_food_by_code(database, food_code)
+        if matched_food:
+            return matched_food
+
+    normalized_name = normalize_food_name(food_name or "")
+    if not normalized_name:
+        return None
+
+    candidate_foods = merge_internal_and_external_food_sources(
+        database,
+        food_name or normalized_name,
+        limit=10,
+        include_external=include_external,
+    )
+    if not candidate_foods:
+        return None
+
+    ranked_foods = sorted(
+        candidate_foods,
+        key=lambda food: _score_food_match(food, normalized_name),
+        reverse=True,
+    )
+    return ranked_foods[0]
 
 
 def get_cached_food(

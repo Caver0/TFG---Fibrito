@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.database import get_database
 from app.core.security import get_current_user
-from app.schemas.diet import DailyDiet, DietGenerateRequest, DietListResponse
+from app.schemas.diet import DailyDiet, DietGenerateRequest, DietListResponse, DietMutationResponse, ReplaceFoodRequest
 from app.schemas.user import UserPublic
 from app.services.diet_service import (
     generate_food_based_diet,
@@ -12,7 +12,9 @@ from app.services.diet_service import (
     list_user_diets,
     save_diet,
 )
+from app.services.food_substitution_service import replace_food_in_meal
 from app.services.food_preferences_service import FoodPreferenceConflictError
+from app.services.meal_regeneration_service import regenerate_meal
 from app.services.nutrition_service import NutritionProfileIncompleteError
 
 router = APIRouter(prefix="/diets", tags=["diets"])
@@ -71,3 +73,49 @@ def read_user_diet_by_id(
 ) -> DailyDiet:
     database = get_database()
     return get_user_diet_by_id(database, current_user.id, diet_id)
+
+
+@router.post("/{diet_id}/meals/{meal_number}/regenerate", response_model=DietMutationResponse)
+def regenerate_user_meal(
+    diet_id: str,
+    meal_number: int,
+    current_user: UserPublic = Depends(get_current_user),
+) -> DietMutationResponse:
+    database = get_database()
+
+    try:
+        return regenerate_meal(
+            database,
+            user=current_user,
+            diet_id=diet_id,
+            meal_number=meal_number,
+        )
+    except FoodPreferenceConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/{diet_id}/meals/{meal_number}/replace-food", response_model=DietMutationResponse)
+def replace_user_food_in_meal(
+    diet_id: str,
+    meal_number: int,
+    payload: ReplaceFoodRequest,
+    current_user: UserPublic = Depends(get_current_user),
+) -> DietMutationResponse:
+    database = get_database()
+
+    try:
+        return replace_food_in_meal(
+            database,
+            user=current_user,
+            diet_id=diet_id,
+            meal_number=meal_number,
+            payload=payload,
+        )
+    except FoodPreferenceConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc

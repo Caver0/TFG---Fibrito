@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import * as dietsApi from '../api/dietsApi'
+import * as foodsApi from '../api/foodsApi'
 import DietCard from '../components/DietCard'
 import DietGeneratorForm from '../components/DietGeneratorForm'
 import DietHistory from '../components/DietHistory'
@@ -15,10 +16,16 @@ function DietsPage() {
   const [generateError, setGenerateError] = useState('')
   const [generateMessage, setGenerateMessage] = useState('')
   const [selectedDietError, setSelectedDietError] = useState('')
+  const [dietActionError, setDietActionError] = useState('')
+  const [dietActionMessage, setDietActionMessage] = useState('')
+  const [dietActionSummary, setDietActionSummary] = useState(null)
   const [isLatestDietLoading, setIsLatestDietLoading] = useState(false)
   const [isHistoryLoading, setIsHistoryLoading] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isMealActionLoading, setIsMealActionLoading] = useState(false)
   const [viewingDietId, setViewingDietId] = useState('')
+  const [activeMealNumber, setActiveMealNumber] = useState(null)
+  const [activeFoodCode, setActiveFoodCode] = useState('')
 
   async function loadLatestDiet(activeToken = token) {
     if (!activeToken) {
@@ -87,6 +94,9 @@ function DietsPage() {
     setGenerateError('')
     setGenerateMessage('')
     setSelectedDietError('')
+    setDietActionError('')
+    setDietActionMessage('')
+    setDietActionSummary(null)
 
     try {
       const createdDiet = await dietsApi.generateDiet(token, payload)
@@ -110,15 +120,97 @@ function DietsPage() {
 
     setViewingDietId(dietId)
     setSelectedDietError('')
+    setDietActionMessage('')
+    setDietActionSummary(null)
+    setDietActionError('')
 
     try {
       const diet = await dietsApi.getDietById(token, dietId)
       setSelectedDiet(diet)
+      setDietActionError('')
     } catch (error) {
       setSelectedDietError(error.message)
     } finally {
       setViewingDietId('')
     }
+  }
+
+  function syncUpdatedDiet(updatedDiet) {
+    setSelectedDiet(updatedDiet)
+    setLatestDiet((currentDiet) => {
+      if (!currentDiet || currentDiet.id === updatedDiet.id) {
+        return updatedDiet
+      }
+
+      return currentDiet
+    })
+  }
+
+  async function handleRegenerateMeal(dietId, mealNumber) {
+    if (!token) {
+      return false
+    }
+
+    setIsMealActionLoading(true)
+    setActiveMealNumber(mealNumber)
+    setActiveFoodCode('')
+    setDietActionError('')
+    setDietActionMessage('')
+
+    try {
+      const response = await dietsApi.regenerateMeal(token, dietId, mealNumber)
+      syncUpdatedDiet(response.diet)
+      setDietActionMessage(response.summary.message)
+      setDietActionSummary(response.summary)
+      await loadDietHistory(token)
+      return true
+    } catch (error) {
+      setDietActionError(error.message)
+      return false
+    } finally {
+      setIsMealActionLoading(false)
+      setActiveMealNumber(null)
+    }
+  }
+
+  async function handleReplaceFood(dietId, mealNumber, payload) {
+    if (!token) {
+      return false
+    }
+
+    setIsMealActionLoading(true)
+    setActiveMealNumber(mealNumber)
+    setActiveFoodCode(payload.current_food_code ?? '')
+    setDietActionError('')
+    setDietActionMessage('')
+
+    try {
+      const response = await dietsApi.replaceFoodInMeal(token, dietId, mealNumber, payload)
+      syncUpdatedDiet(response.diet)
+      setDietActionMessage(response.summary.message)
+      setDietActionSummary(response.summary)
+      await loadDietHistory(token)
+      return true
+    } catch (error) {
+      setDietActionError(error.message)
+      return false
+    } finally {
+      setIsMealActionLoading(false)
+      setActiveMealNumber(null)
+      setActiveFoodCode('')
+    }
+  }
+
+  async function handleSearchReplacementFoods(query) {
+    if (!token) {
+      return []
+    }
+
+    const response = await foodsApi.searchFoods(token, query, {
+      includeExternal: true,
+      limit: 6,
+    })
+    return response.foods
   }
 
   return (
@@ -131,11 +223,20 @@ function DietsPage() {
           onGenerate={handleGenerate}
         />
         <DietCard
+          actionError={dietActionError}
+          actionMessage={dietActionMessage}
+          actionSummary={dietActionSummary}
+          activeFoodCode={activeFoodCode}
+          activeMealNumber={activeMealNumber}
           title="Ultima dieta disponible"
           description="Mostramos la ultima dieta generada o la que selecciones desde el historial, ya convertida en alimentos y cantidades."
           diet={selectedDiet ?? latestDiet}
           error={selectedDietError || latestDietError}
           isLoading={isLatestDietLoading || Boolean(viewingDietId)}
+          isMealActionLoading={isMealActionLoading}
+          onRegenerateMeal={handleRegenerateMeal}
+          onReplaceFood={handleReplaceFood}
+          onSearchFoods={handleSearchReplacementFoods}
         />
       </div>
 

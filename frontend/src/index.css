@@ -191,6 +191,7 @@ button {
 .profile-form button,
 .weight-form button,
 .diet-form button,
+.replacement-form button,
 .secondary-button {
   border-radius: 999px;
   padding: 14px 18px;
@@ -201,7 +202,8 @@ button {
 .auth-form button,
 .profile-form button,
 .weight-form button,
-.diet-form button {
+.diet-form button,
+.replacement-form button {
   background: #1c1a17;
   color: #fff8f1;
 }
@@ -214,7 +216,8 @@ button {
 .auth-form button:disabled,
 .profile-form button:disabled,
 .weight-form button:disabled,
-.diet-form button:disabled {
+.diet-form button:disabled,
+.replacement-form button:disabled {
   opacity: 0.7;
   cursor: wait;
 }
@@ -223,6 +226,7 @@ button {
 .profile-form button:hover,
 .weight-form button:hover,
 .diet-form button:hover,
+.replacement-form button:hover,
 .secondary-button:hover {
   transform: translateY(-1px);
 }
@@ -661,6 +665,16 @@ button {
   gap: 12px;
 }
 
+.meal-card-header-actions {
+  align-items: flex-start;
+}
+
+.meal-card-header-actions > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .meal-card p {
   margin: 0 0 8px;
   color: #5f564d;
@@ -710,8 +724,123 @@ button {
   gap: 12px;
 }
 
+.food-row-title {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .food-row-meta {
   margin: 0;
+}
+
+.food-action-button,
+.meal-action-button {
+  flex-shrink: 0;
+  padding: 10px 16px;
+}
+
+.diet-action-summary {
+  border-radius: 18px;
+  border: 1px solid rgba(94, 72, 54, 0.08);
+  background: #fff4e7;
+  padding: 18px;
+}
+
+.diet-action-summary strong {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.diet-action-summary p {
+  margin: 0 0 12px;
+  color: #5f564d;
+}
+
+.diet-action-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #5f564d;
+  display: grid;
+  gap: 8px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(28, 26, 23, 0.44);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 30;
+}
+
+.modal-panel {
+  width: min(100%, 640px);
+  max-height: min(90vh, 860px);
+  overflow: auto;
+  border-radius: 24px;
+  background: #fffaf4;
+  border: 1px solid rgba(94, 72, 54, 0.12);
+  box-shadow: 0 24px 60px rgba(73, 54, 39, 0.18);
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.replacement-form {
+  display: grid;
+  gap: 16px;
+}
+
+.replacement-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #3f372f;
+  font-weight: 600;
+}
+
+.replacement-form input {
+  width: 100%;
+  border: 1px solid #d8cab8;
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: #fffdf9;
+}
+
+.replacement-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.replacement-results {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.replacement-result {
+  width: 100%;
+  text-align: left;
+  border-radius: 18px;
+  border: 1px solid rgba(94, 72, 54, 0.1);
+  background: #fff4e7;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.replacement-result span {
+  color: #6b6258;
+}
+
+.replacement-result-active {
+  border-color: rgba(184, 92, 39, 0.45);
+  box-shadow: 0 0 0 2px rgba(184, 92, 39, 0.1);
 }
 
 @media (max-width: 900px) {
@@ -767,6 +896,13 @@ button {
   .distribution-card-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .meal-card-header,
+  .food-row-header,
+  .replacement-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .sidebar-menu-panel {

@@ -30,3 +30,18 @@ export function getDietById(token, dietId) {
     token,
   })
 }
+
+export function regenerateMeal(token, dietId, mealNumber) {
+  return apiRequest(`${DIETS_BASE_PATH}/${dietId}/meals/${mealNumber}/regenerate`, {
+    method: 'POST',
+    token,
+  })
+}
+
+export function replaceFoodInMeal(token, dietId, mealNumber, payload) {
+  return apiRequest(`${DIETS_BASE_PATH}/${dietId}/meals/${mealNumber}/replace-food`, {
+    method: 'POST',
+    token,
+    body: payload,
+  })
+}
