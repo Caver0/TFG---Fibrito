@@ -15,6 +15,21 @@ export function updateNutritionProfile(token, payload) {
   })
 }
 
+export function getFoodPreferences(token) {
+  return apiRequest('/users/me/preferences', {
+    method: 'GET',
+    token,
+  })
+}
+
+export function updateFoodPreferences(token, payload) {
+  return apiRequest('/users/me/preferences', {
+    method: 'PUT',
+    token,
+    body: payload,
+  })
+}
+
 export function getNutritionSummary(token) {
   return apiRequest('/users/me/nutrition', {
     method: 'GET',

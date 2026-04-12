@@ -42,6 +42,9 @@ class FoodCatalogItem(BaseModel):
     step: float = Field(gt=0)
     matched_query: str | None = None
     image: str | None = None
+    dietary_tags: list[str] = Field(default_factory=list)
+    allergen_tags: list[str] = Field(default_factory=list)
+    compatibility_notes: list[str] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -85,6 +88,9 @@ def serialize_food_catalog_item(document: dict) -> FoodCatalogItem:
         step=_round_food_value(document.get("step")),
         matched_query=document.get("matched_query"),
         image=document.get("image"),
+        dietary_tags=document.get("dietary_tags", []),
+        allergen_tags=document.get("allergen_tags", []),
+        compatibility_notes=document.get("compatibility_notes", []),
         created_at=document.get("created_at"),
         updated_at=document.get("updated_at"),
     )

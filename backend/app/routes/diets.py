@@ -12,6 +12,7 @@ from app.services.diet_service import (
     list_user_diets,
     save_diet,
 )
+from app.services.food_preferences_service import FoodPreferenceConflictError
 from app.services.nutrition_service import NutritionProfileIncompleteError
 
 router = APIRouter(prefix="/diets", tags=["diets"])
@@ -35,6 +36,11 @@ def create_daily_diet(
     except NutritionProfileIncompleteError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except FoodPreferenceConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
         ) from exc
 

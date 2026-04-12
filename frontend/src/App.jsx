@@ -44,7 +44,7 @@ function App() {
               <span className="eyebrow">Sesion activa</span>
               <h1>Perfil de {user.name}</h1>
               <p className="profile-email">{user.email}</p>
-              <p className="profile-email">Planifica nutricion, progreso y dieta diaria por alimentos en un mismo panel.</p>
+              <p className="profile-email">Planifica nutricion, progreso, preferencias alimentarias y dieta diaria por alimentos en un mismo panel.</p>
             </div>
           </div>
 

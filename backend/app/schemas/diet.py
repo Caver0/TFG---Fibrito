@@ -283,6 +283,11 @@ class DietBase(BaseModel):
     food_data_source: str = DEFAULT_DIET_SOURCE
     food_data_sources: list[str] = Field(default_factory=list)
     food_catalog_version: str | None = None
+    food_preferences_applied: bool = False
+    applied_dietary_restrictions: list[str] = Field(default_factory=list)
+    applied_allergies: list[str] = Field(default_factory=list)
+    preferred_food_matches: int = Field(default=0, ge=0)
+    food_filter_warnings: list[str] = Field(default_factory=list)
     catalog_source_strategy: str = DEFAULT_CATALOG_SOURCE_STRATEGY
     spoonacular_attempted: bool = False
     spoonacular_attempts: int = Field(default=0, ge=0)
@@ -450,6 +455,11 @@ def serialize_daily_diet(document: dict[str, Any]) -> DailyDiet:
         food_data_source=food_data_source,
         food_data_sources=food_data_sources,
         food_catalog_version=document.get("food_catalog_version"),
+        food_preferences_applied=document.get("food_preferences_applied", False),
+        applied_dietary_restrictions=document.get("applied_dietary_restrictions", []),
+        applied_allergies=document.get("applied_allergies", []),
+        preferred_food_matches=document.get("preferred_food_matches", 0),
+        food_filter_warnings=document.get("food_filter_warnings", []),
         catalog_source_strategy=document.get("catalog_source_strategy", DEFAULT_CATALOG_SOURCE_STRATEGY),
         spoonacular_attempted=document.get(
             "spoonacular_attempted",
@@ -495,6 +505,11 @@ def serialize_diet_list_item(document: dict[str, Any]) -> DietListItem:
         food_data_source=food_data_source,
         food_data_sources=food_data_sources,
         food_catalog_version=document.get("food_catalog_version"),
+        food_preferences_applied=document.get("food_preferences_applied", False),
+        applied_dietary_restrictions=document.get("applied_dietary_restrictions", []),
+        applied_allergies=document.get("applied_allergies", []),
+        preferred_food_matches=document.get("preferred_food_matches", 0),
+        food_filter_warnings=document.get("food_filter_warnings", []),
         catalog_source_strategy=document.get("catalog_source_strategy", DEFAULT_CATALOG_SOURCE_STRATEGY),
         spoonacular_attempted=document.get(
             "spoonacular_attempted",

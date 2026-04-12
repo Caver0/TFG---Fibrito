@@ -36,8 +36,12 @@ def register_user(payload: UserCreate) -> UserPublic:
         "training_days_per_week": None,
         "goal": None,
         "target_calories": None,
-        "preferences": [],
-        "restrictions": [],
+        "food_preferences": {
+            "preferred_foods": [],
+            "disliked_foods": [],
+            "dietary_restrictions": [],
+            "allergies": [],
+        },
     }
 
     try:

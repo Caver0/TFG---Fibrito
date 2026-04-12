@@ -8,6 +8,12 @@ from fastapi import HTTPException, status
 from app.schemas.diet import DailyDiet, DietListItem, DietMeal, TrainingTimeOfDay, serialize_daily_diet, serialize_diet_list_item
 from app.schemas.user import UserPublic
 from app.services.food_catalog_service import get_food_catalog_version, get_internal_food_lookup, resolve_foods_by_codes
+from app.services.food_preferences_service import (
+    FoodPreferenceConflictError,
+    apply_user_food_preferences,
+    build_user_food_preferences_profile,
+    count_preferred_food_matches_in_meals,
+)
 from app.services.meal_distribution_service import generate_meal_distribution_targets, round_distribution_value
 
 DEFAULT_FOOD_DATA_SOURCE = "internal"
@@ -42,6 +48,30 @@ ROLE_DISPLAY_ORDER = {
     "dairy": 4,
     "fat": 5,
 }
+ROLE_LABELS = {
+    "protein": "proteina",
+    "carb": "carbohidrato",
+    "fat": "grasa",
+}
+ROLE_FALLBACK_CODE_POOLS = {
+    "protein": [
+        "chicken_breast",
+        "turkey_breast",
+        "tuna",
+        "egg_whites",
+        "greek_yogurt",
+        "eggs",
+    ],
+    "carb": [
+        "rice",
+        "potato",
+        "pasta",
+        "whole_wheat_bread",
+        "banana",
+        "oats",
+    ],
+    "fat": ["olive_oil", "avocado", "mixed_nuts"],
+}
 CORE_MACRO_KEYS = ("protein_grams", "fat_grams", "carb_grams")
 MACRO_CALORIE_FACTORS = {
     "protein_grams": 4.0,
@@ -52,6 +82,124 @@ MACRO_CALORIE_FACTORS = {
 
 def normalize_diet_food_source(value: str | None) -> str:
     return DIET_SOURCE_MAP.get(str(value or "").strip(), DEFAULT_FOOD_DATA_SOURCE)
+
+
+def _dedupe_foods_by_code(foods: list[dict]) -> list[dict]:
+    deduped_foods: list[dict] = []
+    seen_codes: set[str] = set()
+
+    for food in foods:
+        food_code = str(food["code"])
+        if food_code in seen_codes:
+            continue
+
+        seen_codes.add(food_code)
+        deduped_foods.append(food)
+
+    return deduped_foods
+
+
+def _build_preference_filtered_role_codes(
+    *,
+    role: str,
+    candidate_codes: list[str],
+    food_lookup: dict[str, dict],
+    preference_profile: dict,
+) -> list[str]:
+    compatible_candidate_foods = [food_lookup[code] for code in candidate_codes if code in food_lookup]
+    compatible_candidate_foods.extend(
+        food_lookup[code]
+        for code in ROLE_FALLBACK_CODE_POOLS[role]
+        if code in food_lookup and code not in candidate_codes
+    )
+    filtered_result = apply_user_food_preferences(compatible_candidate_foods, preference_profile)
+    compatible_foods = _dedupe_foods_by_code(filtered_result["foods"])
+
+    if compatible_foods:
+        return [food["code"] for food in compatible_foods]
+
+    blocked_food_labels = sorted(
+        {
+            blocked_food["name"]
+            for blocked_food in filtered_result["blocked_foods"]
+        }
+    )
+    detail = (
+        f"No hay suficientes alimentos compatibles para cubrir el rol de {ROLE_LABELS[role]} "
+        "con tus preferencias y restricciones actuales."
+    )
+    if blocked_food_labels:
+        detail += " Alimentos descartados: " + ", ".join(blocked_food_labels[:6]) + "."
+
+    detail += " Revisa alimentos no deseados, restricciones dieteticas o alergias."
+    raise FoodPreferenceConflictError(detail)
+
+
+def _build_preference_filtered_support_options(
+    *,
+    support_options: list[list[dict]],
+    food_lookup: dict[str, dict],
+    preference_profile: dict,
+) -> list[list[dict]]:
+    prioritized_options: list[tuple[int, list[dict]]] = []
+    seen_keys: set[tuple[str, ...]] = set()
+
+    for support_option in support_options:
+        support_foods = [
+            food_lookup[support_food["food_code"]]
+            for support_food in support_option
+            if support_food["food_code"] in food_lookup
+        ]
+        filtered_support_result = apply_user_food_preferences(support_foods, preference_profile)
+        allowed_codes = {food["code"] for food in filtered_support_result["foods"]}
+        filtered_support_option = [
+            support_food
+            for support_food in support_option
+            if support_food["food_code"] in allowed_codes
+        ]
+        option_key = tuple(sorted(support_food["food_code"] for support_food in filtered_support_option))
+        if option_key in seen_keys:
+            continue
+
+        seen_keys.add(option_key)
+        prioritized_options.append((filtered_support_result["preferred_matches"], filtered_support_option))
+
+    if not prioritized_options:
+        return [[]]
+
+    prioritized_options.sort(key=lambda item: (-item[0], len(item[1])))
+    normalized_options = [support_option for _, support_option in prioritized_options]
+    if [] not in normalized_options:
+        normalized_options.append([])
+
+    return normalized_options
+
+
+def apply_user_food_preferences_to_meal_candidates(
+    *,
+    candidate_codes: dict[str, list[str]],
+    support_options: list[list[dict]],
+    food_lookup: dict[str, dict],
+    preference_profile: dict,
+) -> tuple[dict[str, list[str]], list[list[dict]]]:
+    if not preference_profile.get("has_preferences"):
+        return candidate_codes, support_options
+
+    filtered_candidate_codes = {
+        role: _build_preference_filtered_role_codes(
+            role=role,
+            candidate_codes=role_codes,
+            food_lookup=food_lookup,
+            preference_profile=preference_profile,
+        )
+        for role, role_codes in candidate_codes.items()
+    }
+    filtered_support_options = _build_preference_filtered_support_options(
+        support_options=support_options,
+        food_lookup=food_lookup,
+        preference_profile=preference_profile,
+    )
+    return filtered_candidate_codes, filtered_support_options
 
 
 def round_diet_value(value: float) -> float:
@@ -499,6 +647,7 @@ def find_exact_solution_for_meal(
     meals_count: int,
     training_focus: bool,
     food_lookup: dict[str, dict],
+    preference_profile: dict | None = None,
 ) -> dict:
     candidate_codes = get_role_candidate_codes(
         meal=meal,
@@ -512,6 +661,13 @@ def find_exact_solution_for_meal(
         meals_count=meals_count,
         training_focus=training_focus,
     )
+    if preference_profile and preference_profile.get("has_preferences"):
+        candidate_codes, support_options = apply_user_food_preferences_to_meal_candidates(
+            candidate_codes=candidate_codes,
+            support_options=support_options,
+            food_lookup=food_lookup,
+            preference_profile=preference_profile,
+        )
     meal_slot = get_meal_slot(meal_index, meals_count)
 
     best_solution: dict | None = None
@@ -554,24 +710,16 @@ def find_exact_solution_for_meal(
     if best_solution:
         return best_solution
 
+    if preference_profile and preference_profile.get("has_preferences"):
+        raise FoodPreferenceConflictError(
+            "No hay suficientes combinaciones de alimentos compatibles para generar esta comida "
+            "con tus preferencias actuales. Ajusta restricciones, alergias o alimentos no deseados."
+        )
+
     fallback_role_codes = {
-        "protein": [
-            "chicken_breast",
-            "turkey_breast",
-            "tuna",
-            "egg_whites",
-            "greek_yogurt",
-            "eggs",
-        ],
-        "carb": [
-            "rice",
-            "potato",
-            "pasta",
-            "whole_wheat_bread",
-            "banana",
-            "oats",
-        ],
-        "fat": ["olive_oil", "avocado", "mixed_nuts"],
+        "protein": ROLE_FALLBACK_CODE_POOLS["protein"],
+        "carb": ROLE_FALLBACK_CODE_POOLS["carb"],
+        "fat": ROLE_FALLBACK_CODE_POOLS["fat"],
     }
     evaluate_candidate_sets(fallback_role_codes, [[]])
 
@@ -724,6 +872,7 @@ def generate_food_based_diet(
     custom_percentages: list[float] | None = None,
     training_time_of_day: TrainingTimeOfDay | None = None,
 ) -> dict:
+    preference_profile = build_user_food_preferences_profile(user)
     meal_distribution, focus_indexes = generate_meal_distribution_targets(
         user=user,
         meals_count=meals_count,
@@ -738,6 +887,7 @@ def generate_food_based_diet(
             meals_count=meals_count,
             training_focus=meal_distribution["training_optimization_applied"] and meal_index in focus_indexes,
             food_lookup=internal_food_lookup,
+            preference_profile=preference_profile,
         )
         for meal_index, meal in enumerate(meal_distribution["meals"])
     ]
@@ -762,6 +912,7 @@ def generate_food_based_diet(
         for meal_index, meal in enumerate(meal_distribution["meals"])
     ]
     food_data_source, food_data_sources = summarize_food_sources(generated_meals)
+    preferred_food_matches = count_preferred_food_matches_in_meals(generated_meals, preference_profile)
     daily_totals = calculate_daily_totals_from_meals(
         target_calories=meal_distribution["target_calories"],
         target_protein_grams=meal_distribution["protein_grams"],
@@ -790,6 +941,11 @@ def generate_food_based_diet(
         "food_data_source": food_data_source,
         "food_data_sources": food_data_sources,
         "food_catalog_version": lookup_metadata.get("food_catalog_version", get_food_catalog_version()),
+        "food_preferences_applied": preference_profile.get("has_preferences", False),
+        "applied_dietary_restrictions": preference_profile.get("dietary_restrictions", []),
+        "applied_allergies": preference_profile.get("allergies", []),
+        "preferred_food_matches": preferred_food_matches,
+        "food_filter_warnings": preference_profile.get("warnings", []),
         "catalog_source_strategy": lookup_metadata.get("catalog_source_strategy", CATALOG_SOURCE_STRATEGY_DEFAULT),
         "spoonacular_attempted": lookup_metadata.get("spoonacular_attempted", False),
         "spoonacular_attempts": lookup_metadata.get("spoonacular_attempts", 0),
@@ -842,6 +998,11 @@ def save_diet(database, user_id: str, diet_payload: dict) -> DailyDiet:
         "food_data_source": diet_payload.get("food_data_source", DEFAULT_FOOD_DATA_SOURCE),
         "food_data_sources": diet_payload.get("food_data_sources", [diet_payload.get("food_data_source", DEFAULT_FOOD_DATA_SOURCE)]),
         "food_catalog_version": diet_payload.get("food_catalog_version"),
+        "food_preferences_applied": diet_payload.get("food_preferences_applied", False),
+        "applied_dietary_restrictions": diet_payload.get("applied_dietary_restrictions", []),
+        "applied_allergies": diet_payload.get("applied_allergies", []),
+        "preferred_food_matches": diet_payload.get("preferred_food_matches", 0),
+        "food_filter_warnings": diet_payload.get("food_filter_warnings", []),
         "catalog_source_strategy": diet_payload.get("catalog_source_strategy", CATALOG_SOURCE_STRATEGY_DEFAULT),
         "spoonacular_attempted": diet_payload.get("spoonacular_attempted", False),
         "spoonacular_attempts": diet_payload.get("spoonacular_attempts", 0),

@@ -9,6 +9,7 @@ from typing import Any
 from app.core.config import get_settings
 from app.data.food_catalog import CATALOG_VERSION, FOOD_CATALOG
 from app.schemas.food import serialize_food_catalog_item
+from app.services.food_preferences_service import annotate_food_compatibility
 from app.services.spoonacular_service import (
     SpoonacularError,
     SpoonacularUnavailableError,
@@ -124,7 +125,7 @@ def _build_internal_food_entry(food: dict[str, Any]) -> dict[str, Any]:
         *(food.get("aliases") or []),
     )
 
-    return {
+    return annotate_food_compatibility({
         **deepcopy(food),
         "internal_code": food["code"],
         "normalized_name": normalized_name,
@@ -135,7 +136,7 @@ def _build_internal_food_entry(food: dict[str, Any]) -> dict[str, Any]:
         "image": None,
         "matched_query": None,
         "aliases": aliases,
-    }
+    })
 
 
 def _serialize_cached_food(document: dict[str, Any]) -> dict[str, Any]:
@@ -144,7 +145,7 @@ def _serialize_cached_food(document: dict[str, Any]) -> dict[str, Any]:
     serialized_food["source"] = LOCAL_CACHE_FOOD_SOURCE
     serialized_food["aliases"] = document.get("aliases", [])
     serialized_food["external_search_enabled"] = False
-    return serialized_food
+    return annotate_food_compatibility(serialized_food)
 
 
 def _build_spoonacular_request_reference(food: dict[str, Any] | None) -> tuple[float, str | None]:
@@ -252,7 +253,7 @@ def _normalize_spoonacular_food(
         ingredient_information.get("id"),
     )
 
-    return {
+    return annotate_food_compatibility({
         "code": code,
         "internal_code": internal_food["code"] if internal_food else None,
         "normalized_name": normalized_name,
@@ -287,7 +288,7 @@ def _normalize_spoonacular_food(
             ingredient_information.get("originalName", ""),
             *internal_aliases,
         ),
-    }
+    })
 
 
 def get_food_catalog() -> list[dict[str, Any]]:

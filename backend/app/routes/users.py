@@ -6,7 +6,8 @@ from pymongo import ReturnDocument
 from app.core.database import get_database
 from app.core.security import get_current_user
 from app.schemas.nutrition import NutritionProfileUpdate, NutritionSummary
-from app.schemas.user import UserPublic, serialize_user
+from app.schemas.user import FoodPreferencesProfile, FoodPreferencesUpdate, UserPublic, serialize_user
+from app.services.food_preferences_service import sanitize_user_food_preferences
 from app.services.nutrition_service import (
     NutritionProfileIncompleteError,
     build_nutrition_summary,
@@ -19,6 +20,35 @@ router = APIRouter(prefix="/users", tags=["users"])
 @router.get("/me", response_model=UserPublic)
 def read_current_user(current_user: UserPublic = Depends(get_current_user)) -> UserPublic:
     return current_user
+
+
+@router.get("/me/preferences", response_model=FoodPreferencesProfile)
+def read_current_user_food_preferences(
+    current_user: UserPublic = Depends(get_current_user),
+) -> FoodPreferencesProfile:
+    return current_user.food_preferences
+
+
+@router.put("/me/preferences", response_model=FoodPreferencesProfile)
+def update_current_user_food_preferences(
+    payload: FoodPreferencesUpdate,
+    current_user: UserPublic = Depends(get_current_user),
+) -> FoodPreferencesProfile:
+    database = get_database()
+    current_user_id = ObjectId(current_user.id)
+    serialized_preferences = sanitize_user_food_preferences(payload)
+    updated_user = database.users.find_one_and_update(
+        {"_id": current_user_id},
+        {"$set": {"food_preferences": serialized_preferences}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if not updated_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    return serialize_user(updated_user).food_preferences
 
 
 @router.put("/me/profile", response_model=UserPublic)

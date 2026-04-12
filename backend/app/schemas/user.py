@@ -8,6 +8,17 @@ SexType = Literal["Masculino", "Femenino"]
 GoalType = Literal["perder_grasa", "mantener_peso", "ganar_masa"]
 
 
+class FoodPreferencesProfile(BaseModel):
+    preferred_foods: list[str] = Field(default_factory=list)
+    disliked_foods: list[str] = Field(default_factory=list)
+    dietary_restrictions: list[str] = Field(default_factory=list)
+    allergies: list[str] = Field(default_factory=list)
+
+
+class FoodPreferencesUpdate(FoodPreferencesProfile):
+    pass
+
+
 class UserCreate(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     email: EmailStr
@@ -24,8 +35,7 @@ class UserBase(BaseModel):
     training_days_per_week: int | None = Field(default=None, ge=0, le=7)
     goal: GoalType | None = None
     target_calories: float | None = Field(default=None, gt=0)
-    preferences: list[str] = Field(default_factory=list)
-    restrictions: list[str] = Field(default_factory=list)
+    food_preferences: FoodPreferencesProfile = Field(default_factory=FoodPreferencesProfile)
 
 
 class UserInDB(UserBase):
@@ -41,6 +51,16 @@ class UserPublic(UserBase):
 
 
 def serialize_user(document: dict[str, Any]) -> UserPublic:
+    serialized_food_preferences = FoodPreferencesProfile(
+        preferred_foods=document.get("food_preferences", {}).get("preferred_foods", document.get("preferences", [])),
+        disliked_foods=document.get("food_preferences", {}).get("disliked_foods", []),
+        dietary_restrictions=document.get("food_preferences", {}).get(
+            "dietary_restrictions",
+            document.get("restrictions", []),
+        ),
+        allergies=document.get("food_preferences", {}).get("allergies", []),
+    )
+
     return UserPublic(
         id=str(document["_id"]),
         name=document["name"],
@@ -53,6 +73,5 @@ def serialize_user(document: dict[str, Any]) -> UserPublic:
         training_days_per_week=document.get("training_days_per_week"),
         goal=document.get("goal"),
         target_calories=document.get("target_calories"),
-        preferences=document.get("preferences", []),
-        restrictions=document.get("restrictions", []),
+        food_preferences=serialized_food_preferences,
     )
