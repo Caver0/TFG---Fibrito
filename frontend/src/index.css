@@ -231,6 +231,11 @@ button {
   color: #3f372f;
 }
 
+.secondary-button-active {
+  background: #1c1a17;
+  color: #fff8f1;
+}
+
 .auth-form button:disabled,
 .profile-form button:disabled,
 .weight-form button:disabled,
@@ -640,7 +645,8 @@ button {
   font-weight: 600;
 }
 
-.analysis-actions button {
+.analysis-actions button,
+.meal-adherence-note-actions button:first-child {
   border-radius: 999px;
   padding: 14px 18px;
   background: #1c1a17;
@@ -648,9 +654,29 @@ button {
   font-weight: 700;
 }
 
-.analysis-actions button:disabled {
+.analysis-actions button:disabled,
+.meal-adherence-note-actions button:first-child:disabled {
   opacity: 0.7;
   cursor: wait;
+}
+
+.analysis-adherence-note {
+  border-radius: 18px;
+  border: 1px solid rgba(94, 72, 54, 0.1);
+  background: #fff8f1;
+  padding: 18px;
+}
+
+.analysis-adherence-note p {
+  margin: 10px 0 0;
+  color: #5f564d;
+}
+
+.analysis-adherence-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
 }
 
 .adjustment-card-header {
@@ -842,6 +868,138 @@ button {
   background: #fffaf4;
   border: 1px solid rgba(94, 72, 54, 0.08);
   padding: 14px 16px;
+}
+
+.meal-adherence-panel {
+  border-radius: 16px;
+  border: 1px solid rgba(94, 72, 54, 0.08);
+  background: #fffaf4;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.meal-adherence-header,
+.meal-adherence-actions,
+.meal-adherence-note-actions,
+.adherence-panel-header,
+.weekly-adherence-hero-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.meal-adherence-header,
+.adherence-panel-header {
+  align-items: flex-start;
+}
+
+.meal-adherence-status {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.meal-adherence-status small,
+.meal-adherence-note-preview,
+.weekly-adherence-week {
+  color: #6b6258;
+}
+
+.meal-adherence-actions,
+.meal-adherence-note-actions {
+  flex-wrap: wrap;
+}
+
+.meal-adherence-note {
+  display: grid;
+  gap: 12px;
+}
+
+.meal-adherence-note label,
+.adherence-date-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #3f372f;
+  font-weight: 600;
+}
+
+.meal-adherence-note textarea,
+.adherence-date-field input {
+  width: 100%;
+  border: 1px solid #d8cab8;
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: #fffdf9;
+  font: inherit;
+}
+
+.adherence-summary-grid,
+.weekly-adherence-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.adherence-pill,
+.weekly-adherence-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.adherence-pill-pending {
+  background: #f2e9df;
+  color: #5f564d;
+}
+
+.adherence-pill-completed,
+.weekly-adherence-badge-alta {
+  background: #ebf9f0;
+  color: #146c43;
+}
+
+.adherence-pill-omitted,
+.weekly-adherence-badge-baja {
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.adherence-pill-modified,
+.weekly-adherence-badge-media {
+  background: #fff3e5;
+  color: #8a4b13;
+}
+
+.weekly-adherence-hero {
+  border-radius: 20px;
+  padding: 20px;
+  background: #fff4e7;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.weekly-adherence-hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.weekly-adherence-hero-copy strong {
+  font-size: 1.35rem;
+}
+
+.weekly-adherence-hero-copy p {
+  margin: 0;
+  color: #5f564d;
 }
 
 .meal-summary-item {
@@ -1135,7 +1293,9 @@ button {
 
   .diet-highlight-grid,
   .diet-distribution-grid,
-  .diet-meta-grid {
+  .diet-meta-grid,
+  .adherence-summary-grid,
+  .weekly-adherence-grid {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -1211,7 +1371,9 @@ button {
   .meal-list-grid,
   .distribution-grid,
   .preference-options-grid,
-  .replacement-result-grid {
+  .replacement-result-grid,
+  .adherence-summary-grid,
+  .weekly-adherence-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1225,7 +1387,13 @@ button {
   .food-row-header,
   .replacement-panel-header,
   .replacement-result-header,
-  .replacement-actions {
+  .replacement-actions,
+  .meal-adherence-header,
+  .meal-adherence-actions,
+  .meal-adherence-note-actions,
+  .adherence-panel-header,
+  .weekly-adherence-hero-header,
+  .analysis-adherence-header {
     flex-direction: column;
     align-items: stretch;
   }

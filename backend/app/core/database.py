@@ -23,6 +23,21 @@ def connect_to_mongo() -> MongoClient:
         database.diets.create_index(
             [("user_id", ASCENDING), ("created_at", ASCENDING)]
         )
+        database.diet_adherence.create_index(
+            [
+                ("user_id", ASCENDING),
+                ("diet_id", ASCENDING),
+                ("date", ASCENDING),
+                ("meal_number", ASCENDING),
+            ],
+            unique=True,
+        )
+        database.diet_adherence.create_index(
+            [("user_id", ASCENDING), ("date", ASCENDING)]
+        )
+        database.diet_adherence.create_index(
+            [("diet_id", ASCENDING), ("date", ASCENDING)]
+        )
         database.foods_catalog.create_index([("normalized_name", ASCENDING)])
         database.foods_catalog.create_index([("aliases", ASCENDING)])
         database.foods_catalog.create_index([("internal_code", ASCENDING)])

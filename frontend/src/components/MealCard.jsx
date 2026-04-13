@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useState } from 'react'
 
 import FoodReplacementModal from './FoodReplacementModal'
+import MealAdherenceControls from './MealAdherenceControls'
 
 function formatNumber(value, decimals = 1) {
   return Number(value ?? 0).toFixed(decimals)
@@ -53,12 +54,15 @@ function formatFoodLineage(food) {
 }
 
 function MealCard({
+  adherence,
   busyFoodCode,
+  isAdherenceSaving,
   isBusy,
   isRegenerating,
   meal,
   onLoadReplacementOptions,
   onRegenerate,
+  onSaveAdherence,
   onReplaceFood,
 }) {
   const [replacementTarget, setReplacementTarget] = useState(null)
@@ -121,6 +125,15 @@ function MealCard({
           <strong>{formatNumber(meal.actual_carb_grams)} / {formatNumber(meal.target_carb_grams)} g</strong>
         </div>
       </div>
+
+      {onSaveAdherence ? (
+        <MealAdherenceControls
+          adherence={adherence}
+          isSaving={isAdherenceSaving}
+          mealNumber={meal.meal_number}
+          onSave={onSaveAdherence}
+        />
+      ) : null}
 
       {meal.foods?.length ? (
         <div className="food-list food-list-grid">

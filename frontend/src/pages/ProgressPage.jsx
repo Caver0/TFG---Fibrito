@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
+import * as adherenceApi from '../api/adherenceApi'
 import * as progressApi from '../api/progressApi'
 import * as weightApi from '../api/weightApi'
 import AdjustmentHistory from '../components/AdjustmentHistory'
 import ProgressSummary from '../components/ProgressSummary'
 import WeeklyAnalysisCard from '../components/WeeklyAnalysisCard'
+import WeeklyAdherenceSummary from '../components/WeeklyAdherenceSummary'
 import WeeklyAveragesCard from '../components/WeeklyAveragesCard'
 import WeightForm from '../components/WeightForm'
 import WeightHistory from '../components/WeightHistory'
@@ -15,11 +17,13 @@ function ProgressPage() {
   const [summary, setSummary] = useState(null)
   const [weeklyAverages, setWeeklyAverages] = useState([])
   const [weeklyAnalysis, setWeeklyAnalysis] = useState(null)
+  const [weeklyAdherenceSummary, setWeeklyAdherenceSummary] = useState(null)
   const [adjustmentHistory, setAdjustmentHistory] = useState([])
   const [historyError, setHistoryError] = useState('')
   const [summaryError, setSummaryError] = useState('')
   const [weeklyAveragesError, setWeeklyAveragesError] = useState('')
   const [weeklyAnalysisError, setWeeklyAnalysisError] = useState('')
+  const [weeklyAdherenceError, setWeeklyAdherenceError] = useState('')
   const [adjustmentHistoryError, setAdjustmentHistoryError] = useState('')
   const [saveError, setSaveError] = useState('')
   const [saveMessage, setSaveMessage] = useState('')
@@ -29,6 +33,7 @@ function ProgressPage() {
   const [isSummaryLoading, setIsSummaryLoading] = useState(false)
   const [isWeeklyAveragesLoading, setIsWeeklyAveragesLoading] = useState(false)
   const [isWeeklyAnalysisLoading, setIsWeeklyAnalysisLoading] = useState(false)
+  const [isWeeklyAdherenceLoading, setIsWeeklyAdherenceLoading] = useState(false)
   const [isAdjustmentHistoryLoading, setIsAdjustmentHistoryLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isApplyingAdjustment, setIsApplyingAdjustment] = useState(false)
@@ -118,6 +123,33 @@ function ProgressPage() {
     }
   }
 
+  async function loadWeeklyAdherenceSummary(
+    activeToken = token,
+    targetWeekLabel = weeklyAnalysis?.current_week_label ?? null,
+  ) {
+    if (!activeToken) {
+      return null
+    }
+
+    setIsWeeklyAdherenceLoading(true)
+    setWeeklyAdherenceError('')
+
+    try {
+      const response = await adherenceApi.getWeeklyAdherenceSummary(
+        activeToken,
+        targetWeekLabel ? { week_label: targetWeekLabel } : {},
+      )
+      setWeeklyAdherenceSummary(response)
+      return response
+    } catch (error) {
+      setWeeklyAdherenceSummary(null)
+      setWeeklyAdherenceError(error.message)
+      return null
+    } finally {
+      setIsWeeklyAdherenceLoading(false)
+    }
+  }
+
   async function loadAdjustmentHistory(activeToken = token) {
     if (!activeToken) {
       return []
@@ -147,11 +179,12 @@ function ProgressPage() {
   }
 
   async function reloadWeeklyData(activeToken = token) {
-    await Promise.all([
+    const [, analysis] = await Promise.all([
       loadWeeklyAverages(activeToken),
       loadWeeklyAnalysis(activeToken),
       loadAdjustmentHistory(activeToken),
     ])
+    await loadWeeklyAdherenceSummary(activeToken, analysis?.current_week_label ?? null)
   }
 
   async function reloadAll(activeToken = token) {
@@ -168,6 +201,19 @@ function ProgressPage() {
 
     reloadAll(token)
   }, [token])
+
+  useEffect(() => {
+    if (!token) {
+      return undefined
+    }
+
+    async function handleAdherenceUpdated() {
+      await loadWeeklyAdherenceSummary(token, weeklyAnalysis?.current_week_label ?? null)
+    }
+
+    window.addEventListener('adherence:updated', handleAdherenceUpdated)
+    return () => window.removeEventListener('adherence:updated', handleAdherenceUpdated)
+  }, [token, weeklyAnalysis?.current_week_label])
 
   async function handleSave(payload) {
     if (!token) {
@@ -275,6 +321,7 @@ function ProgressPage() {
           />
           <WeeklyAnalysisCard
             analysis={weeklyAnalysis}
+            adherenceSummary={weeklyAdherenceSummary}
             applyError={applyError}
             applyMessage={applyMessage}
             error={weeklyAnalysisError}
@@ -283,6 +330,14 @@ function ProgressPage() {
             onApply={handleApplyAdjustment}
           />
         </div>
+
+        <WeeklyAdherenceSummary
+          description="Esta lectura conecta la adherencia real con la fiabilidad interpretativa de la media semanal del peso en ayunas."
+          error={weeklyAdherenceError}
+          isLoading={isWeeklyAdherenceLoading}
+          summary={weeklyAdherenceSummary}
+          title="Fiabilidad del analisis segun adherencia"
+        />
 
         <AdjustmentHistory
           entries={adjustmentHistory}

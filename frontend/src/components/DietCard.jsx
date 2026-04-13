@@ -141,15 +141,19 @@ function DietCard({
   actionError,
   actionMessage,
   actionSummary,
+  activeAdherenceMealNumber,
   activeFoodCode,
   activeMealNumber,
+  adherenceRecordsByMeal,
   description,
   diet,
   error,
+  isAdherenceSaving,
   isLoading,
   isMealActionLoading,
   onLoadReplacementOptions,
   onRegenerateMeal,
+  onSaveMealAdherence,
   onReplaceFood,
   title,
 }) {
@@ -178,6 +182,14 @@ function DietCard({
     }
 
     return onLoadReplacementOptions(mealNumber, food)
+  }
+
+  async function handleSaveMealAdherence(mealNumber, payload) {
+    if (!diet?.id || !onSaveMealAdherence) {
+      return false
+    }
+
+    return onSaveMealAdherence(diet.id, mealNumber, payload)
   }
 
   return (
@@ -282,13 +294,16 @@ function DietCard({
           <div className="meal-list meal-list-grid">
             {diet.meals.map((meal) => (
               <MealCard
+                adherence={adherenceRecordsByMeal?.[meal.meal_number] ?? null}
                 key={meal.meal_number}
                 busyFoodCode={isMealActionLoading && activeMealNumber === meal.meal_number ? activeFoodCode : ''}
+                isAdherenceSaving={Boolean(isAdherenceSaving && activeAdherenceMealNumber === meal.meal_number)}
                 isBusy={isMealActionLoading}
                 isRegenerating={isMealActionLoading && activeMealNumber === meal.meal_number && !activeFoodCode}
                 meal={meal}
                 onLoadReplacementOptions={handleLoadReplacementOptions}
                 onRegenerate={handleRegenerate}
+                onSaveAdherence={onSaveMealAdherence ? handleSaveMealAdherence : null}
                 onReplaceFood={handleReplaceFood}
               />
             ))}

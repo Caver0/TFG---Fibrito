@@ -17,8 +17,19 @@ function getStatusLabel(status) {
   return 'Perfil incompleto'
 }
 
+function formatAdherenceLevel(level) {
+  if (level === 'alta') {
+    return 'Alta adherencia'
+  }
+  if (level === 'media') {
+    return 'Adherencia media'
+  }
+  return 'Baja adherencia'
+}
+
 function WeeklyAnalysisCard({
   analysis,
+  adherenceSummary,
   applyError,
   applyMessage,
   error,
@@ -96,6 +107,20 @@ function WeeklyAnalysisCard({
           </div>
 
           <p className="info-note">{analysis.adjustment_reason}</p>
+
+          {adherenceSummary ? (
+            <article className="analysis-adherence-note">
+              <div className="analysis-adherence-header">
+                <strong>Fiabilidad interpretativa</strong>
+                <span className={`weekly-adherence-badge weekly-adherence-badge-${adherenceSummary.adherence_level}`}>
+                  {formatAdherenceLevel(adherenceSummary.adherence_level)}
+                </span>
+              </div>
+              <p>
+                Factor semanal {Number(adherenceSummary.weekly_adherence_factor ?? 0).toFixed(2)}. {adherenceSummary.interpretation_message}
+              </p>
+            </article>
+          ) : null}
         </>
       ) : null}
 
