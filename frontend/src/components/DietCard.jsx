@@ -1,6 +1,4 @@
-import { useState } from 'react'
-
-import FoodReplacementModal from './FoodReplacementModal'
+import { useMemo } from 'react'
 import MealCard from './MealCard'
 import { formatTrainingTimeOfDay } from '../utils/dietDistribution'
 
@@ -15,16 +13,14 @@ function formatDietTimestamp(value) {
   })
 }
 
-function formatDistribution(percentages) {
-  if (!percentages?.length) {
-    return 'Sin distribucion guardada'
-  }
-
-  return percentages.map((value) => `${value}%`).join(' / ')
-}
-
 function formatNumber(value, decimals = 1) {
   return Number(value ?? 0).toFixed(decimals)
+}
+
+function formatSignedValue(value, unit = '') {
+  const numericValue = Number(value ?? 0)
+  const prefix = numericValue > 0 ? '+' : ''
+  return `${prefix}${formatNumber(numericValue)}${unit ? ` ${unit}` : ''}`
 }
 
 function formatFoodSource(value) {
@@ -74,7 +70,71 @@ function formatResolutionSummary(diet) {
     return 'No'
   }
 
-  return `Si (${attempts} consultas de resolucion)`
+  return `Si (${attempts} consultas)`
+}
+
+function buildHighlightItems(diet) {
+  return [
+    {
+      label: 'Objetivo diario',
+      value: `${formatNumber(diet.target_calories)} kcal`,
+      detail: `Dif. ${formatSignedValue(diet.calorie_difference, 'kcal')}`,
+    },
+    {
+      label: 'Generado',
+      value: `${formatNumber(diet.actual_calories)} kcal`,
+      detail: `${diet.meals_count} comidas`,
+    },
+    {
+      label: 'Proteina',
+      value: `${formatNumber(diet.actual_protein_grams)} g`,
+      detail: `Objetivo ${formatNumber(diet.protein_grams)} g`,
+    },
+    {
+      label: 'Grasas',
+      value: `${formatNumber(diet.actual_fat_grams)} g`,
+      detail: `Objetivo ${formatNumber(diet.fat_grams)} g`,
+    },
+    {
+      label: 'Carbohidratos',
+      value: `${formatNumber(diet.actual_carb_grams)} g`,
+      detail: `Objetivo ${formatNumber(diet.carb_grams)} g`,
+    },
+    {
+      label: 'Entreno',
+      value: diet.training_optimization_applied ? 'Optimizada' : 'Sin optimizar',
+      detail: formatTrainingTimeOfDay(diet.training_time_of_day),
+    },
+  ]
+}
+
+function buildMetaItems(diet) {
+  return [
+    {
+      label: 'Creada',
+      value: formatDietTimestamp(diet.created_at),
+    },
+    {
+      label: 'Fuentes',
+      value: formatFoodSources(diet.food_data_sources, diet.food_data_source),
+    },
+    {
+      label: 'Catalogo',
+      value: diet.food_catalog_version ?? 'No aplica',
+    },
+    {
+      label: 'Resolucion',
+      value: formatCatalogSourceStrategy(diet.catalog_source_strategy),
+    },
+    {
+      label: 'Spoonacular',
+      value: formatResolutionSummary(diet),
+    },
+    {
+      label: 'Compatibilidad',
+      value: diet.food_preferences_applied ? 'Preferencias aplicadas' : 'Sin filtros extra',
+    },
+  ]
 }
 
 function DietCard({
@@ -88,22 +148,20 @@ function DietCard({
   error,
   isLoading,
   isMealActionLoading,
+  onLoadReplacementOptions,
   onRegenerateMeal,
   onReplaceFood,
-  onSearchFoods,
   title,
 }) {
-  const [replacementTarget, setReplacementTarget] = useState(null)
+  const highlightItems = useMemo(() => (diet ? buildHighlightItems(diet) : []), [diet])
+  const metaItems = useMemo(() => (diet ? buildMetaItems(diet) : []), [diet])
 
-  async function handleSubmitReplacement(payload) {
-    if (!diet?.id || !replacementTarget) {
+  async function handleReplaceFood(mealNumber, payload) {
+    if (!diet?.id) {
       return
     }
 
-    const wasSuccessful = await onReplaceFood(diet.id, replacementTarget.mealNumber, payload)
-    if (wasSuccessful) {
-      setReplacementTarget(null)
-    }
+    return onReplaceFood(diet.id, mealNumber, payload)
   }
 
   async function handleRegenerate(mealNumber) {
@@ -112,6 +170,14 @@ function DietCard({
     }
 
     await onRegenerateMeal(diet.id, mealNumber)
+  }
+
+  async function handleLoadReplacementOptions(mealNumber, food) {
+    if (!diet?.id) {
+      return { options: [] }
+    }
+
+    return onLoadReplacementOptions(mealNumber, food)
   }
 
   return (
@@ -145,90 +211,75 @@ function DietCard({
 
       {!isLoading && diet ? (
         <>
-          <div className="nutrition-grid">
-            <article className="metric-card">
-              <span>Creada</span>
-              <strong>{formatDietTimestamp(diet.created_at)}</strong>
-            </article>
-            <article className="metric-card">
-              <span>Comidas</span>
-              <strong>{diet.meals_count}</strong>
-            </article>
-            <article className="metric-card">
-              <span>Calorias generadas</span>
-              <strong>{formatNumber(diet.actual_calories)} kcal</strong>
-            </article>
-            <article className="metric-card">
-              <span>Objetivo diario</span>
-              <strong>{formatNumber(diet.target_calories)} kcal</strong>
-            </article>
-            <article className="metric-card">
-              <span>Proteina generada</span>
-              <strong>{formatNumber(diet.actual_protein_grams)} g</strong>
-            </article>
-            <article className="metric-card">
-              <span>Grasas generadas</span>
-              <strong>{formatNumber(diet.actual_fat_grams)} g</strong>
-            </article>
-            <article className="metric-card">
-              <span>Carbohidratos generados</span>
-              <strong>{formatNumber(diet.actual_carb_grams)} g</strong>
-            </article>
-            <article className="metric-card">
-              <span>Diferencia calorica</span>
-              <strong>{formatNumber(diet.calorie_difference)} kcal</strong>
-            </article>
-            <article className="metric-card">
-              <span>Distribucion usada</span>
-              <strong>{formatDistribution(diet.distribution_percentages)}</strong>
-            </article>
-            <article className="metric-card">
-              <span>Fuente de alimentos</span>
-              <strong>{formatFoodSource(diet.food_data_source)}</strong>
-            </article>
-            <article className="metric-card">
-              <span>Fuentes usadas</span>
-              <strong>{formatFoodSources(diet.food_data_sources, diet.food_data_source)}</strong>
-            </article>
-            <article className="metric-card">
-              <span>Optimizacion por entreno</span>
-              <strong>{diet.training_optimization_applied ? 'Si' : 'No'}</strong>
-            </article>
-            <article className="metric-card">
-              <span>Momento de entreno</span>
-              <strong>{formatTrainingTimeOfDay(diet.training_time_of_day)}</strong>
-            </article>
-            <article className="metric-card">
-              <span>Version del catalogo</span>
-              <strong>{diet.food_catalog_version ?? 'No aplica'}</strong>
-            </article>
-            <article className="metric-card">
-              <span>Estrategia usada</span>
-              <strong>{formatCatalogSourceStrategy(diet.catalog_source_strategy)}</strong>
-            </article>
-            <article className="metric-card">
-              <span>Spoonacular intentado</span>
-              <strong>{formatResolutionSummary(diet)}</strong>
-            </article>
-            <article className="metric-card">
-              <span>Aciertos Spoonacular</span>
-              <strong>{diet.spoonacular_hits ?? 0}</strong>
-            </article>
-            <article className="metric-card">
-              <span>Aciertos cache</span>
-              <strong>{diet.cache_hits ?? 0}</strong>
-            </article>
-            <article className="metric-card">
-              <span>Fallback interno</span>
-              <strong>{diet.internal_fallbacks ?? 0}</strong>
-            </article>
-            <article className="metric-card">
-              <span>Alimentos resueltos</span>
-              <strong>{diet.resolved_foods_count ?? 0}</strong>
-            </article>
+          <div className="diet-overview-grid">
+            <div className="diet-highlight-grid">
+              {highlightItems.map((item) => (
+                <article key={item.label} className="metric-card metric-card-highlight">
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                  <small>{item.detail}</small>
+                </article>
+              ))}
+            </div>
+
+            <section className="diet-distribution-panel">
+              <div className="diet-distribution-header">
+                <div>
+                  <span className="eyebrow">Distribucion del dia</span>
+                  <h3>Reparto actual por comidas</h3>
+                </div>
+                <p>{diet.distribution_percentages?.length ? 'Resumen rapido de porcentaje, energia y macros por comida.' : 'No hay distribucion guardada para esta dieta.'}</p>
+              </div>
+
+              <div className="diet-distribution-grid">
+                {diet.meals.map((meal) => (
+                  <article key={`distribution-${meal.meal_number}`} className="diet-distribution-card">
+                    <div className="diet-distribution-card-header">
+                      <strong>Comida {meal.meal_number}</strong>
+                      <span>{formatNumber(meal.distribution_percentage ?? 0)}%</span>
+                    </div>
+                    <p>{formatNumber(meal.actual_calories)} / {formatNumber(meal.target_calories)} kcal</p>
+                    <div className="diet-distribution-card-macros">
+                      <span>P {formatNumber(meal.actual_protein_grams)} g</span>
+                      <span>G {formatNumber(meal.actual_fat_grams)} g</span>
+                      <span>C {formatNumber(meal.actual_carb_grams)} g</span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+
+            <section className="diet-meta-panel">
+              <div className="diet-meta-panel-header">
+                <div>
+                  <span className="eyebrow">Contexto</span>
+                  <h3>Trazabilidad y resolucion</h3>
+                </div>
+              </div>
+
+              <div className="diet-meta-grid">
+                {metaItems.map((item) => (
+                  <article key={item.label} className="diet-meta-card">
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
+                  </article>
+                ))}
+              </div>
+            </section>
+
+            {diet.food_filter_warnings?.length ? (
+              <article className="diet-warning-panel">
+                <strong>Notas de compatibilidad</strong>
+                <ul className="diet-action-list">
+                  {diet.food_filter_warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              </article>
+            ) : null}
           </div>
 
-          <div className="meal-list">
+          <div className="meal-list meal-list-grid">
             {diet.meals.map((meal) => (
               <MealCard
                 key={meal.meal_number}
@@ -236,21 +287,12 @@ function DietCard({
                 isBusy={isMealActionLoading}
                 isRegenerating={isMealActionLoading && activeMealNumber === meal.meal_number && !activeFoodCode}
                 meal={meal}
-                onOpenReplacement={(mealNumber, food) => setReplacementTarget({ mealNumber, food })}
+                onLoadReplacementOptions={handleLoadReplacementOptions}
                 onRegenerate={handleRegenerate}
+                onReplaceFood={handleReplaceFood}
               />
             ))}
           </div>
-
-          <FoodReplacementModal
-            food={replacementTarget?.food}
-            isOpen={Boolean(replacementTarget)}
-            isSubmitting={isMealActionLoading}
-            mealNumber={replacementTarget?.mealNumber}
-            onClose={() => setReplacementTarget(null)}
-            onSearchFoods={onSearchFoods}
-            onSubmit={handleSubmitReplacement}
-          />
         </>
       ) : null}
     </section>

@@ -1,3 +1,7 @@
+import { Fragment, useMemo, useState } from 'react'
+
+import FoodReplacementModal from './FoodReplacementModal'
+
 function formatNumber(value, decimals = 1) {
   return Number(value ?? 0).toFixed(decimals)
 }
@@ -53,9 +57,34 @@ function MealCard({
   isBusy,
   isRegenerating,
   meal,
-  onOpenReplacement,
+  onLoadReplacementOptions,
   onRegenerate,
+  onReplaceFood,
 }) {
+  const [replacementTarget, setReplacementTarget] = useState(null)
+
+  const replacementTargetKey = useMemo(
+    () => replacementTarget?.food_code ?? replacementTarget?.name ?? '',
+    [replacementTarget],
+  )
+
+  async function handleSubmitReplacement(payload) {
+    const wasSuccessful = await onReplaceFood(meal.meal_number, payload)
+    if (wasSuccessful) {
+      setReplacementTarget(null)
+    }
+  }
+
+  function handleToggleReplacement(food) {
+    const foodKey = food.food_code ?? food.name
+    if (replacementTargetKey === foodKey) {
+      setReplacementTarget(null)
+      return
+    }
+
+    setReplacementTarget(food)
+  }
+
   return (
     <article className="meal-card">
       <div className="meal-card-header meal-card-header-actions">
@@ -94,32 +123,53 @@ function MealCard({
       </div>
 
       {meal.foods?.length ? (
-        <div className="food-list">
+        <div className="food-list food-list-grid">
           {meal.foods.map((food) => {
             const foodKey = food.food_code ?? food.name
             const isReplacing = busyFoodCode === foodKey
+            const isReplacementOpen = replacementTargetKey === foodKey
 
             return (
-              <article key={`${meal.meal_number}-${foodKey}`} className="food-row">
-                <div className="food-row-header">
-                  <div className="food-row-title">
-                    <strong>{food.name}</strong>
-                    <span>{formatFoodQuantity(food)}</span>
+              <Fragment key={`${meal.meal_number}-${foodKey}`}>
+                <article className={`food-row ${isReplacementOpen ? 'food-row-active' : ''}`}>
+                  <div className="food-row-header">
+                    <div className="food-row-title">
+                      <strong>{food.name}</strong>
+                      <span>{formatFoodQuantity(food)}</span>
+                    </div>
+
+                    <button
+                      className="secondary-button food-action-button"
+                      disabled={isBusy}
+                      type="button"
+                      onClick={() => handleToggleReplacement(food)}
+                    >
+                      {isReplacing ? 'Sustituyendo...' : isReplacementOpen ? 'Cerrar sustitucion' : 'Sustituir'}
+                    </button>
                   </div>
 
-                  <button
-                    className="secondary-button food-action-button"
-                    disabled={isBusy}
-                    type="button"
-                    onClick={() => onOpenReplacement(meal.meal_number, food)}
-                  >
-                    {isReplacing ? 'Abriendo...' : 'Sustituir'}
-                  </button>
-                </div>
-                <p className="food-row-meta">
-                  {formatNumber(food.calories, 2)} kcal | P {formatNumber(food.protein_grams, 2)} g | G {formatNumber(food.fat_grams, 2)} g | C {formatNumber(food.carb_grams, 2)} g | {formatFoodLineage(food)}{food.spoonacular_id ? ` | Spoonacular ID ${food.spoonacular_id}` : ''}
-                </p>
-              </article>
+                  <p className="food-row-meta">
+                    {formatNumber(food.calories, 2)} kcal | P {formatNumber(food.protein_grams, 2)} g | G {formatNumber(food.fat_grams, 2)} g | C {formatNumber(food.carb_grams, 2)} g
+                  </p>
+                  <p className="food-row-source">
+                    {formatFoodLineage(food)}{food.spoonacular_id ? ` | Spoonacular ID ${food.spoonacular_id}` : ''}
+                  </p>
+                </article>
+
+                {isReplacementOpen ? (
+                  <div className="food-replacement-slot">
+                    <FoodReplacementModal
+                      food={replacementTarget}
+                      isOpen={Boolean(replacementTarget)}
+                      isSubmitting={busyFoodCode === replacementTargetKey && isBusy}
+                      mealNumber={meal.meal_number}
+                      onCancel={() => setReplacementTarget(null)}
+                      onLoadOptions={onLoadReplacementOptions}
+                      onSubmit={handleSubmitReplacement}
+                    />
+                  </div>
+                ) : null}
+              </Fragment>
             )
           })}
         </div>

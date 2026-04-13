@@ -5,7 +5,13 @@ from typing import Any
 
 from fastapi import HTTPException, status
 
-from app.schemas.diet import DietMutationResponse, DietMutationSummary, ReplaceFoodRequest
+from app.schemas.diet import (
+    DietMutationResponse,
+    DietMutationSummary,
+    FoodReplacementOption,
+    FoodReplacementOptionsResponse,
+    ReplaceFoodRequest,
+)
 from app.schemas.user import UserPublic
 from app.services.diet_service import (
     build_exact_meal_solution,
@@ -44,11 +50,11 @@ COMPATIBLE_GROUPS_BY_SLOT = {
 }
 
 
-def _find_current_food_in_meal(meal, payload: ReplaceFoodRequest):
-    normalized_target_name = normalize_food_name(payload.current_food_name)
+def _find_current_food_in_meal(meal, *, current_food_name: str, current_food_code: str | None = None):
+    normalized_target_name = normalize_food_name(current_food_name)
 
     for food in meal.foods:
-        if payload.current_food_code and food.food_code == payload.current_food_code:
+        if current_food_code and food.food_code == current_food_code:
             return food
 
         if normalize_food_name(food.name) == normalized_target_name:
@@ -56,7 +62,7 @@ def _find_current_food_in_meal(meal, payload: ReplaceFoodRequest):
 
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"No se encontro el alimento '{payload.current_food_name}' en la comida seleccionada.",
+        detail=f"No se encontro el alimento '{current_food_name}' en la comida seleccionada.",
     )
 
 
@@ -70,6 +76,66 @@ def _build_current_meal_food_lookup(base_lookup: dict[str, dict[str, Any]], meal
         meal_lookup[food_code] = build_catalog_food_from_diet_food(food.model_dump())
 
     return meal_lookup
+
+
+def _build_food_replacement_context(
+    database,
+    *,
+    user: UserPublic,
+    diet_id: str,
+    meal_number: int,
+    current_food_name: str,
+    current_food_code: str | None = None,
+) -> dict[str, Any]:
+    diet = get_user_diet_by_id(database, user.id, diet_id)
+    meal_index = meal_number - 1
+    if meal_index < 0 or meal_index >= len(diet.meals):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Meal not found in the selected diet",
+        )
+
+    meal = diet.meals[meal_index]
+    current_food = _find_current_food_in_meal(
+        meal,
+        current_food_name=current_food_name,
+        current_food_code=current_food_code,
+    )
+    context_food_lookup = build_diet_context_food_lookup(database, diet)
+    meal_food_lookup = _build_current_meal_food_lookup(context_food_lookup, meal)
+    current_food_entry = meal_food_lookup.get(str(current_food.food_code or "")) or build_catalog_food_from_diet_food(
+        current_food.model_dump()
+    )
+    preference_profile = build_user_food_preferences_profile(user)
+    training_focus = get_training_focus_for_meal(diet, meal_index)
+    inferred_plan = infer_existing_meal_plan(
+        meal,
+        meal_index=meal_index,
+        meals_count=diet.meals_count,
+        training_focus=training_focus,
+        food_lookup=meal_food_lookup,
+    )
+    slot = _derive_replacement_slot(str(current_food.food_code or ""), inferred_plan, current_food_entry)
+    daily_food_usage = track_daily_food_usage_excluding_current_meal(
+        diet,
+        meal_index_to_exclude=meal_index,
+        food_lookup=context_food_lookup,
+    )
+
+    return {
+        "diet": diet,
+        "meal": meal,
+        "meal_index": meal_index,
+        "current_food": current_food,
+        "current_food_entry": current_food_entry,
+        "context_food_lookup": context_food_lookup,
+        "meal_food_lookup": meal_food_lookup,
+        "preference_profile": preference_profile,
+        "training_focus": training_focus,
+        "inferred_plan": inferred_plan,
+        "slot": slot,
+        "daily_food_usage": daily_food_usage,
+    }
 
 
 def _derive_replacement_slot(current_food_code: str, inferred_plan: dict[str, Any], current_food_entry: dict[str, Any]) -> dict[str, str]:
@@ -459,6 +525,233 @@ def _build_updated_meal_payload(meal, meal_solution: dict[str, Any]) -> dict[str
     }
 
 
+def _extract_food_portion(meal_solution: dict[str, Any], food_code: str) -> dict[str, Any] | None:
+    return next(
+        (
+            food
+            for food in meal_solution.get("foods", [])
+            if food.get("food_code") == food_code
+        ),
+        None,
+    )
+
+
+def _build_replacement_option(
+    *,
+    current_food,
+    replacement_food: dict[str, Any],
+    meal_solution: dict[str, Any],
+    rebuild_strategy: str,
+) -> FoodReplacementOption | None:
+    replacement_portion = _extract_food_portion(meal_solution, replacement_food["code"])
+    if not replacement_portion:
+        return None
+
+    note = (
+        "Encaja ajustando solo la pieza sustituida dentro de la comida."
+        if rebuild_strategy == "strict"
+        else "Necesita un reajuste mas flexible del resto de la comida para cuadrar macros."
+    )
+
+    return FoodReplacementOption(
+        food_code=replacement_food["code"],
+        name=replacement_food["name"],
+        category=replacement_food.get("category", "otros"),
+        functional_group=derive_functional_group(replacement_food),
+        source=str(replacement_food.get("source") or "internal"),
+        recommended_quantity=float(replacement_portion["quantity"]),
+        recommended_unit=str(replacement_portion["unit"]),
+        recommended_grams=float(replacement_portion["grams"]) if replacement_portion.get("grams") is not None else None,
+        calories=float(replacement_portion["calories"]),
+        protein_grams=float(replacement_portion["protein_grams"]),
+        fat_grams=float(replacement_portion["fat_grams"]),
+        carb_grams=float(replacement_portion["carb_grams"]),
+        calorie_delta_vs_current=float(replacement_portion["calories"]) - float(current_food.calories),
+        protein_delta_vs_current=float(replacement_portion["protein_grams"]) - float(current_food.protein_grams),
+        fat_delta_vs_current=float(replacement_portion["fat_grams"]) - float(current_food.fat_grams),
+        carb_delta_vs_current=float(replacement_portion["carb_grams"]) - float(current_food.carb_grams),
+        meal_calorie_difference=float(meal_solution["calorie_difference"]),
+        meal_protein_difference=float(meal_solution["protein_difference"]),
+        meal_fat_difference=float(meal_solution["fat_difference"]),
+        meal_carb_difference=float(meal_solution["carb_difference"]),
+        strategy=rebuild_strategy,  # type: ignore[arg-type]
+        note=note,
+    )
+
+
+def _build_replacement_option_sort_score(
+    option: FoodReplacementOption,
+    *,
+    current_food,
+    replacement_food: dict[str, Any],
+    slot: dict[str, str],
+) -> float:
+    current_reference_quantity = float(current_food.grams or current_food.quantity or 0.0)
+    replacement_reference_quantity = float(option.recommended_grams or option.recommended_quantity or 0.0)
+    quantity_penalty = 0.0
+
+    if current_reference_quantity > 0 and replacement_reference_quantity > 0:
+        quantity_ratio = max(current_reference_quantity, replacement_reference_quantity) / max(
+            min(current_reference_quantity, replacement_reference_quantity),
+            1.0,
+        )
+        tolerance = 2.4 if slot["role"] == "fat" else 2.0 if slot["kind"] == "support" else 1.75
+        quantity_penalty += max(0.0, quantity_ratio - tolerance) * 3.2
+
+    replacement_quantity = float(option.recommended_quantity or 0.0)
+    default_quantity = float(replacement_food.get("default_quantity") or 0.0)
+    if default_quantity > 0 and replacement_quantity > 0:
+        relative_deviation = abs(replacement_quantity - default_quantity) / default_quantity
+        deviation_tolerance = 1.1 if slot["kind"] == "support" else 0.85
+        quantity_penalty += max(0.0, relative_deviation - deviation_tolerance) * 2.4
+
+    min_quantity = float(replacement_food.get("min_quantity") or 0.0)
+    if min_quantity > 0 and replacement_quantity < min_quantity * 0.7:
+        quantity_penalty += ((min_quantity * 0.7) - replacement_quantity) / max(min_quantity, 1.0) * 12.0
+
+    max_quantity = float(replacement_food.get("max_quantity") or 0.0)
+    if max_quantity > 0 and replacement_quantity > max_quantity * 1.1:
+        quantity_penalty += (replacement_quantity - (max_quantity * 1.1)) / max(max_quantity, 1.0) * 10.0
+
+    return (
+        (8.0 if option.strategy == "relaxed" else 0.0)
+        + abs(option.meal_calorie_difference) * 0.12
+        + abs(option.meal_protein_difference) * 1.6
+        + abs(option.meal_fat_difference) * 1.6
+        + abs(option.meal_carb_difference) * 1.2
+        + quantity_penalty
+    )
+
+
+def _evaluate_replacement_candidate(
+    *,
+    current_food,
+    replacement_food: dict[str, Any],
+    meal,
+    meal_index: int,
+    meals_count: int,
+    training_focus: bool,
+    slot: dict[str, str],
+    inferred_plan: dict[str, Any],
+    food_lookup: dict[str, dict[str, Any]],
+    preference_profile: dict[str, Any],
+    daily_food_usage: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    updated_meal_solution, rebuild_strategy = rebuild_meal_after_food_replacement(
+        meal=meal,
+        meal_index=meal_index,
+        meals_count=meals_count,
+        training_focus=training_focus,
+        current_food=current_food,
+        replacement_food=replacement_food,
+        slot=slot,
+        inferred_plan=inferred_plan,
+        food_lookup=food_lookup,
+        preference_profile=preference_profile,
+        daily_food_usage=daily_food_usage,
+    )
+    replacement_option = _build_replacement_option(
+        current_food=current_food,
+        replacement_food=replacement_food,
+        meal_solution=updated_meal_solution,
+        rebuild_strategy=rebuild_strategy,
+    )
+    if replacement_option is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"No se pudo estimar una cantidad valida para '{replacement_food['name']}'.",
+        )
+
+    return {
+        "replacement_food": replacement_food,
+        "meal_solution": updated_meal_solution,
+        "rebuild_strategy": rebuild_strategy,
+        "replacement_option": replacement_option,
+        "score": _build_replacement_option_sort_score(
+            replacement_option,
+            current_food=current_food,
+            replacement_food=replacement_food,
+            slot=slot,
+        ),
+    }
+
+
+def list_food_replacement_options(
+    database,
+    *,
+    user: UserPublic,
+    diet_id: str,
+    meal_number: int,
+    payload: ReplaceFoodRequest,
+    limit: int = 6,
+) -> FoodReplacementOptionsResponse:
+    context = _build_food_replacement_context(
+        database,
+        user=user,
+        diet_id=diet_id,
+        meal_number=meal_number,
+        current_food_name=payload.current_food_name,
+        current_food_code=payload.current_food_code,
+    )
+    candidate_foods = find_equivalent_food_candidates(
+        current_food_entry=context["current_food_entry"],
+        slot=context["slot"],
+        preference_profile=context["preference_profile"],
+        daily_food_usage=context["daily_food_usage"],
+    )
+    scored_options: list[tuple[float, FoodReplacementOption]] = []
+    seen_food_codes: set[str] = set()
+
+    for candidate_food in candidate_foods:
+        if candidate_food["code"] in seen_food_codes:
+            continue
+
+        try:
+            candidate_evaluation = _evaluate_replacement_candidate(
+                current_food=context["current_food"],
+                replacement_food=candidate_food,
+                meal=context["meal"],
+                meal_index=context["meal_index"],
+                meals_count=context["diet"].meals_count,
+                training_focus=context["training_focus"],
+                slot=context["slot"],
+                inferred_plan=context["inferred_plan"],
+                food_lookup=context["meal_food_lookup"],
+                preference_profile=context["preference_profile"],
+                daily_food_usage=context["daily_food_usage"],
+            )
+        except (FoodPreferenceConflictError, HTTPException):
+            continue
+
+        scored_options.append(
+            (
+                float(candidate_evaluation["score"]),
+                candidate_evaluation["replacement_option"],
+            )
+        )
+        seen_food_codes.add(candidate_food["code"])
+
+    if not scored_options:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"No se encontraron sustitutos compatibles para '{context['current_food'].name}' con el estado actual de la dieta."
+            ),
+        )
+
+    scored_options.sort(key=lambda item: (item[0], item[1].name.lower()))
+    replacement_options = [option for _, option in scored_options[:limit]]
+    return FoodReplacementOptionsResponse(
+        meal_number=meal_number,
+        current_food_name=context["current_food"].name,
+        current_food_code=context["current_food"].food_code,
+        current_food_quantity=float(context["current_food"].quantity),
+        current_food_unit=context["current_food"].unit,
+        current_food_grams=float(context["current_food"].grams) if context["current_food"].grams is not None else None,
+        options=replacement_options,
+    )
+
+
 def replace_food_in_meal(
     database,
     *,
@@ -467,35 +760,13 @@ def replace_food_in_meal(
     meal_number: int,
     payload: ReplaceFoodRequest,
 ) -> DietMutationResponse:
-    diet = get_user_diet_by_id(database, user.id, diet_id)
-    meal_index = meal_number - 1
-    if meal_index < 0 or meal_index >= len(diet.meals):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Meal not found in the selected diet",
-        )
-
-    meal = diet.meals[meal_index]
-    current_food = _find_current_food_in_meal(meal, payload)
-    context_food_lookup = build_diet_context_food_lookup(database, diet)
-    meal_food_lookup = _build_current_meal_food_lookup(context_food_lookup, meal)
-    current_food_entry = meal_food_lookup.get(str(current_food.food_code or "")) or build_catalog_food_from_diet_food(
-        current_food.model_dump()
-    )
-    preference_profile = build_user_food_preferences_profile(user)
-    training_focus = get_training_focus_for_meal(diet, meal_index)
-    inferred_plan = infer_existing_meal_plan(
-        meal,
-        meal_index=meal_index,
-        meals_count=diet.meals_count,
-        training_focus=training_focus,
-        food_lookup=meal_food_lookup,
-    )
-    slot = _derive_replacement_slot(str(current_food.food_code or ""), inferred_plan, current_food_entry)
-    daily_food_usage = track_daily_food_usage_excluding_current_meal(
-        diet,
-        meal_index_to_exclude=meal_index,
-        food_lookup=context_food_lookup,
+    context = _build_food_replacement_context(
+        database,
+        user=user,
+        diet_id=diet_id,
+        meal_number=meal_number,
+        current_food_name=payload.current_food_name,
+        current_food_code=payload.current_food_code,
     )
 
     if payload.replacement_food_name or payload.replacement_food_code:
@@ -503,23 +774,23 @@ def replace_food_in_meal(
             _resolve_requested_replacement_food(
                 database,
                 payload=payload,
-                slot=slot,
-                preference_profile=preference_profile,
+                slot=context["slot"],
+                preference_profile=context["preference_profile"],
             )
         ]
         candidate_strategy = "user_requested"
     else:
         candidate_foods = find_equivalent_food_candidates(
-            current_food_entry=current_food_entry,
-            slot=slot,
-            preference_profile=preference_profile,
-            daily_food_usage=daily_food_usage,
+            current_food_entry=context["current_food_entry"],
+            slot=context["slot"],
+            preference_profile=context["preference_profile"],
+            daily_food_usage=context["daily_food_usage"],
         )
         if not candidate_foods:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=(
-                    f"No se encontraron sustitutos compatibles para '{current_food.name}' con las preferencias y restricciones actuales."
+                    f"No se encontraron sustitutos compatibles para '{context['current_food'].name}' con las preferencias y restricciones actuales."
                 ),
             )
         candidate_strategy = "auto_equivalent"
@@ -528,32 +799,55 @@ def replace_food_in_meal(
     updated_meal: dict[str, Any] | None = None
     rebuild_strategy = "strict"
     last_error: Exception | None = None
-    for candidate_food in candidate_foods:
-        if candidate_food["code"] == current_food_entry["code"]:
-            continue
+    if candidate_strategy == "user_requested":
+        requested_food = candidate_foods[0]
+        candidate_evaluation = _evaluate_replacement_candidate(
+            current_food=context["current_food"],
+            replacement_food=requested_food,
+            meal=context["meal"],
+            meal_index=context["meal_index"],
+            meals_count=context["diet"].meals_count,
+            training_focus=context["training_focus"],
+            slot=context["slot"],
+            inferred_plan=context["inferred_plan"],
+            food_lookup=context["meal_food_lookup"],
+            preference_profile=context["preference_profile"],
+            daily_food_usage=context["daily_food_usage"],
+        )
+        replacement_food = requested_food
+        updated_meal = candidate_evaluation["meal_solution"]
+        rebuild_strategy = candidate_evaluation["rebuild_strategy"]
+    else:
+        best_candidate_evaluation: dict[str, Any] | None = None
+        for candidate_food in candidate_foods:
+            if candidate_food["code"] == context["current_food_entry"]["code"]:
+                continue
 
-        try:
-            candidate_updated_meal, candidate_rebuild_strategy = rebuild_meal_after_food_replacement(
-                meal=meal,
-                meal_index=meal_index,
-                meals_count=diet.meals_count,
-                training_focus=training_focus,
-                current_food=current_food,
-                replacement_food=candidate_food,
-                slot=slot,
-                inferred_plan=inferred_plan,
-                food_lookup=meal_food_lookup,
-                preference_profile=preference_profile,
-                daily_food_usage=daily_food_usage,
-            )
-        except (FoodPreferenceConflictError, HTTPException) as exc:
-            last_error = exc
-            continue
+            try:
+                candidate_evaluation = _evaluate_replacement_candidate(
+                    current_food=context["current_food"],
+                    replacement_food=candidate_food,
+                    meal=context["meal"],
+                    meal_index=context["meal_index"],
+                    meals_count=context["diet"].meals_count,
+                    training_focus=context["training_focus"],
+                    slot=context["slot"],
+                    inferred_plan=context["inferred_plan"],
+                    food_lookup=context["meal_food_lookup"],
+                    preference_profile=context["preference_profile"],
+                    daily_food_usage=context["daily_food_usage"],
+                )
+            except (FoodPreferenceConflictError, HTTPException) as exc:
+                last_error = exc
+                continue
 
-        replacement_food = candidate_food
-        updated_meal = candidate_updated_meal
-        rebuild_strategy = candidate_rebuild_strategy
-        break
+            if best_candidate_evaluation is None or float(candidate_evaluation["score"]) < float(best_candidate_evaluation["score"]):
+                best_candidate_evaluation = candidate_evaluation
+
+        if best_candidate_evaluation is not None:
+            replacement_food = best_candidate_evaluation["replacement_food"]
+            updated_meal = best_candidate_evaluation["meal_solution"]
+            rebuild_strategy = best_candidate_evaluation["rebuild_strategy"]
 
     if replacement_food is None or updated_meal is None:
         if last_error is not None:
@@ -563,20 +857,20 @@ def replace_food_in_meal(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="No se pudo encontrar un sustituto valido distinto al alimento actual.",
         )
-    updated_meal_payload = _build_updated_meal_payload(meal, updated_meal)
+    updated_meal_payload = _build_updated_meal_payload(context["meal"], updated_meal)
     updated_diet = persist_updated_meal_in_diet(
         database,
         user=user,
-        diet=diet,
+        diet=context["diet"],
         diet_id=diet_id,
-        meal_index=meal_index,
+        meal_index=context["meal_index"],
         updated_meal=updated_meal_payload,
-        preference_profile=preference_profile,
+        preference_profile=context["preference_profile"],
         metadata_overrides={
-            "food_catalog_version": diet.food_catalog_version,
-            "catalog_source_strategy": diet.catalog_source_strategy,
-            "spoonacular_attempted": diet.spoonacular_attempted or replacement_food.get("source") == "spoonacular",
-            "spoonacular_attempts": diet.spoonacular_attempts + int(replacement_food.get("source") == "spoonacular"),
+            "food_catalog_version": context["diet"].food_catalog_version,
+            "catalog_source_strategy": context["diet"].catalog_source_strategy,
+            "spoonacular_attempted": context["diet"].spoonacular_attempted or replacement_food.get("source") == "spoonacular",
+            "spoonacular_attempts": context["diet"].spoonacular_attempts + int(replacement_food.get("source") == "spoonacular"),
         },
     )
 
@@ -597,14 +891,14 @@ def replace_food_in_meal(
             action="food_replaced",
             meal_number=meal_number,
             message=(
-                f"Se sustituyo '{current_food.name}' por '{replacement_food['name']}' en la comida {meal_number}."
+                f"Se sustituyo '{context['current_food'].name}' por '{replacement_food['name']}' en la comida {meal_number}."
             ),
-            current_food_name=current_food.name,
+            current_food_name=context["current_food"].name,
             replacement_food_name=replacement_food["name"],
             preserved_meal_numbers=[
                 current_meal.meal_number
-                for index, current_meal in enumerate(diet.meals)
-                if index != meal_index
+                for index, current_meal in enumerate(context["diet"].meals)
+                if index != context["meal_index"]
             ],
             changed_food_names=[food["name"] for food in updated_meal_payload.get("foods", [])],
             strategy_notes=strategy_notes,

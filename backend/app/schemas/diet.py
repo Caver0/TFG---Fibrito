@@ -236,6 +236,41 @@ class ReplaceFoodRequest(BaseModel):
     replacement_food_code: str | None = None
 
 
+class FoodReplacementOption(BaseModel):
+    food_code: str
+    name: str
+    category: str
+    functional_group: str
+    source: str = DEFAULT_DIET_SOURCE
+    recommended_quantity: float = Field(gt=0)
+    recommended_unit: str
+    recommended_grams: float | None = Field(default=None, ge=0)
+    calories: float = Field(ge=0)
+    protein_grams: float = Field(ge=0)
+    fat_grams: float = Field(ge=0)
+    carb_grams: float = Field(ge=0)
+    calorie_delta_vs_current: float = 0.0
+    protein_delta_vs_current: float = 0.0
+    fat_delta_vs_current: float = 0.0
+    carb_delta_vs_current: float = 0.0
+    meal_calorie_difference: float = 0.0
+    meal_protein_difference: float = 0.0
+    meal_fat_difference: float = 0.0
+    meal_carb_difference: float = 0.0
+    strategy: Literal["strict", "relaxed"]
+    note: str | None = None
+
+
+class FoodReplacementOptionsResponse(BaseModel):
+    meal_number: int = Field(ge=1)
+    current_food_name: str
+    current_food_code: str | None = None
+    current_food_quantity: float = Field(gt=0)
+    current_food_unit: str
+    current_food_grams: float | None = Field(default=None, ge=0)
+    options: list[FoodReplacementOption] = Field(default_factory=list)
+
+
 class DietFood(BaseModel):
     food_code: str | None = None
     source: str = DEFAULT_DIET_SOURCE

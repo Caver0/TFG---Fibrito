@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import * as dietsApi from '../api/dietsApi'
-import * as foodsApi from '../api/foodsApi'
 import DietCard from '../components/DietCard'
 import DietGeneratorForm from '../components/DietGeneratorForm'
 import DietHistory from '../components/DietHistory'
@@ -201,43 +200,47 @@ function DietsPage() {
     }
   }
 
-  async function handleSearchReplacementFoods(query) {
+  async function handleLoadReplacementOptions(mealNumber, food) {
     if (!token) {
-      return []
+      return { options: [] }
     }
 
-    const response = await foodsApi.searchFoods(token, query, {
-      includeExternal: true,
-      limit: 6,
+    return dietsApi.getFoodReplacementOptions(token, (selectedDiet ?? latestDiet).id, mealNumber, {
+      current_food_name: food.name,
+      current_food_code: food.food_code,
     })
-    return response.foods
   }
 
   return (
     <div className="diets-page">
-      <div className="progress-grid">
-        <DietGeneratorForm
-          error={generateError}
-          isGenerating={isGenerating}
-          message={generateMessage}
-          onGenerate={handleGenerate}
-        />
-        <DietCard
-          actionError={dietActionError}
-          actionMessage={dietActionMessage}
-          actionSummary={dietActionSummary}
-          activeFoodCode={activeFoodCode}
-          activeMealNumber={activeMealNumber}
-          title="Ultima dieta disponible"
-          description="Mostramos la ultima dieta generada o la que selecciones desde el historial, ya convertida en alimentos y cantidades."
-          diet={selectedDiet ?? latestDiet}
-          error={selectedDietError || latestDietError}
-          isLoading={isLatestDietLoading || Boolean(viewingDietId)}
-          isMealActionLoading={isMealActionLoading}
-          onRegenerateMeal={handleRegenerateMeal}
-          onReplaceFood={handleReplaceFood}
-          onSearchFoods={handleSearchReplacementFoods}
-        />
+      <div className="diets-workspace">
+        <aside className="diets-sidebar">
+          <DietGeneratorForm
+            error={generateError}
+            isGenerating={isGenerating}
+            message={generateMessage}
+            onGenerate={handleGenerate}
+          />
+        </aside>
+
+        <div className="diets-main">
+          <DietCard
+            actionError={dietActionError}
+            actionMessage={dietActionMessage}
+            actionSummary={dietActionSummary}
+            activeFoodCode={activeFoodCode}
+            activeMealNumber={activeMealNumber}
+            title="Ultima dieta disponible"
+            description="Mostramos la ultima dieta generada o la que selecciones desde el historial, ya convertida en alimentos y cantidades."
+            diet={selectedDiet ?? latestDiet}
+            error={selectedDietError || latestDietError}
+            isLoading={isLatestDietLoading || Boolean(viewingDietId)}
+            isMealActionLoading={isMealActionLoading}
+            onLoadReplacementOptions={handleLoadReplacementOptions}
+            onRegenerateMeal={handleRegenerateMeal}
+            onReplaceFood={handleReplaceFood}
+          />
+        </div>
       </div>
 
       <DietHistory
