@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import MealCard from './MealCard'
 import { formatTrainingTimeOfDay } from '../utils/dietDistribution'
+import { buildMacroEnergyBreakdown } from '../utils/macroEnergy'
 
 function formatDietTimestamp(value) {
   if (!value) {
@@ -21,6 +23,10 @@ function formatSignedValue(value, unit = '') {
   const numericValue = Number(value ?? 0)
   const prefix = numericValue > 0 ? '+' : ''
   return `${prefix}${formatNumber(numericValue)}${unit ? ` ${unit}` : ''}`
+}
+
+function formatPercentage(value) {
+  return `${formatNumber(value ?? 0)}%`
 }
 
 function formatFoodSource(value) {
@@ -137,6 +143,26 @@ function buildMetaItems(diet) {
   ]
 }
 
+function MacroTooltip({ active, payload }) {
+  if (!active || !payload?.length) {
+    return null
+  }
+
+  const macro = payload[0]?.payload
+  if (!macro) {
+    return null
+  }
+
+  return (
+    <div className="chart-tooltip">
+      <strong>{macro.label}</strong>
+      <p>{formatNumber(macro.calories)} kcal</p>
+      <p>{formatNumber(macro.grams)} g</p>
+      <p>{formatPercentage(macro.percentage)}</p>
+    </div>
+  )
+}
+
 function DietCard({
   actionError,
   actionMessage,
@@ -159,6 +185,10 @@ function DietCard({
 }) {
   const highlightItems = useMemo(() => (diet ? buildHighlightItems(diet) : []), [diet])
   const metaItems = useMemo(() => (diet ? buildMetaItems(diet) : []), [diet])
+  const macroBreakdown = useMemo(
+    () => (diet ? buildMacroEnergyBreakdown(diet) : { totalCalories: 0, items: [] }),
+    [diet],
+  )
 
   async function handleReplaceFood(mealNumber, payload) {
     if (!diet?.id) {
@@ -238,9 +268,54 @@ function DietCard({
               <div className="diet-distribution-header">
                 <div>
                   <span className="eyebrow">Distribucion del dia</span>
-                  <h3>Reparto actual por comidas</h3>
+                  <h3>Calorias y macros del plan</h3>
                 </div>
-                <p>{diet.distribution_percentages?.length ? 'Resumen rapido de porcentaje, energia y macros por comida.' : 'No hay distribucion guardada para esta dieta.'}</p>
+                <p>Mostramos el reparto calorico de los macros actuales y el peso relativo de cada comida con la misma paleta visual.</p>
+              </div>
+
+              <div className="diet-macro-summary">
+                <div className="diet-macro-chart">
+                  <ResponsiveContainer width="100%" height={220}>
+                    <PieChart>
+                      <Pie
+                        data={macroBreakdown.items}
+                        dataKey="calories"
+                        nameKey="label"
+                        innerRadius={58}
+                        outerRadius={84}
+                        paddingAngle={2}
+                        stroke="none"
+                      >
+                        {macroBreakdown.items.map((item) => (
+                          <Cell key={item.key} fill={item.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<MacroTooltip />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="diet-macro-chart-center">
+                    <strong>{formatNumber(macroBreakdown.totalCalories)} kcal</strong>
+                    <span>Kcal totales</span>
+                  </div>
+                </div>
+
+                <div className="diet-macro-legend">
+                  {macroBreakdown.items.map((item) => (
+                    <article key={item.key} className="diet-macro-legend-item">
+                      <div className="diet-macro-legend-heading">
+                        <span
+                          className="diet-macro-color"
+                          aria-hidden="true"
+                          style={{ backgroundColor: item.color }}
+                        />
+                        <strong>{item.label}</strong>
+                      </div>
+                      <p>{formatNumber(item.grams)} g</p>
+                      <p>{formatNumber(item.calories)} kcal</p>
+                      <p>{formatPercentage(item.percentage)} del total</p>
+                    </article>
+                  ))}
+                </div>
               </div>
 
               <div className="diet-distribution-grid">
@@ -251,6 +326,7 @@ function DietCard({
                       <span>{formatNumber(meal.distribution_percentage ?? 0)}%</span>
                     </div>
                     <p>{formatNumber(meal.actual_calories)} / {formatNumber(meal.target_calories)} kcal</p>
+                    <MealCard meal={meal} showCompactMacroBar />
                     <div className="diet-distribution-card-macros">
                       <span>P {formatNumber(meal.actual_protein_grams)} g</span>
                       <span>G {formatNumber(meal.actual_fat_grams)} g</span>
@@ -305,6 +381,7 @@ function DietCard({
                 onRegenerate={handleRegenerate}
                 onSaveAdherence={onSaveMealAdherence ? handleSaveMealAdherence : null}
                 onReplaceFood={handleReplaceFood}
+                showMacroBar
               />
             ))}
           </div>

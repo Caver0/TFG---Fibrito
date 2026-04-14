@@ -2,6 +2,7 @@ import { Fragment, useMemo, useState } from 'react'
 
 import FoodReplacementModal from './FoodReplacementModal'
 import MealAdherenceControls from './MealAdherenceControls'
+import { buildMacroEnergyBreakdown } from '../utils/macroEnergy'
 
 function formatNumber(value, decimals = 1) {
   return Number(value ?? 0).toFixed(decimals)
@@ -53,6 +54,41 @@ function formatFoodLineage(food) {
   return formatFoodSource(source)
 }
 
+function MealMacroBar({ meal, compact = false }) {
+  const macroBreakdown = buildMacroEnergyBreakdown(meal)
+
+  return (
+    <div className={`meal-macro-visual ${compact ? 'meal-macro-visual-compact' : ''}`}>
+      <div className="meal-macro-header">
+        <strong>Distribucion calorica</strong>
+        <span>{formatNumber(macroBreakdown.totalCalories)} kcal</span>
+      </div>
+
+      <div className="meal-macro-bar" aria-hidden="true">
+        {macroBreakdown.items.map((item) => (
+          <span
+            key={item.key}
+            className="meal-macro-bar-segment"
+            style={{
+              width: `${Math.max(item.percentage, item.percentage > 0 ? 4 : 0)}%`,
+              backgroundColor: item.color,
+            }}
+          />
+        ))}
+      </div>
+
+      <div className="meal-macro-legend">
+        {macroBreakdown.items.map((item) => (
+          <span key={item.key}>
+            <i className="diet-macro-color" aria-hidden="true" style={{ backgroundColor: item.color }} />
+            {item.label}: {formatNumber(item.grams)} g · {formatNumber(item.percentage)}%
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function MealCard({
   adherence,
   busyFoodCode,
@@ -64,6 +100,8 @@ function MealCard({
   onRegenerate,
   onSaveAdherence,
   onReplaceFood,
+  showMacroBar = false,
+  showCompactMacroBar = false,
 }) {
   const [replacementTarget, setReplacementTarget] = useState(null)
 
@@ -73,6 +111,10 @@ function MealCard({
   )
 
   async function handleSubmitReplacement(payload) {
+    if (!onReplaceFood) {
+      return
+    }
+
     const wasSuccessful = await onReplaceFood(meal.meal_number, payload)
     if (wasSuccessful) {
       setReplacementTarget(null)
@@ -89,6 +131,10 @@ function MealCard({
     setReplacementTarget(food)
   }
 
+  if (showCompactMacroBar) {
+    return <MealMacroBar meal={meal} compact />
+  }
+
   return (
     <article className="meal-card">
       <div className="meal-card-header meal-card-header-actions">
@@ -99,13 +145,15 @@ function MealCard({
 
         <button
           className="secondary-button meal-action-button"
-          disabled={isBusy}
+          disabled={isBusy || !onRegenerate}
           type="button"
-          onClick={() => onRegenerate(meal.meal_number)}
+          onClick={() => onRegenerate?.(meal.meal_number)}
         >
           {isRegenerating ? 'Regenerando...' : 'Regenerar comida'}
         </button>
       </div>
+
+      {showMacroBar ? <MealMacroBar meal={meal} /> : null}
 
       <div className="meal-summary-grid">
         <div className="meal-summary-item">
@@ -153,7 +201,7 @@ function MealCard({
 
                     <button
                       className="secondary-button food-action-button"
-                      disabled={isBusy}
+                      disabled={isBusy || !onReplaceFood}
                       type="button"
                       onClick={() => handleToggleReplacement(food)}
                     >
