@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import AuthCard from '../components/AuthCard'
+import AuthShell from '../components/AuthShell'
 import { useAuth } from '../context/AuthContext'
 
 const initialForm = {
@@ -33,65 +35,87 @@ function RegisterPage({ onSwitch }) {
   }
 
   return (
-    <section className="auth-panel">
-      <div className="auth-copy">
-        <span className="eyebrow">Fibrito</span>
-        <h1>Crea tu cuenta</h1>
-        <p>Empezamos con tu perfil base para dejar lista la siguiente fase del proyecto.</p>
-      </div>
+    <AuthShell>
+      <AuthCard
+        mode="register"
+        title="Recruitment Protocol"
+        subtitle="Create a live operative profile connected to the FIBRIT0 backend."
+        footer={(
+          <p className="auth-switch-line">
+            <span>Already authorized?</span>{' '}
+            <button type="button" className="auth-inline-link" onClick={onSwitch}>
+              Return To Access Gate
+            </button>
+          </p>
+        )}
+      >
+        <form className="auth-command-form" onSubmit={handleSubmit}>
+          <label className="auth-field">
+            <span>Operative Name</span>
+            <div className="auth-input-shell">
+              <i className="material-symbols-outlined" aria-hidden="true">
+                badge
+              </i>
+              <input
+                name="name"
+                type="text"
+                placeholder="Athlete designation"
+                autoComplete="name"
+                value={form.name}
+                onChange={handleChange}
+                required
+              />
+            </div>
+          </label>
 
-      <form className="auth-form" onSubmit={handleSubmit}>
-        <label>
-          <span>Nombre</span>
-          <input
-            name="name"
-            type="text"
-            placeholder="Tu nombre"
-            value={form.name}
-            onChange={handleChange}
-            required
-          />
-        </label>
+          <label className="auth-field">
+            <span>Laboratory ID (Email)</span>
+            <div className="auth-input-shell">
+              <i className="material-symbols-outlined" aria-hidden="true">
+                alternate_email
+              </i>
+              <input
+                name="email"
+                type="email"
+                placeholder="user@kineticlab.io"
+                autoComplete="email"
+                value={form.email}
+                onChange={handleChange}
+                required
+              />
+            </div>
+          </label>
 
-        <label>
-          <span>Email</span>
-          <input
-            name="email"
-            type="email"
-            placeholder="tu@email.com"
-            value={form.email}
-            onChange={handleChange}
-            required
-          />
-        </label>
+          <label className="auth-field">
+            <span>Secure Access Key</span>
+            <div className="auth-input-shell">
+              <i className="material-symbols-outlined" aria-hidden="true">
+                lock
+              </i>
+              <input
+                name="password"
+                type="password"
+                placeholder="Minimum 8 characters"
+                autoComplete="new-password"
+                value={form.password}
+                onChange={handleChange}
+                minLength={8}
+                required
+              />
+            </div>
+          </label>
 
-        <label>
-          <span>Contraseña</span>
-          <input
-            name="password"
-            type="password"
-            placeholder="Mínimo 8 caracteres"
-            value={form.password}
-            onChange={handleChange}
-            minLength={8}
-            required
-          />
-        </label>
+          {error ? <p className="auth-feedback auth-feedback-error">{error}</p> : null}
 
-        {error ? <p className="form-error">{error}</p> : null}
-
-        <button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? 'Creando cuenta...' : 'Registrarme'}
-        </button>
-      </form>
-
-      <p className="auth-switch">
-        ¿Ya tienes cuenta?{' '}
-        <button type="button" className="link-button" onClick={onSwitch}>
-          Ir a login
-        </button>
-      </p>
-    </section>
+          <button type="submit" className="auth-primary-button" disabled={isSubmitting}>
+            <span>{isSubmitting ? 'Recruiting Operative...' : 'Initiate Recruitment'}</span>
+            <i className="material-symbols-outlined" aria-hidden="true">
+              arrow_forward
+            </i>
+          </button>
+        </form>
+      </AuthCard>
+    </AuthShell>
   )
 }
 

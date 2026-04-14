@@ -1,46 +1,47 @@
 import { useEffect, useState } from 'react'
-import DietsPage from './pages/DietsPage'
+import './App.css'
+import AppShell from './components/AppShell'
+import { useAuth } from './context/AuthContext'
 import DashboardPage from './pages/DashboardPage'
+import DietsPage from './pages/DietsPage'
+import LoginPage from './pages/LoginPage'
 import ProfilePage from './pages/ProfilePage'
 import ProgressPage from './pages/ProgressPage'
-import SidebarMenu from './components/SidebarMenu'
-import { useAuth } from './context/AuthContext'
-import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
-import './App.css'
+import { formatDateLabel, formatGoalPhase } from './utils/stitch'
 
 const APP_VIEWS = [
   {
     id: 'dashboard',
-    label: 'Dashboard',
-    eyebrow: 'Centro de control',
-    heading: 'Vision general del atleta',
-    description: 'Concentra progreso, adherencia y dieta activa en una vista mas clara, amplia y facil de recorrer.',
-    note: 'Resumen premium del estado actual',
+    sidebarLabel: 'Dashboard',
+    icon: 'dashboard',
+    topbarTitle: 'DASHBOARD_V2.0',
+    searchPlaceholder: 'SEARCH METRICS...',
+    getTopbarContext: (user) => formatGoalPhase(user?.goal),
   },
   {
     id: 'diets',
-    label: 'Dietas',
-    eyebrow: 'Plan diario',
-    heading: 'Dietas, comidas y adherencia',
-    description: 'Trabaja la generacion de dieta y el seguimiento diario en bloques independientes con mejor jerarquia visual.',
-    note: 'Planificacion y ejecucion del dia',
+    sidebarLabel: 'Diets',
+    icon: 'restaurant',
+    topbarTitle: 'DIETS MANAGEMENT',
+    searchPlaceholder: 'SEARCH PROTOCOLS...',
+    getTopbarContext: () => formatDateLabel(new Date(), { month: 'long' }).toUpperCase(),
   },
   {
     id: 'progress',
-    label: 'Progreso',
-    eyebrow: 'Seguimiento corporal',
-    heading: 'Registros, medias y analisis semanal',
-    description: 'Consulta el historial, la lectura semanal y los ajustes guardados sin perder el contexto de cada bloque.',
-    note: 'Lectura de tendencia y ajustes',
+    sidebarLabel: 'Progress',
+    icon: 'insights',
+    topbarTitle: 'ADHERENCE ANALYSIS',
+    searchPlaceholder: 'SEARCH METRICS...',
+    getTopbarContext: () => 'SYSTEM RELIABILITY // WEIGHT TREND',
   },
   {
     id: 'profile',
-    label: 'Perfil',
-    eyebrow: 'Base nutricional',
-    heading: 'Perfil y preferencias alimentarias',
-    description: 'Ordena tus datos base, objetivos y filtros de alimentos en una vista limpia y consistente.',
-    note: 'Configuracion del atleta',
+    sidebarLabel: 'Profile',
+    icon: 'person',
+    topbarTitle: 'USER PREFERENCES',
+    searchPlaceholder: 'LAB COMMAND...',
+    getTopbarContext: () => 'CURRENT STATE /',
   },
 ]
 
@@ -49,23 +50,9 @@ function getInitialView() {
     return APP_VIEWS[0].id
   }
 
-  const hashValue = window.location.hash.replace('#', '')
-  return APP_VIEWS.some((view) => view.id === hashValue)
-    ? hashValue
-    : APP_VIEWS[0].id
-}
-
-function formatGoalLabel(goal) {
-  if (goal === 'perder_grasa') {
-    return 'Perder grasa'
-  }
-  if (goal === 'mantener_peso') {
-    return 'Mantener peso'
-  }
-  if (goal === 'ganar_masa') {
-    return 'Ganar masa'
-  }
-  return 'Completa el perfil'
+  const currentHash = window.location.hash.replace('#', '')
+  const knownView = APP_VIEWS.find((view) => view.id === currentHash)
+  return knownView?.id ?? APP_VIEWS[0].id
 }
 
 function App() {
@@ -75,9 +62,9 @@ function App() {
 
   useEffect(() => {
     function handleHashChange() {
-      const hashValue = window.location.hash.replace('#', '')
-      const nextView = APP_VIEWS.find((view) => view.id === hashValue)?.id ?? APP_VIEWS[0].id
-      setActiveView(nextView)
+      const currentHash = window.location.hash.replace('#', '')
+      const knownView = APP_VIEWS.find((view) => view.id === currentHash)
+      setActiveView(knownView?.id ?? APP_VIEWS[0].id)
     }
 
     window.addEventListener('hashchange', handleHashChange)
@@ -103,98 +90,57 @@ function App() {
     })
   }
 
-  const activeViewMeta = APP_VIEWS.find((view) => view.id === activeView) ?? APP_VIEWS[0]
+  const currentView = APP_VIEWS.find((view) => view.id === activeView) ?? APP_VIEWS[0]
+  const viewMeta = {
+    ...currentView,
+    topbarContext: currentView.getTopbarContext(user),
+    phaseLabel: formatGoalPhase(user?.goal),
+  }
 
   if (!isReady) {
     return (
-      <main className="app-shell app-shell-auth">
-        <section className="card auth-stage">
-          <p>Cargando sesion...</p>
-        </section>
+      <main className="app-loading-screen">
+        <div className="lab-frame auth-lab-frame app-loading-frame">
+          <p>Initializing FIBRIT0 core...</p>
+        </div>
       </main>
     )
   }
 
   if (!isAuthenticated) {
-    return (
-      <main className="app-shell app-shell-auth">
-        <section className="auth-stage">
-          {authView === 'login' ? (
-            <LoginPage onSwitch={() => setAuthView('register')} />
-          ) : (
-            <RegisterPage onSwitch={() => setAuthView('login')} />
-          )}
-        </section>
-      </main>
+    return authView === 'login' ? (
+      <LoginPage onSwitch={() => setAuthView('register')} />
+    ) : (
+      <RegisterPage onSwitch={() => setAuthView('login')} />
     )
   }
 
   return (
-    <main className="app-shell app-shell-wide">
-      <div className="app-frame">
-        <SidebarMenu
-          activeView={activeView}
-          onLogout={logout}
-          onNavigate={handleNavigate}
-          user={user}
-          views={APP_VIEWS}
-        />
+    <AppShell
+      activeView={activeView}
+      onNavigate={handleNavigate}
+      onLogout={logout}
+      user={user}
+      views={APP_VIEWS}
+      viewMeta={viewMeta}
+    >
+      <section hidden={activeView !== 'dashboard'}>
+        <DashboardPage />
+      </section>
 
-        <section className="app-content">
-          <header className="app-toolbar">
-            <div className="app-toolbar-copy">
-              <span className="eyebrow">{activeViewMeta.eyebrow}</span>
-              <h1>{activeViewMeta.heading}</h1>
-              <p>{activeViewMeta.description}</p>
-            </div>
+      <section hidden={activeView !== 'diets'}>
+        <DietsPage />
+      </section>
 
-            <div className="app-toolbar-meta">
-              <article className="app-toolbar-stat">
-                <span>Perfil activo</span>
-                <strong>{user.name}</strong>
-                <small>{user.email}</small>
-              </article>
+      <section hidden={activeView !== 'progress'}>
+        <ProgressPage />
+      </section>
 
-              <article className="app-toolbar-stat">
-                <span>Vista actual</span>
-                <strong>{activeViewMeta.label}</strong>
-                <small>{activeViewMeta.note}</small>
-              </article>
-
-              <article className="app-toolbar-stat">
-                <span>Objetivo</span>
-                <strong>{formatGoalLabel(user.goal)}</strong>
-                <small>
-                  {user.target_calories
-                    ? `${Math.round(Number(user.target_calories))} kcal objetivo`
-                    : 'Completa tu perfil nutricional'}
-                </small>
-              </article>
-            </div>
-          </header>
-
-          <div className="page-view-stack">
-            <section className="page-view" hidden={activeView !== 'dashboard'}>
-              <DashboardPage />
-            </section>
-
-            <section className="page-view" hidden={activeView !== 'diets'}>
-              <DietsPage />
-            </section>
-
-            <section className="page-view" hidden={activeView !== 'progress'}>
-              <ProgressPage />
-            </section>
-
-            <section className="page-view" hidden={activeView !== 'profile'}>
-              <ProfilePage />
-            </section>
-          </div>
-        </section>
-      </div>
-    </main>
+      <section hidden={activeView !== 'profile'}>
+        <ProfilePage />
+      </section>
+    </AppShell>
   )
 }
 
 export default App
-

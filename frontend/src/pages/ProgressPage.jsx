@@ -1,15 +1,85 @@
 import { useEffect, useState } from 'react'
+import {
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import * as adherenceApi from '../api/adherenceApi'
+import * as dashboardApi from '../api/dashboardApi'
 import * as progressApi from '../api/progressApi'
 import * as weightApi from '../api/weightApi'
-import AdjustmentHistory from '../components/AdjustmentHistory'
-import ProgressSummary from '../components/ProgressSummary'
-import WeeklyAnalysisCard from '../components/WeeklyAnalysisCard'
-import WeeklyAdherenceSummary from '../components/WeeklyAdherenceSummary'
-import WeeklyAveragesCard from '../components/WeeklyAveragesCard'
-import WeightForm from '../components/WeightForm'
-import WeightHistory from '../components/WeightHistory'
+import CircularGauge from '../components/CircularGauge'
+import SectionPanel from '../components/SectionPanel'
 import { useAuth } from '../context/AuthContext'
+import {
+  formatAdherenceLevel,
+  formatCalories,
+  formatCompactNumber,
+  formatDateLabel,
+  formatDayLabel,
+  formatMass,
+  formatPercent,
+  formatSignedCalories,
+  formatSignedMass,
+  toConfidenceScore,
+} from '../utils/stitch'
+
+function getTodayDateInputValue() {
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function buildTrendSeries(entries, expectedTrend, weeklyAverages) {
+  const actualEntries = Array.isArray(entries) && entries.length > 0
+    ? entries.map((entry) => ({
+        chartDate: entry.date,
+        axisLabel: formatDateLabel(entry.date),
+        actualWeight: Number(entry.weight),
+      }))
+    : (weeklyAverages ?? []).map((entry) => ({
+        chartDate: entry.end_date,
+        axisLabel: entry.week_label,
+        actualWeight: Number(entry.average_weight),
+      }))
+
+  const byDate = Object.fromEntries(actualEntries.map((entry) => [entry.chartDate, entry]))
+
+  for (const point of expectedTrend ?? []) {
+    const chartDate = point.date
+    if (!byDate[chartDate]) {
+      byDate[chartDate] = {
+        chartDate,
+        axisLabel: formatDateLabel(chartDate),
+      }
+      actualEntries.push(byDate[chartDate])
+    }
+    byDate[chartDate].expectedWeight = Number(point.expected_weight)
+  }
+
+  return actualEntries.sort((left, right) => new Date(left.chartDate) - new Date(right.chartDate))
+}
+
+function TrendTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+
+  const actual = payload.find((item) => item.dataKey === 'actualWeight')
+  const expected = payload.find((item) => item.dataKey === 'expectedWeight')
+
+  return (
+    <div className="chart-tooltip">
+      <strong>{label}</strong>
+      {actual ? <p>Actual: {formatMass(actual.value)}</p> : null}
+      {expected ? <p>Expected: {formatMass(expected.value)}</p> : null}
+    </div>
+  )
+}
 
 function ProgressPage() {
   const { refreshUser, token } = useAuth()
@@ -19,12 +89,17 @@ function ProgressPage() {
   const [weeklyAnalysis, setWeeklyAnalysis] = useState(null)
   const [weeklyAdherenceSummary, setWeeklyAdherenceSummary] = useState(null)
   const [adjustmentHistory, setAdjustmentHistory] = useState([])
+  const [dashboardSnapshot, setDashboardSnapshot] = useState(null)
+  const [weightForm, setWeightForm] = useState({
+    weight: '',
+    date: getTodayDateInputValue(),
+  })
   const [historyError, setHistoryError] = useState('')
   const [summaryError, setSummaryError] = useState('')
   const [weeklyAveragesError, setWeeklyAveragesError] = useState('')
   const [weeklyAnalysisError, setWeeklyAnalysisError] = useState('')
   const [weeklyAdherenceError, setWeeklyAdherenceError] = useState('')
-  const [adjustmentHistoryError, setAdjustmentHistoryError] = useState('')
+  const [dashboardError, setDashboardError] = useState('')
   const [saveError, setSaveError] = useState('')
   const [saveMessage, setSaveMessage] = useState('')
   const [applyError, setApplyError] = useState('')
@@ -34,19 +109,15 @@ function ProgressPage() {
   const [isWeeklyAveragesLoading, setIsWeeklyAveragesLoading] = useState(false)
   const [isWeeklyAnalysisLoading, setIsWeeklyAnalysisLoading] = useState(false)
   const [isWeeklyAdherenceLoading, setIsWeeklyAdherenceLoading] = useState(false)
-  const [isAdjustmentHistoryLoading, setIsAdjustmentHistoryLoading] = useState(false)
+  const [isDashboardLoading, setIsDashboardLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isApplyingAdjustment, setIsApplyingAdjustment] = useState(false)
   const [deletingEntryId, setDeletingEntryId] = useState('')
 
   async function loadWeightHistory(activeToken = token) {
-    if (!activeToken) {
-      return []
-    }
-
+    if (!activeToken) return []
     setIsHistoryLoading(true)
     setHistoryError('')
-
     try {
       const response = await weightApi.getWeightHistory(activeToken)
       setEntries(response.entries)
@@ -61,17 +132,13 @@ function ProgressPage() {
   }
 
   async function loadProgressSummary(activeToken = token) {
-    if (!activeToken) {
-      return null
-    }
-
+    if (!activeToken) return null
     setIsSummaryLoading(true)
     setSummaryError('')
-
     try {
-      const nextSummary = await weightApi.getProgressSummary(activeToken)
-      setSummary(nextSummary)
-      return nextSummary
+      const response = await weightApi.getProgressSummary(activeToken)
+      setSummary(response)
+      return response
     } catch (error) {
       setSummary(null)
       setSummaryError(error.message)
@@ -82,13 +149,9 @@ function ProgressPage() {
   }
 
   async function loadWeeklyAverages(activeToken = token) {
-    if (!activeToken) {
-      return []
-    }
-
+    if (!activeToken) return []
     setIsWeeklyAveragesLoading(true)
     setWeeklyAveragesError('')
-
     try {
       const response = await progressApi.getWeeklyAverages(activeToken)
       setWeeklyAverages(response.averages)
@@ -103,13 +166,9 @@ function ProgressPage() {
   }
 
   async function loadWeeklyAnalysis(activeToken = token) {
-    if (!activeToken) {
-      return null
-    }
-
+    if (!activeToken) return null
     setIsWeeklyAnalysisLoading(true)
     setWeeklyAnalysisError('')
-
     try {
       const response = await progressApi.getWeeklyAnalysis(activeToken)
       setWeeklyAnalysis(response)
@@ -123,22 +182,12 @@ function ProgressPage() {
     }
   }
 
-  async function loadWeeklyAdherenceSummary(
-    activeToken = token,
-    targetWeekLabel = weeklyAnalysis?.current_week_label ?? null,
-  ) {
-    if (!activeToken) {
-      return null
-    }
-
+  async function loadWeeklyAdherenceSummary(activeToken = token, targetWeekLabel = weeklyAnalysis?.current_week_label ?? null) {
+    if (!activeToken) return null
     setIsWeeklyAdherenceLoading(true)
     setWeeklyAdherenceError('')
-
     try {
-      const response = await adherenceApi.getWeeklyAdherenceSummary(
-        activeToken,
-        targetWeekLabel ? { week_label: targetWeekLabel } : {},
-      )
+      const response = await adherenceApi.getWeeklyAdherenceSummary(activeToken, targetWeekLabel ? { week_label: targetWeekLabel } : {})
       setWeeklyAdherenceSummary(response)
       return response
     } catch (error) {
@@ -151,102 +200,86 @@ function ProgressPage() {
   }
 
   async function loadAdjustmentHistory(activeToken = token) {
-    if (!activeToken) {
-      return []
-    }
-
-    setIsAdjustmentHistoryLoading(true)
-    setAdjustmentHistoryError('')
-
+    if (!activeToken) return []
     try {
       const response = await progressApi.getAdjustmentHistory(activeToken)
       setAdjustmentHistory(response.entries)
       return response.entries
-    } catch (error) {
+    } catch {
       setAdjustmentHistory([])
-      setAdjustmentHistoryError(error.message)
       return []
-    } finally {
-      setIsAdjustmentHistoryLoading(false)
     }
   }
 
-  async function reloadWeightData(activeToken = token) {
-    await Promise.all([
-      loadWeightHistory(activeToken),
-      loadProgressSummary(activeToken),
-    ])
+  async function loadDashboardSnapshot(activeToken = token) {
+    if (!activeToken) return null
+    setIsDashboardLoading(true)
+    setDashboardError('')
+    try {
+      const response = await dashboardApi.getDashboardOverview(activeToken)
+      setDashboardSnapshot(response)
+      return response
+    } catch (error) {
+      setDashboardSnapshot(null)
+      setDashboardError(error.message)
+      return null
+    } finally {
+      setIsDashboardLoading(false)
+    }
   }
 
-  async function reloadWeeklyData(activeToken = token) {
-    const [, analysis] = await Promise.all([
-      loadWeeklyAverages(activeToken),
+  async function reloadAll(activeToken = token) {
+    const [, , analysis] = await Promise.all([
+      loadWeightHistory(activeToken),
+      loadProgressSummary(activeToken),
       loadWeeklyAnalysis(activeToken),
+      loadWeeklyAverages(activeToken),
       loadAdjustmentHistory(activeToken),
+      loadDashboardSnapshot(activeToken),
     ])
     await loadWeeklyAdherenceSummary(activeToken, analysis?.current_week_label ?? null)
   }
 
-  async function reloadAll(activeToken = token) {
-    await Promise.all([
-      reloadWeightData(activeToken),
-      reloadWeeklyData(activeToken),
-    ])
-  }
-
   useEffect(() => {
-    if (!token) {
-      return
-    }
-
+    if (!token) return
     reloadAll(token)
   }, [token])
 
   useEffect(() => {
-    if (!token) {
-      return undefined
-    }
-
+    if (!token) return undefined
     async function handleAdherenceUpdated() {
       await loadWeeklyAdherenceSummary(token, weeklyAnalysis?.current_week_label ?? null)
+      await loadDashboardSnapshot(token)
     }
-
     window.addEventListener('adherence:updated', handleAdherenceUpdated)
     return () => window.removeEventListener('adherence:updated', handleAdherenceUpdated)
   }, [token, weeklyAnalysis?.current_week_label])
 
-  async function handleSave(payload) {
-    if (!token) {
-      return false
-    }
-
+  async function handleSave(event) {
+    event.preventDefault()
+    if (!token) return
     setIsSaving(true)
     setSaveError('')
     setSaveMessage('')
-
     try {
-      await weightApi.createWeightEntry(token, payload)
+      await weightApi.createWeightEntry(token, {
+        weight: Number(weightForm.weight),
+        date: weightForm.date,
+      })
       await reloadAll(token)
       window.dispatchEvent(new CustomEvent('dashboard:refresh'))
-      setSaveMessage('Registro de peso guardado correctamente.')
-      return true
+      setSaveMessage('Weight log saved correctly.')
+      setWeightForm((current) => ({ ...current, weight: '' }))
     } catch (error) {
       setSaveError(error.message)
-      return false
     } finally {
       setIsSaving(false)
     }
   }
 
   async function handleDelete(entryId) {
-    if (!token) {
-      return
-    }
-
+    if (!token) return
     setDeletingEntryId(entryId)
-    setHistoryError('')
-    setSummaryError('')
-
     try {
       await weightApi.deleteWeightEntry(token, entryId)
       await reloadAll(token)
@@ -259,29 +292,17 @@ function ProgressPage() {
   }
 
   async function handleApplyAdjustment() {
-    if (!token) {
-      return
-    }
-
+    if (!token) return
     setIsApplyingAdjustment(true)
     setApplyError('')
     setApplyMessage('')
-
     try {
       const response = await progressApi.applyWeeklyAdjustment(token)
       setWeeklyAnalysis(response.analysis)
       await refreshUser(token)
-      await reloadWeeklyData(token)
+      await reloadAll(token)
       window.dispatchEvent(new CustomEvent('dashboard:refresh'))
-      if (response.analysis.adjustment_reason.startsWith('Ya existe un analisis guardado')) {
-        setApplyMessage(response.analysis.adjustment_reason)
-      } else if (response.adjustment?.adjustment_applied) {
-        setApplyMessage('Ajuste semanal aplicado y guardado correctamente.')
-      } else if (response.adjustment) {
-        setApplyMessage('Analisis semanal guardado sin cambios de calorias.')
-      } else {
-        setApplyMessage(response.analysis.adjustment_reason)
-      }
+      setApplyMessage(response.adjustment?.adjustment_applied ? 'Weekly adjustment applied and stored.' : response.analysis.adjustment_reason)
     } catch (error) {
       setApplyError(error.message)
     } finally {
@@ -289,79 +310,117 @@ function ProgressPage() {
     }
   }
 
+  const chartSeries = buildTrendSeries(
+    dashboardSnapshot?.weight_progress?.entries,
+    dashboardSnapshot?.weight_progress?.expected_trend,
+    weeklyAverages,
+  )
+  const confidenceScore = toConfidenceScore(weeklyAdherenceSummary?.weekly_adherence_factor ?? 0)
+  const dailyBreakdown = dashboardSnapshot?.adherence?.daily_breakdown ?? []
+  const recentEntries = [...entries].slice(-3).reverse()
+
   return (
-    <section className="page-shell progress-page">
-      <header className="page-header">
-        <div className="page-header-copy">
-          <span className="eyebrow">Seguimiento del progreso</span>
-          <h2>Registros, medias y ajustes semanales</h2>
-          <p>Separamos el registro diario del analisis semanal para que cada bloque tenga su propia lectura y aproveche mejor el espacio disponible.</p>
-        </div>
+    <div className="progress-page">
+      {(isHistoryLoading || isSummaryLoading || isWeeklyAveragesLoading || isWeeklyAnalysisLoading || isWeeklyAdherenceLoading || isDashboardLoading)
+        ? <p className="page-status">Loading adherence analysis...</p>
+        : null}
+      {(historyError || summaryError || weeklyAveragesError || weeklyAnalysisError || weeklyAdherenceError || dashboardError || saveError || applyError)
+        ? <p className="page-status page-status-error">{historyError || summaryError || weeklyAveragesError || weeklyAnalysisError || weeklyAdherenceError || dashboardError || saveError || applyError}</p>
+        : null}
 
-        <div className="page-header-note">
-          <strong>Lectura temporal</strong>
-          <span>Primero el dato diario, despues la tendencia semanal y finalmente el historial de decisiones.</span>
-        </div>
-      </header>
+      <div className="progress-hero-grid">
+        <SectionPanel eyebrow="System Status" className="progress-hero-card progress-hero-copy">
+          <h3>Data Reliability: <span>{formatAdherenceLevel(weeklyAdherenceSummary?.adherence_level)}</span></h3>
+          <p>{weeklyAdherenceSummary?.interpretation_message || dashboardSnapshot?.summary?.adherence_interpretation || 'Adherence tracking will unlock reliability interpretation once meal logging starts.'}</p>
+          <button type="button" className="panel-cta-button" onClick={() => window.location.hash = '#diets'}>Review Diet Logs</button>
+        </SectionPanel>
 
-      <div className="progress-page-layout">
-        <div className="progress-top-grid">
-          <WeightForm
-            error={saveError}
-            isSaving={isSaving}
-            message={saveMessage}
-            onSave={handleSave}
-          />
-          <ProgressSummary
-            error={summaryError}
-            isLoading={isSummaryLoading}
-            summary={summary}
-          />
-        </div>
+        <SectionPanel className="progress-hero-card progress-gauge-card">
+          <CircularGauge value={confidenceScore} label="Confidence" />
+          <div className="progress-gauge-meta">
+            <div><small>Tracking</small><strong>{formatPercent(weeklyAdherenceSummary?.tracking_coverage_percentage ?? 0, 0)}</strong></div>
+            <div><small>Precision</small><strong>{weeklyAnalysis?.can_analyze ? 'Ultra' : 'Pending'}</strong></div>
+          </div>
+        </SectionPanel>
 
-        <WeightHistory
-          entries={entries}
-          error={historyError}
-          isLoading={isHistoryLoading}
-          onDelete={handleDelete}
-          deletingEntryId={deletingEntryId}
-        />
-
-        <div className="progress-analysis-grid">
-          <WeeklyAveragesCard
-            averages={weeklyAverages}
-            error={weeklyAveragesError}
-            isLoading={isWeeklyAveragesLoading}
-          />
-          <WeeklyAnalysisCard
-            analysis={weeklyAnalysis}
-            adherenceSummary={weeklyAdherenceSummary}
-            applyError={applyError}
-            applyMessage={applyMessage}
-            error={weeklyAnalysisError}
-            isApplying={isApplyingAdjustment}
-            isLoading={isWeeklyAnalysisLoading}
-            onApply={handleApplyAdjustment}
-          />
-        </div>
-
-        <div className="progress-bottom-grid">
-          <WeeklyAdherenceSummary
-            description="Esta lectura conecta la adherencia real con la fiabilidad interpretativa de la media semanal del peso en ayunas."
-            error={weeklyAdherenceError}
-            isLoading={isWeeklyAdherenceLoading}
-            summary={weeklyAdherenceSummary}
-            title="Fiabilidad del analisis segun adherencia"
-          />
-
-          <AdjustmentHistory
-            entries={adjustmentHistory}
-            error={adjustmentHistoryError}
-            isLoading={isAdjustmentHistoryLoading}
-          />
+        <div className="progress-quick-stats">
+          <SectionPanel className="progress-quick-card"><small>Weekly Delta</small><strong>{formatSignedMass(weeklyAnalysis?.weekly_change, { maximumFractionDigits: 2, minimumFractionDigits: 2 })}</strong></SectionPanel>
+          <SectionPanel className="progress-quick-card progress-quick-card-danger"><small>Caloric Flux</small><strong>{formatSignedCalories(weeklyAnalysis?.calorie_change)}</strong></SectionPanel>
         </div>
       </div>
-    </section>
+
+      <SectionPanel
+        title="Weight Analysis Trend"
+        description="Actual (neon) vs. expected projection from the current backend model."
+        actions={<div className="legend-group"><span><i className="legend-dot legend-dot-primary" />Actual</span><span><i className="legend-dot legend-dot-muted" />Target</span></div>}
+      >
+        <div className="dashboard-chart-wrap">
+          {chartSeries.length > 0 ? (
+            <ResponsiveContainer width="100%" height={340}>
+              <ComposedChart data={chartSeries}>
+                <CartesianGrid stroke="rgba(118, 117, 118, 0.18)" strokeDasharray="4 6" vertical={false} />
+                <XAxis dataKey="axisLabel" axisLine={false} tickLine={false} tick={{ fill: '#adacab', fontSize: 10, fontWeight: 700 }} />
+                <YAxis hide domain={['auto', 'auto']} />
+                <Tooltip content={<TrendTooltip />} />
+                <Line type="monotone" dataKey="expectedWeight" stroke="#484849" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="actualWeight" stroke="#daf900" strokeWidth={4} dot={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          ) : <p className="panel-placeholder">Weight trend data will appear after the first logs are available.</p>}
+        </div>
+      </SectionPanel>
+
+      <div className="progress-bottom-layout">
+        <SectionPanel title="Adherence Heatmap">
+          <div className="adherence-heatmap-grid">
+            {(dailyBreakdown.length > 0 ? dailyBreakdown : new Array(7).fill(null)).map((day, index) => (
+              <div key={`heat-${index}`} className="adherence-heatmap-cell-wrap">
+                <span>{day ? day.day_label : ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'][index]}</span>
+                <div className={`adherence-heatmap-cell adherence-heatmap-level-${day ? Math.max(0, Math.min(4, Math.round((day.adherence_percentage || 0) / 25))) : 0}`} />
+              </div>
+            ))}
+          </div>
+        </SectionPanel>
+
+        <SectionPanel title="Recent Logs">
+          {recentEntries.length > 0 ? (
+            <div className="recent-log-list">
+              {recentEntries.map((entry) => (
+                <article key={entry.id} className="recent-log-item">
+                  <div>
+                    <strong>{formatMass(entry.weight)}</strong>
+                    <small>{formatDayLabel(entry.date)} // {formatDateLabel(entry.date, { month: 'short', day: '2-digit', year: 'numeric' })}</small>
+                  </div>
+                  <button type="button" className="protocol-chip-button" disabled={deletingEntryId === entry.id} onClick={() => handleDelete(entry.id)}>
+                    {deletingEntryId === entry.id ? 'Deleting...' : 'Delete'}
+                  </button>
+                </article>
+              ))}
+            </div>
+          ) : <p className="panel-placeholder">Recent weight logs will appear here.</p>}
+        </SectionPanel>
+      </div>
+
+      <SectionPanel className="progress-footer-bar">
+        <form className="progress-log-form" onSubmit={handleSave}>
+          <label><span>Weight (kg)</span><input type="number" step="0.1" min="0" value={weightForm.weight} onChange={(event) => setWeightForm((current) => ({ ...current, weight: event.target.value }))} required /></label>
+          <label><span>Date</span><input type="date" value={weightForm.date} onChange={(event) => setWeightForm((current) => ({ ...current, date: event.target.value }))} required /></label>
+          <button type="submit" className="protocol-secondary-button" disabled={isSaving}>{isSaving ? 'Saving...' : 'Log Weight'}</button>
+        </form>
+
+        <div className="progress-footer-copy">
+          <strong>{summary?.latest_weight ? `Latest weight ${formatMass(summary.latest_weight)}` : 'No latest weight yet'}</strong>
+          <span>{summary?.number_of_entries ? `${summary.number_of_entries} entries tracked` : 'Start logging weight to enable weekly analysis.'}</span>
+        </div>
+
+        <button type="button" className="panel-cta-button" disabled={isApplyingAdjustment} onClick={handleApplyAdjustment}>
+          {isApplyingAdjustment ? 'Applying...' : 'Apply Weekly Adjustment'}
+        </button>
+      </SectionPanel>
+
+      {saveMessage ? <p className="page-status page-status-success">{saveMessage}</p> : null}
+      {applyMessage ? <p className="page-status page-status-success">{applyMessage}</p> : null}
+    </div>
   )
 }
 
