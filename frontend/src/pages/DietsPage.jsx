@@ -371,8 +371,21 @@ function DietsPage() {
   }
 
   return (
-    <div className="diets-page">
-      <div className="diets-workspace">
+    <section className="page-shell diets-page">
+      <header className="page-header">
+        <div className="page-header-copy">
+          <span className="eyebrow">Planificacion diaria</span>
+          <h2>Dietas, comidas y seguimiento del dia</h2>
+          <p>La vista de dietas se reorganiza en bloques independientes para generar, revisar y registrar el cumplimiento con mas claridad.</p>
+        </div>
+
+        <div className="page-header-note">
+          <strong>Flujo de trabajo</strong>
+          <span>Generador lateral, detalle principal de la dieta y paneles de adherencia separados.</span>
+        </div>
+      </header>
+
+      <div className="diets-page-layout">
         <aside className="diets-sidebar">
           <DietGeneratorForm
             error={generateError}
@@ -382,7 +395,7 @@ function DietsPage() {
           />
         </aside>
 
-        <div className="diets-main">
+        <div className="diets-main-stack">
           <DietCard
             actionError={dietActionError}
             actionMessage={dietActionMessage}
@@ -405,7 +418,7 @@ function DietsPage() {
           />
 
           {(selectedDiet ?? latestDiet) ? (
-            <>
+            <div className="diets-support-grid">
               <AdherencePanel
                 error={adherenceError}
                 isLoading={isDietAdherenceLoading}
@@ -422,7 +435,7 @@ function DietsPage() {
                 summary={weeklyAdherenceSummary}
                 title="Interpretacion semanal de adherencia"
               />
-            </>
+            </div>
           ) : null}
         </div>
       </div>
@@ -435,7 +448,7 @@ function DietsPage() {
         selectedDietId={selectedDiet?.id ?? latestDiet?.id ?? ''}
         viewingDietId={viewingDietId}
       />
-    </div>
+    </section>
   )
 }
 

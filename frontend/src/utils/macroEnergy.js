@@ -4,21 +4,21 @@ const MACRO_CONFIG = [
     label: 'Proteina',
     gramsKey: 'actual_protein_grams',
     factor: 4,
-    color: '#f7c948',
+    color: '#dfe9ff',
   },
   {
     key: 'carbs',
     label: 'Carbohidratos',
     gramsKey: 'actual_carb_grams',
     factor: 4,
-    color: '#2f6fe4',
+    color: '#72d8ff',
   },
   {
     key: 'fat',
     label: 'Grasas',
     gramsKey: 'actual_fat_grams',
     factor: 9,
-    color: '#8a5cf6',
+    color: '#5b7fff',
   },
 ]
 

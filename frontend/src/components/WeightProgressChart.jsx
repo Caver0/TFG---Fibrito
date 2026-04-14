@@ -12,7 +12,6 @@ import {
   formatCalories,
   formatLongDate,
   formatShortDate,
-  formatSignedCalories,
   formatSignedWeight,
   formatWeight,
 } from '../utils/dashboardFormat'
@@ -103,18 +102,18 @@ function WeightProgressChart({ weightProgress }) {
           <div className="dashboard-chart-shell">
             <ResponsiveContainer width="100%" height={360}>
               <ComposedChart margin={{ top: 12, right: 18, bottom: 8, left: 0 }}>
-                <CartesianGrid stroke="rgba(94, 72, 54, 0.12)" strokeDasharray="4 4" />
+                <CartesianGrid stroke="rgba(152, 176, 214, 0.16)" strokeDasharray="4 4" />
                 <XAxis
                   dataKey="timestamp"
                   domain={['dataMin', 'dataMax']}
                   scale="time"
                   type="number"
                   tickFormatter={(value) => formatShortDate(value)}
-                  tick={{ fill: '#6b6258', fontSize: 12 }}
+                  tick={{ fill: '#8fa0bd', fontSize: 12 }}
                 />
                 <YAxis
                   tickFormatter={(value) => `${Number(value).toFixed(1)} kg`}
-                  tick={{ fill: '#6b6258', fontSize: 12 }}
+                  tick={{ fill: '#8fa0bd', fontSize: 12 }}
                   width={82}
                 />
                 <Tooltip content={buildTooltipContent} labelFormatter={(value) => value} />
@@ -123,9 +122,9 @@ function WeightProgressChart({ weightProgress }) {
                   data={entriesData}
                   dataKey="weight"
                   name="Peso diario"
-                  stroke="#c96a2a"
+                  stroke="#72d8ff"
                   strokeWidth={2}
-                  dot={{ r: 2.5, fill: '#c96a2a' }}
+                  dot={{ r: 2.5, fill: '#72d8ff' }}
                   activeDot={{ r: 4 }}
                 />
                 <Line
@@ -133,9 +132,9 @@ function WeightProgressChart({ weightProgress }) {
                   data={weeklyAveragesData}
                   dataKey="average_weight"
                   name="Media semanal"
-                  stroke="#1c1a17"
+                  stroke="#dfe9ff"
                   strokeWidth={3}
-                  dot={{ r: 4, fill: '#1c1a17' }}
+                  dot={{ r: 4, fill: '#dfe9ff' }}
                   activeDot={{ r: 5 }}
                 />
                 {expectedTrendData.length > 0 ? (
@@ -144,7 +143,7 @@ function WeightProgressChart({ weightProgress }) {
                     data={expectedTrendData}
                     dataKey="expected_weight"
                     name="Referencia esperada"
-                    stroke="#607d5f"
+                    stroke="#5b7fff"
                     strokeWidth={2}
                     strokeDasharray="6 5"
                     dot={false}
@@ -155,8 +154,8 @@ function WeightProgressChart({ weightProgress }) {
                     data={adjustmentEventsData}
                     dataKey="reference_weight"
                     name="Ajustes caloricos"
-                    fill="#cf2f24"
-                    stroke="#cf2f24"
+                    fill="#ff6b6b"
+                    stroke="#ff6b6b"
                   />
                 ) : null}
               </ComposedChart>

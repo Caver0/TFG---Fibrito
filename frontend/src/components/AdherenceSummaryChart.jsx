@@ -69,14 +69,14 @@ function AdherenceSummaryChart({ adherence }) {
             <div className="dashboard-chart-shell dashboard-chart-shell-compact">
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={dailyBreakdown} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
-                  <CartesianGrid stroke="rgba(94, 72, 54, 0.12)" strokeDasharray="4 4" />
-                  <XAxis dataKey="day_label" tick={{ fill: '#6b6258', fontSize: 12 }} />
-                  <YAxis allowDecimals={false} tick={{ fill: '#6b6258', fontSize: 12 }} />
+                  <CartesianGrid stroke="rgba(152, 176, 214, 0.16)" strokeDasharray="4 4" />
+                  <XAxis dataKey="day_label" tick={{ fill: '#8fa0bd', fontSize: 12 }} />
+                  <YAxis allowDecimals={false} tick={{ fill: '#8fa0bd', fontSize: 12 }} />
                   <Tooltip content={buildTooltipContent} />
-                  <Bar dataKey="completed_meals" stackId="adherence" fill="#3d8b5d" name="Completadas" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="modified_meals" stackId="adherence" fill="#d58a28" name="Modificadas" />
-                  <Bar dataKey="omitted_meals" stackId="adherence" fill="#cf2f24" name="Omitidas" />
-                  <Bar dataKey="pending_meals" stackId="adherence" fill="#c7b7a3" name="Pendientes" />
+                  <Bar dataKey="completed_meals" stackId="adherence" fill="#72d8ff" name="Completadas" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="modified_meals" stackId="adherence" fill="#5b7fff" name="Modificadas" />
+                  <Bar dataKey="omitted_meals" stackId="adherence" fill="#ff6b6b" name="Omitidas" />
+                  <Bar dataKey="pending_meals" stackId="adherence" fill="#32445f" name="Pendientes" />
                 </BarChart>
               </ResponsiveContainer>
             </div>

@@ -81,7 +81,7 @@ function MealMacroBar({ meal, compact = false }) {
         {macroBreakdown.items.map((item) => (
           <span key={item.key}>
             <i className="diet-macro-color" aria-hidden="true" style={{ backgroundColor: item.color }} />
-            {item.label}: {formatNumber(item.grams)} g · {formatNumber(item.percentage)}%
+            {item.label}: {formatNumber(item.grams)} g - {formatNumber(item.percentage)}%
           </span>
         ))}
       </div>

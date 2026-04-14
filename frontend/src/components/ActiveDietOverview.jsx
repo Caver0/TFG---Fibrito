@@ -73,11 +73,11 @@ function ActiveDietOverview({ activeDiet }) {
           <div className="dashboard-chart-shell dashboard-chart-shell-compact">
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={mealData} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
-                <CartesianGrid stroke="rgba(94, 72, 54, 0.12)" strokeDasharray="4 4" />
-                <XAxis dataKey="short_label" tick={{ fill: '#6b6258', fontSize: 12 }} />
-                <YAxis tickFormatter={(value) => `${Math.round(Number(value))}`} tick={{ fill: '#6b6258', fontSize: 12 }} />
+                <CartesianGrid stroke="rgba(152, 176, 214, 0.16)" strokeDasharray="4 4" />
+                <XAxis dataKey="short_label" tick={{ fill: '#8fa0bd', fontSize: 12 }} />
+                <YAxis tickFormatter={(value) => `${Math.round(Number(value))}`} tick={{ fill: '#8fa0bd', fontSize: 12 }} />
                 <Tooltip content={buildTooltipContent} />
-                <Bar dataKey="target_calories" fill="#c96a2a" radius={[6, 6, 0, 0]} name="Calorias objetivo" />
+                <Bar dataKey="target_calories" fill="#72d8ff" radius={[6, 6, 0, 0]} name="Calorias objetivo" />
               </BarChart>
             </ResponsiveContainer>
           </div>

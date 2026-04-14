@@ -1,0 +1,296 @@
+.app-shell {
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.app-shell-wide {
+  display: block;
+}
+
+.app-shell-auth {
+  display: grid;
+  place-items: center;
+}
+
+.auth-stage {
+  width: min(100%, 1120px);
+  display: grid;
+  place-items: center;
+}
+
+.app-frame {
+  width: min(100%, 1680px);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.app-content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.app-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(300px, 0.9fr);
+  gap: 24px;
+  padding: 28px;
+}
+
+.app-toolbar-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.app-toolbar-copy h1 {
+  margin: 0;
+  font-size: clamp(2.3rem, 4vw, 3.5rem);
+  line-height: 0.98;
+}
+
+.app-toolbar-copy p {
+  margin: 0;
+  max-width: 780px;
+}
+
+.app-toolbar-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.app-toolbar-stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 132px;
+}
+
+.app-toolbar-stat span {
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.app-toolbar-stat strong {
+  font-size: 1.25rem;
+  line-height: 1.15;
+}
+
+.app-toolbar-stat small {
+  line-height: 1.5;
+}
+
+.page-view-stack {
+  min-width: 0;
+}
+
+.page-view {
+  min-width: 0;
+}
+
+.page-view[hidden] {
+  display: none !important;
+}
+
+.page-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.page-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.7fr);
+  gap: 18px;
+  align-items: end;
+}
+
+.page-header-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.page-header-copy h2 {
+  margin: 0;
+  font-size: clamp(1.7rem, 2.6vw, 2.45rem);
+  line-height: 1.05;
+}
+
+.page-header-copy p,
+.page-header-note span {
+  margin: 0;
+}
+
+.page-header-note {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 20px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  min-height: 100%;
+}
+
+.dashboard-page-layout,
+.diets-main-stack,
+.progress-page-layout,
+.profile-form-stack {
+  display: grid;
+  gap: 24px;
+}
+
+.dashboard-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(360px, 0.82fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.dashboard-side-column {
+  display: grid;
+  gap: 24px;
+}
+
+.diets-page-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.diets-sidebar,
+.profile-summary-column {
+  position: sticky;
+  top: 24px;
+  align-self: start;
+}
+
+.diets-main-stack {
+  min-width: 0;
+}
+
+.diets-support-grid,
+.progress-top-grid,
+.progress-analysis-grid,
+.progress-bottom-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  align-items: start;
+}
+
+.profile-content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.9fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.profile-summary-column {
+  min-width: 0;
+}
+
+.sidebar-menu {
+  position: sticky;
+  top: 24px;
+  align-self: start;
+}
+
+.sidebar-menu-user,
+.sidebar-menu-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar-menu-user-label {
+  font-size: 0.76rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.sidebar-menu-footer p {
+  margin: 0;
+}
+
+@media (max-width: 1400px) {
+  .app-toolbar {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1180px) {
+  .app-frame,
+  .dashboard-main-grid,
+  .diets-page-layout,
+  .profile-content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar-menu {
+    position: static;
+  }
+
+  .diets-sidebar,
+  .profile-summary-column {
+    position: static;
+    top: auto;
+  }
+
+  .sidebar-menu-links {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-toolbar-meta {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 960px) {
+  .app-shell {
+    padding: 18px;
+  }
+
+  .page-header,
+  .app-toolbar-meta,
+  .diets-support-grid,
+  .progress-top-grid,
+  .progress-analysis-grid,
+  .progress-bottom-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar-menu-links {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    padding: 14px;
+  }
+
+  .app-toolbar,
+  .page-header-note {
+    padding: 20px;
+  }
+
+  .app-toolbar-copy h1 {
+    font-size: 2.1rem;
+  }
+
+  .sidebar-menu-links {
+    grid-template-columns: 1fr;
+  }
+}

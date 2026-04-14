@@ -290,9 +290,22 @@ function ProgressPage() {
   }
 
   return (
-    <div className="progress-page">
-      <section id="panel-registro-peso" className="dashboard-scroll-section progress-section">
-        <div className="progress-grid">
+    <section className="page-shell progress-page">
+      <header className="page-header">
+        <div className="page-header-copy">
+          <span className="eyebrow">Seguimiento del progreso</span>
+          <h2>Registros, medias y ajustes semanales</h2>
+          <p>Separamos el registro diario del analisis semanal para que cada bloque tenga su propia lectura y aproveche mejor el espacio disponible.</p>
+        </div>
+
+        <div className="page-header-note">
+          <strong>Lectura temporal</strong>
+          <span>Primero el dato diario, despues la tendencia semanal y finalmente el historial de decisiones.</span>
+        </div>
+      </header>
+
+      <div className="progress-page-layout">
+        <div className="progress-top-grid">
           <WeightForm
             error={saveError}
             isSaving={isSaving}
@@ -313,10 +326,8 @@ function ProgressPage() {
           onDelete={handleDelete}
           deletingEntryId={deletingEntryId}
         />
-      </section>
 
-      <section id="panel-analisis-progreso" className="dashboard-scroll-section progress-section">
-        <div className="progress-grid">
+        <div className="progress-analysis-grid">
           <WeeklyAveragesCard
             averages={weeklyAverages}
             error={weeklyAveragesError}
@@ -334,21 +345,23 @@ function ProgressPage() {
           />
         </div>
 
-        <WeeklyAdherenceSummary
-          description="Esta lectura conecta la adherencia real con la fiabilidad interpretativa de la media semanal del peso en ayunas."
-          error={weeklyAdherenceError}
-          isLoading={isWeeklyAdherenceLoading}
-          summary={weeklyAdherenceSummary}
-          title="Fiabilidad del analisis segun adherencia"
-        />
+        <div className="progress-bottom-grid">
+          <WeeklyAdherenceSummary
+            description="Esta lectura conecta la adherencia real con la fiabilidad interpretativa de la media semanal del peso en ayunas."
+            error={weeklyAdherenceError}
+            isLoading={isWeeklyAdherenceLoading}
+            summary={weeklyAdherenceSummary}
+            title="Fiabilidad del analisis segun adherencia"
+          />
 
-        <AdjustmentHistory
-          entries={adjustmentHistory}
-          error={adjustmentHistoryError}
-          isLoading={isAdjustmentHistoryLoading}
-        />
-      </section>
-    </div>
+          <AdjustmentHistory
+            entries={adjustmentHistory}
+            error={adjustmentHistoryError}
+            isLoading={isAdjustmentHistoryLoading}
+          />
+        </div>
+      </div>
+    </section>
   )
 }
 

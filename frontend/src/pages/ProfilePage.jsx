@@ -123,30 +123,48 @@ function ProfilePage() {
   }
 
   return (
-    <div className="profile-page">
-      <div className="progress-page">
-        <ProfileForm
-          user={user}
-          isSaving={isSaving}
-          saveMessage={saveMessage}
-          saveError={saveError}
-          onSave={handleSave}
-        />
-        <FoodPreferencesForm
-          preferences={foodPreferences}
-          isLoading={isFoodPreferencesLoading}
-          isSaving={isFoodPreferencesSaving}
-          saveMessage={foodPreferencesMessage}
-          saveError={foodPreferencesError}
-          onSave={handleSaveFoodPreferences}
-        />
+    <section className="page-shell profile-page-shell">
+      <header className="page-header">
+        <div className="page-header-copy">
+          <span className="eyebrow">Configuracion del atleta</span>
+          <h2>Perfil nutricional y preferencias</h2>
+          <p>Ordenamos la configuracion base en formularios mas limpios y dejamos el resumen calculado visible como bloque independiente.</p>
+        </div>
+
+        <div className="page-header-note">
+          <strong>Base del sistema</strong>
+          <span>Los datos de perfil alimentan objetivos, dieta y lecturas del dashboard sin cambiar la logica existente.</span>
+        </div>
+      </header>
+
+      <div className="profile-content-grid">
+        <div className="profile-form-stack">
+          <ProfileForm
+            user={user}
+            isSaving={isSaving}
+            saveMessage={saveMessage}
+            saveError={saveError}
+            onSave={handleSave}
+          />
+          <FoodPreferencesForm
+            preferences={foodPreferences}
+            isLoading={isFoodPreferencesLoading}
+            isSaving={isFoodPreferencesSaving}
+            saveMessage={foodPreferencesMessage}
+            saveError={foodPreferencesError}
+            onSave={handleSaveFoodPreferences}
+          />
+        </div>
+
+        <div className="profile-summary-column">
+          <NutritionSummary
+            nutrition={nutrition}
+            error={nutritionError}
+            isLoading={isNutritionLoading}
+          />
+        </div>
       </div>
-      <NutritionSummary
-        nutrition={nutrition}
-        error={nutritionError}
-        isLoading={isNutritionLoading}
-      />
-    </div>
+    </section>
   )
 }
 
