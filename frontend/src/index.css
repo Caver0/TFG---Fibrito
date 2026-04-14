@@ -39,9 +39,8 @@ html {
 
 body {
   margin: 0;
-  min-width: 320px;
-  background: #202126;
-  color: var(--lab-text);
+  padding: 0;
+  background: #0e0e0f; /* Usa el mismo fondo que --lab-bg para consistencia */
 }
 
 body::selection {
