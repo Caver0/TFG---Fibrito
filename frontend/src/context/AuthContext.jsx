@@ -5,8 +5,32 @@ import * as userApi from '../api/userApi'
 const AUTH_STORAGE_KEY = 'fibrito-auth'
 const AuthContext = createContext(null)
 
+function readStorageValue(key) {
+  try {
+    return window.localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function removeStorageValue(key) {
+  try {
+    window.localStorage.removeItem(key)
+  } catch {
+    // Ignoramos bloqueos de storage para no romper el render inicial.
+  }
+}
+
+function writeStorageValue(key, value) {
+  try {
+    window.localStorage.setItem(key, value)
+  } catch {
+    // Si el navegador bloquea storage, la app sigue funcionando sin persistencia.
+  }
+}
+
 function readStoredSession() {
-  const rawSession = window.localStorage.getItem(AUTH_STORAGE_KEY)
+  const rawSession = readStorageValue(AUTH_STORAGE_KEY)
   if (!rawSession) {
     return { token: '', user: null }
   }
@@ -14,7 +38,7 @@ function readStoredSession() {
   try {
     return JSON.parse(rawSession)
   } catch {
-    window.localStorage.removeItem(AUTH_STORAGE_KEY)
+    removeStorageValue(AUTH_STORAGE_KEY)
     return { token: '', user: null }
   }
 }
@@ -28,7 +52,7 @@ export function AuthProvider({ children }) {
   function clearSession() {
     setToken('')
     setUser(null)
-    window.localStorage.removeItem(AUTH_STORAGE_KEY)
+    removeStorageValue(AUTH_STORAGE_KEY)
   }
 
   async function refreshUser(activeToken = token) {
@@ -75,11 +99,11 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     if (!token || !user) {
-      window.localStorage.removeItem(AUTH_STORAGE_KEY)
+      removeStorageValue(AUTH_STORAGE_KEY)
       return
     }
 
-    window.localStorage.setItem(
+    writeStorageValue(
       AUTH_STORAGE_KEY,
       JSON.stringify({ token, user }),
     )

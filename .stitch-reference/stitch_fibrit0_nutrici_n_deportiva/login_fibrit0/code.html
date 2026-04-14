@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&amp;family=Inter:wght@300..700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-secondary-container": "#d2cfd2",
+                    "on-secondary": "#525154",
+                    "inverse-on-surface": "#565556",
+                    "tertiary-fixed-dim": "#ff7c6c",
+                    "surface-container-lowest": "#000000",
+                    "tertiary": "#ff7162",
+                    "on-secondary-fixed-variant": "#5c5b5d",
+                    "background": "#0e0e0f",
+                    "on-primary-container": "#505d00",
+                    "primary-fixed-dim": "#cdea00",
+                    "surface-tint": "#f6ffc0",
+                    "tertiary-fixed": "#ff9385",
+                    "on-surface": "#ffffff",
+                    "secondary": "#e4e2e4",
+                    "on-tertiary": "#4a0001",
+                    "inverse-primary": "#586500",
+                    "on-background": "#ffffff",
+                    "surface-bright": "#2c2c2d",
+                    "surface-container-high": "#201f21",
+                    "outline-variant": "#484849",
+                    "tertiary-container": "#f9362c",
+                    "on-primary": "#586500",
+                    "on-tertiary-container": "#000000",
+                    "tertiary-dim": "#e2241f",
+                    "inverse-surface": "#fcf8f9",
+                    "on-error": "#450900",
+                    "primary-container": "#daf900",
+                    "on-primary-fixed": "#3f4900",
+                    "surface-container": "#1a191b",
+                    "on-primary-fixed-variant": "#596700",
+                    "on-tertiary-fixed": "#3a0001",
+                    "primary": "#f6ffc0",
+                    "surface-dim": "#0e0e0f",
+                    "primary-fixed": "#daf900",
+                    "surface-variant": "#262627",
+                    "outline": "#767576",
+                    "on-surface-variant": "#adaaab",
+                    "surface": "#0e0e0f",
+                    "on-tertiary-fixed-variant": "#7a0004",
+                    "secondary-fixed-dim": "#d6d3d6",
+                    "secondary-container": "#474649",
+                    "secondary-dim": "#d6d3d6",
+                    "on-error-container": "#ffd2c8",
+                    "on-secondary-fixed": "#3f3f41",
+                    "error-container": "#b92902",
+                    "surface-container-highest": "#262627",
+                    "surface-container-low": "#131314",
+                    "error": "#ff7351",
+                    "error-dim": "#d53d18",
+                    "primary-dim": "#d0ed00",
+                    "secondary-fixed": "#e4e2e4"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "fontFamily": {
+                    "headline": ["Space Grotesk"],
+                    "body": ["Inter"],
+                    "label": ["Inter"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0e0e0f;
+        }
+        .kinetic-gradient {
+            background: linear-gradient(135deg, #f6ffc0 0%, #daf900 100%);
+        }
+        .glass-card {
+            background: rgba(38, 38, 39, 0.6);
+            backdrop-filter: blur(40px);
+            -webkit-backdrop-filter: blur(40px);
+        }
+    </style>
+</head>
+<body class="text-on-surface min-h-screen flex items-center justify-center overflow-hidden">
+<!-- Background Layer -->
+<div class="fixed inset-0 z-0">
+<img alt="Background" class="w-full h-full object-cover opacity-40 mix-blend-luminosity" data-alt="Moody dark gym interior with focused athlete in silhouette under dramatic cinematic spotlighting, high contrast technical aesthetic" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB0N1U3jFx4BK4fZoRNCkFA0TaOYHChcTEagCKQeM5aHi-iGlwfNw36SvdS1FPUMFSuyG9oyT3ybnLGU6F0gVeo6_8cWYQppQ-kg6BSpelHUa8x5AePH1VXvtBN1QQnafyeeTMRmTecrgO9yd6OqJdZebXhQvjep03-o5apZn9KOEQ6whqMaAALhdQhdU-H0aCmeGc2V5jv7a1-W2R6Lrd0MdxebMowLpA1BvqjQfsSqTeP6qfsp9bVIV9n-lPSLKQnOeIAZa5WEzk"/>
+<div class="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent"></div>
+</div>
+<!-- Layout Shell (Navigation Suppressed for Login) -->
+<main class="relative z-10 w-full max-w-lg px-6">
+<!-- Brand Identity -->
+<div class="text-center mb-12">
+<h1 class="text-primary-container font-headline font-black text-5xl tracking-tighter uppercase mb-2">
+                FIBRIT0
+            </h1>
+<p class="text-on-surface-variant font-headline font-bold text-sm tracking-[0.2em] uppercase">
+                KINETIC LAB
+            </p>
+</div>
+<!-- Glassmorphism Login Card -->
+<div class="glass-card p-10 rounded-xl shadow-[0_0_60px_rgba(218,249,0,0.04)] relative">
+<!-- Signature Technical Accent -->
+<div class="absolute top-0 left-1/2 -translate-x-1/2 w-16 h-1 bg-primary-container rounded-b-full"></div>
+<div class="mb-8">
+<h2 class="text-on-surface font-headline font-bold text-2xl tracking-tight mb-1">Authorization Required</h2>
+<p class="text-on-surface-variant text-sm font-body">Initialize your performance profile to enter the lab.</p>
+</div>
+<form class="space-y-6">
+<!-- Email Field -->
+<div class="space-y-1.5">
+<label class="text-on-surface-variant font-label text-[0.6875rem] uppercase tracking-widest font-bold" for="email">Laboratory ID (Email)</label>
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg">alternate_email</span>
+<input class="w-full bg-surface-container-lowest border-0 border-b-2 border-outline-variant/30 focus:border-primary focus:ring-0 text-on-surface font-body py-4 pl-12 pr-4 transition-all placeholder:text-outline-variant" id="email" name="email" placeholder="user@kineticlab.io" type="email"/>
+</div>
+</div>
+<!-- Password Field -->
+<div class="space-y-1.5">
+<div class="flex justify-between items-end">
+<label class="text-on-surface-variant font-label text-[0.6875rem] uppercase tracking-widest font-bold" for="password">Secure Access Key</label>
+<a class="text-primary-container font-label text-[0.6875rem] uppercase tracking-widest font-bold hover:text-primary transition-colors" href="#">Recover Key</a>
+</div>
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg">lock</span>
+<input class="w-full bg-surface-container-lowest border-0 border-b-2 border-outline-variant/30 focus:border-primary focus:ring-0 text-on-surface font-body py-4 pl-12 pr-4 transition-all placeholder:text-outline-variant" id="password" name="password" placeholder="••••••••••••" type="password"/>
+</div>
+</div>
+<!-- CTA Button -->
+<button class="w-full kinetic-gradient text-on-primary font-headline font-black uppercase py-5 rounded-md flex items-center justify-center gap-3 tracking-tight active:scale-[0.98] transition-all hover:shadow-[0_0_30px_rgba(218,249,0,0.2)]" type="submit">
+                    Enter the Kinetic Lab
+                    <span class="material-symbols-outlined font-bold">arrow_forward</span>
+</button>
+</form>
+<!-- Onboarding Entry -->
+<div class="mt-8 pt-8 border-t border-outline-variant/10 text-center">
+<p class="text-on-surface-variant text-sm font-body">
+                    New operative? 
+                    <a class="text-on-surface font-bold hover:text-primary-container transition-colors ml-1" href="#">Begin Recruitment</a>
+</p>
+</div>
+</div>
+<!-- Technical Metadata Footer -->
+<div class="mt-8 flex justify-between items-center px-4">
+<div class="flex gap-4">
+<div class="flex flex-col">
+<span class="text-[0.6rem] text-outline-variant uppercase font-bold tracking-tighter">System Status</span>
+<span class="text-[0.75rem] text-primary-container font-headline flex items-center gap-1">
+<span class="w-1.5 h-1.5 bg-primary-container rounded-full animate-pulse"></span>
+                        ONLINE
+                    </span>
+</div>
+<div class="w-px h-8 bg-outline-variant/20"></div>
+<div class="flex flex-col">
+<span class="text-[0.6rem] text-outline-variant uppercase font-bold tracking-tighter">Encryption</span>
+<span class="text-[0.75rem] text-on-surface-variant font-headline">AES-256</span>
+</div>
+</div>
+<div class="text-[0.6875rem] text-outline-variant font-label tracking-widest uppercase">
+                v2.0.4 // CORE
+            </div>
+</div>
+</main>
+<!-- Decorative Elements -->
+<div class="fixed top-12 left-12 opacity-10 pointer-events-none hidden lg:block">
+<span class="text-on-surface font-headline text-[12rem] font-black tracking-tighter select-none">FIB</span>
+</div>
+<div class="fixed bottom-12 right-12 opacity-10 pointer-events-none hidden lg:block">
+<span class="text-on-surface font-headline text-[12rem] font-black tracking-tighter select-none">RIT0</span>
+</div>
+</body></html>

@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&amp;family=Inter:wght@300..700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-secondary-container": "#d2cfd2",
+                    "on-secondary": "#525154",
+                    "inverse-on-surface": "#565556",
+                    "tertiary-fixed-dim": "#ff7c6c",
+                    "surface-container-lowest": "#000000",
+                    "tertiary": "#ff7162",
+                    "on-secondary-fixed-variant": "#5c5b5d",
+                    "background": "#0e0e0f",
+                    "on-primary-container": "#505d00",
+                    "primary-fixed-dim": "#cdea00",
+                    "surface-tint": "#f6ffc0",
+                    "tertiary-fixed": "#ff9385",
+                    "on-surface": "#ffffff",
+                    "secondary": "#e4e2e4",
+                    "on-tertiary": "#4a0001",
+                    "inverse-primary": "#586500",
+                    "on-background": "#ffffff",
+                    "surface-bright": "#2c2c2d",
+                    "surface-container-high": "#201f21",
+                    "outline-variant": "#484849",
+                    "tertiary-container": "#f9362c",
+                    "on-primary": "#586500",
+                    "on-tertiary-container": "#000000",
+                    "tertiary-dim": "#e2241f",
+                    "inverse-surface": "#fcf8f9",
+                    "on-error": "#450900",
+                    "primary-container": "#daf900",
+                    "on-primary-fixed": "#3f4900",
+                    "surface-container": "#1a191b",
+                    "on-primary-fixed-variant": "#596700",
+                    "on-tertiary-fixed": "#3a0001",
+                    "primary": "#f6ffc0",
+                    "surface-dim": "#0e0e0f",
+                    "primary-fixed": "#daf900",
+                    "surface-variant": "#262627",
+                    "outline": "#767576",
+                    "on-surface-variant": "#adaaab",
+                    "surface": "#0e0e0f",
+                    "on-tertiary-fixed-variant": "#7a0004",
+                    "secondary-fixed-dim": "#d6d3d6",
+                    "secondary-container": "#474649",
+                    "secondary-dim": "#d6d3d6",
+                    "on-error-container": "#ffd2c8",
+                    "on-secondary-fixed": "#3f3f41",
+                    "error-container": "#b92902",
+                    "surface-container-highest": "#262627",
+                    "surface-container-low": "#131314",
+                    "error": "#ff7351",
+                    "error-dim": "#d53d18",
+                    "primary-dim": "#d0ed00",
+                    "secondary-fixed": "#e4e2e4"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "fontFamily": {
+                    "headline": ["Space Grotesk"],
+                    "body": ["Inter"],
+                    "label": ["Inter"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3, .technical-label { font-family: 'Space Grotesk', sans-serif; }
+        .glass-panel {
+            background: rgba(38, 38, 39, 0.6);
+            backdrop-filter: blur(20px);
+        }
+        .neon-gradient {
+            background: linear-gradient(135deg, #f6ffc0 0%, #daf900 100%);
+        }
+        .data-grid-dots {
+            background-image: radial-gradient(#2c2c2d 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface min-h-screen">
+<!-- SideNavBar -->
+<aside class="h-screen w-64 fixed left-0 top-0 border-r-0 bg-[#0e0e0f] dark:bg-[#0e0e0f] shadow-[0_0_60px_rgba(218,249,0,0.04)] flex flex-col py-8 z-[60]">
+<div class="px-6 mb-12">
+<h1 class="text-2xl font-black tracking-tighter text-[#daf900] uppercase">FIBRIT0</h1>
+<p class="font-['Space_Grotesk'] tracking-tight text-[10px] uppercase font-bold text-[#adaaab]">KINETIC LAB</p>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="text-[#adaaab] hover:text-white px-6 py-4 flex items-center gap-4 transition-colors hover:bg-[#201f21]" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-['Space_Grotesk'] tracking-tight text-sm uppercase font-bold">Dashboard</span>
+</a>
+<a class="text-[#adaaab] hover:text-white px-6 py-4 flex items-center gap-4 transition-colors hover:bg-[#201f21]" href="#">
+<span class="material-symbols-outlined" data-icon="restaurant">restaurant</span>
+<span class="font-['Space_Grotesk'] tracking-tight text-sm uppercase font-bold">Diets</span>
+</a>
+<!-- ACTIVE TAB: Progress -->
+<a class="text-[#daf900] border-l-4 border-[#daf900] bg-[#201f21] px-6 py-4 flex items-center gap-4 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="insights" style="font-variation-settings: 'FILL' 1;">insights</span>
+<span class="font-['Space_Grotesk'] tracking-tight text-sm uppercase font-bold">Progress</span>
+</a>
+<a class="text-[#adaaab] hover:text-white px-6 py-4 flex items-center gap-4 transition-colors hover:bg-[#201f21]" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-['Space_Grotesk'] tracking-tight text-sm uppercase font-bold">Profile</span>
+</a>
+</nav>
+<div class="px-6 pt-8 mt-auto">
+<div class="bg-surface-container-high p-4 rounded-xl flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden bg-surface-bright">
+<img alt="User Performance Profile" data-alt="close up profile portrait of a focused male athlete with subtle sweat and sharp lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDJXl6NaTgCkrYqTKQ-rtmOwemQI7F9VHnEXTFp8iAiDoN0kyRBgxrK4Pgo5LMQCqGzOWJ8AmwHimxWq7Tn_CI5ydMmJZFgXkPGxZI7hWbaJOz0gRU-E4SXtDzymceZVdB6k30h_-RR9ig-izZtZXQWi9ZBsPPz2CF7BAq_Grthpd8AlUcRVpoVguvtaeoS04c012kZIfgZm05oAxZwipn6_t2hkW4CM50XkzU7zBhdbiC1aTC1rjK5Ov7xyy_ZzX2vosCfwBPdqMY"/>
+</div>
+<div>
+<p class="text-xs font-bold text-on-surface">Alex Mercer</p>
+<p class="text-[10px] text-on-surface-variant uppercase tracking-wider">Tier 01 Elite</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- TopNavBar -->
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] z-50 bg-[#0e0e0f]/60 backdrop-blur-xl flex justify-between items-center px-10 py-6">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-[#daf900]" data-icon="analytics">analytics</span>
+<h2 class="font-['Space_Grotesk'] font-bold text-xl text-[#daf900] tracking-tighter uppercase">Adherence Analysis</h2>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 bg-surface-container-lowest px-4 py-2 rounded-lg border border-outline-variant/15">
+<span class="material-symbols-outlined text-on-surface-variant text-sm" data-icon="search">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-sm w-48 text-on-surface" placeholder="Search metrics..." type="text"/>
+</div>
+<div class="flex gap-4">
+<button class="material-symbols-outlined text-on-surface-variant hover:text-[#f6ffc0] transition-colors" data-icon="notifications">notifications</button>
+<button class="material-symbols-outlined text-on-surface-variant hover:text-[#f6ffc0] transition-colors" data-icon="settings">settings</button>
+</div>
+</div>
+</header>
+<main class="ml-64 pt-28 px-10 pb-12 data-grid-dots min-h-screen">
+<div class="max-w-7xl mx-auto space-y-8">
+<!-- Hero Bento Grid Section -->
+<div class="grid grid-cols-12 gap-6">
+<!-- Interpretation Card -->
+<div class="col-span-12 lg:col-span-4 bg-surface-container-high rounded-xl p-8 relative overflow-hidden flex flex-col justify-between border-t-2 border-primary-container">
+<div class="relative z-10">
+<div class="flex items-center gap-2 mb-6">
+<span class="w-2 h-2 rounded-full bg-primary-container animate-pulse"></span>
+<span class="text-[10px] font-bold uppercase tracking-[0.2em] text-primary-container">System Status</span>
+</div>
+<h3 class="text-3xl font-bold tracking-tight text-on-surface mb-4 font-headline leading-tight">Data Reliability: <span class="text-primary-container">Optimal</span></h3>
+<p class="text-on-surface-variant text-sm leading-relaxed">Your high adherence over the last 14 days makes the weight trend data highly reliable. Projected goals are tracking with 94% accuracy.</p>
+</div>
+<div class="mt-8 relative z-10">
+<button class="neon-gradient text-on-primary px-6 py-3 rounded-lg text-sm font-bold uppercase tracking-tight flex items-center gap-2">
+                            Download Report
+                            <span class="material-symbols-outlined text-sm" data-icon="download">download</span>
+</button>
+</div>
+<!-- Aesthetic Background Graphic -->
+<div class="absolute -right-4 -bottom-4 opacity-10">
+<span class="material-symbols-outlined text-[160px]" data-icon="verified">verified</span>
+</div>
+</div>
+<!-- Confidence Score Indicator -->
+<div class="col-span-12 md:col-span-6 lg:col-span-4 bg-surface-container-low rounded-xl p-8 flex flex-col items-center justify-center text-center">
+<div class="relative w-48 h-48 flex items-center justify-center">
+<!-- SVG Circular Gauge -->
+<svg class="w-full h-full -rotate-90">
+<circle class="text-surface-bright" cx="96" cy="96" fill="transparent" r="80" stroke="currentColor" stroke-width="6"></circle>
+<circle class="text-primary-container" cx="96" cy="96" fill="transparent" r="80" stroke="currentColor" stroke-dasharray="502" stroke-dashoffset="40" stroke-linecap="round" stroke-width="8"></circle>
+</svg>
+<div class="absolute flex flex-col items-center">
+<span class="text-5xl font-black font-headline text-on-surface">92</span>
+<span class="text-[10px] uppercase font-bold tracking-widest text-on-surface-variant">Confidence</span>
+</div>
+</div>
+<div class="mt-6 flex gap-8">
+<div class="text-left">
+<p class="text-[10px] uppercase text-on-surface-variant font-bold">Variability</p>
+<p class="text-lg font-bold font-headline text-on-surface">±0.4lb</p>
+</div>
+<div class="w-px bg-outline-variant/20"></div>
+<div class="text-left">
+<p class="text-[10px] uppercase text-on-surface-variant font-bold">Precision</p>
+<p class="text-lg font-bold font-headline text-on-surface">Ultra</p>
+</div>
+</div>
+</div>
+<!-- Quick Stats Column -->
+<div class="col-span-12 md:col-span-6 lg:col-span-4 space-y-6">
+<div class="bg-surface-container-highest p-6 rounded-xl border-l-4 border-primary-container">
+<p class="text-[10px] uppercase text-on-surface-variant font-bold tracking-widest mb-1">Weekly Delta</p>
+<h4 class="text-4xl font-black font-headline text-on-surface">-1.42 <span class="text-sm font-medium text-on-surface-variant">LBS</span></h4>
+</div>
+<div class="bg-surface-container-highest p-6 rounded-xl border-l-4 border-tertiary">
+<p class="text-[10px] uppercase text-on-surface-variant font-bold tracking-widest mb-1">Caloric Flux</p>
+<h4 class="text-4xl font-black font-headline text-on-surface">+182 <span class="text-sm font-medium text-on-surface-variant">KCAL</span></h4>
+</div>
+</div>
+</div>
+<!-- Weight Trend Analysis Chart Area -->
+<div class="bg-surface-container-low rounded-xl p-8 relative overflow-hidden">
+<div class="flex justify-between items-start mb-12">
+<div>
+<h3 class="text-xl font-bold font-headline uppercase tracking-tight text-on-surface">Weight Analysis Trend</h3>
+<p class="text-sm text-on-surface-variant">Actual (Neon) vs. Expected (Dim) Projection</p>
+</div>
+<div class="flex gap-4">
+<div class="flex items-center gap-2">
+<span class="w-3 h-1 bg-primary-container rounded-full"></span>
+<span class="text-[10px] uppercase font-bold text-on-surface-variant">Actual</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3 h-1 bg-surface-bright rounded-full"></span>
+<span class="text-[10px] uppercase font-bold text-on-surface-variant">Target</span>
+</div>
+</div>
+</div>
+<!-- Abstract Chart Visualization -->
+<div class="h-64 w-full relative flex items-end gap-1">
+<div class="absolute inset-0 flex flex-col justify-between pointer-events-none">
+<div class="border-b border-outline-variant/10 w-full h-0"></div>
+<div class="border-b border-outline-variant/10 w-full h-0"></div>
+<div class="border-b border-outline-variant/10 w-full h-0"></div>
+<div class="border-b border-outline-variant/10 w-full h-0"></div>
+<div class="border-b border-outline-variant/10 w-full h-0"></div>
+</div>
+<!-- Simulating Chart Bars/Points -->
+<div class="flex-1 flex flex-col justify-end items-center gap-1 group">
+<div class="w-1 h-32 bg-surface-bright rounded-t-full"></div>
+<div class="w-2 h-40 bg-primary-container rounded-t-full shadow-[0_0_15px_rgba(218,249,0,0.3)]"></div>
+<span class="text-[10px] text-on-surface-variant font-bold mt-2">MON</span>
+</div>
+<div class="flex-1 flex flex-col justify-end items-center gap-1 group">
+<div class="w-1 h-34 bg-surface-bright rounded-t-full"></div>
+<div class="w-2 h-38 bg-primary-container rounded-t-full opacity-80"></div>
+<span class="text-[10px] text-on-surface-variant font-bold mt-2">TUE</span>
+</div>
+<div class="flex-1 flex flex-col justify-end items-center gap-1 group">
+<div class="w-1 h-30 bg-surface-bright rounded-t-full"></div>
+<div class="w-2 h-44 bg-primary-container rounded-t-full"></div>
+<span class="text-[10px] text-on-surface-variant font-bold mt-2">WED</span>
+</div>
+<div class="flex-1 flex flex-col justify-end items-center gap-1 group">
+<div class="w-1 h-36 bg-surface-bright rounded-t-full"></div>
+<div class="w-2 h-36 bg-primary-container rounded-t-full opacity-90"></div>
+<span class="text-[10px] text-on-surface-variant font-bold mt-2">THU</span>
+</div>
+<div class="flex-1 flex flex-col justify-end items-center gap-1 group">
+<div class="w-1 h-28 bg-surface-bright rounded-t-full"></div>
+<div class="w-2 h-42 bg-primary-container rounded-t-full"></div>
+<span class="text-[10px] text-on-surface-variant font-bold mt-2">FRI</span>
+</div>
+<div class="flex-1 flex flex-col justify-end items-center gap-1 group">
+<div class="w-1 h-32 bg-surface-bright rounded-t-full"></div>
+<div class="w-2 h-30 bg-primary-container rounded-t-full border-2 border-primary-container bg-transparent"></div>
+<span class="text-[10px] text-on-surface-variant font-bold mt-2">SAT</span>
+</div>
+<div class="flex-1 flex flex-col justify-end items-center gap-1 group">
+<div class="w-1 h-35 bg-surface-bright rounded-t-full"></div>
+<div class="w-2 h-25 bg-tertiary rounded-t-full"></div>
+<span class="text-[10px] text-on-surface-variant font-bold mt-2 text-tertiary">SUN</span>
+</div>
+</div>
+</div>
+<!-- Adherence Heatmap & Entries Section -->
+<div class="grid grid-cols-12 gap-8">
+<!-- Adherence Heatmap -->
+<div class="col-span-12 lg:col-span-7 bg-surface-container-high rounded-xl p-8">
+<h3 class="text-lg font-bold font-headline uppercase tracking-tight text-on-surface mb-8">Adherence Heatmap</h3>
+<div class="grid grid-cols-7 gap-3">
+<!-- Days of week labels -->
+<div class="text-center text-[10px] font-bold text-on-surface-variant uppercase pb-2">M</div>
+<div class="text-center text-[10px] font-bold text-on-surface-variant uppercase pb-2">T</div>
+<div class="text-center text-[10px] font-bold text-on-surface-variant uppercase pb-2">W</div>
+<div class="text-center text-[10px] font-bold text-on-surface-variant uppercase pb-2">T</div>
+<div class="text-center text-[10px] font-bold text-on-surface-variant uppercase pb-2">F</div>
+<div class="text-center text-[10px] font-bold text-on-surface-variant uppercase pb-2">S</div>
+<div class="text-center text-[10px] font-bold text-on-surface-variant uppercase pb-2">S</div>
+<!-- Heatmap dots - Row 1 -->
+<div class="aspect-square bg-primary-container rounded-lg"></div>
+<div class="aspect-square bg-primary-container rounded-lg opacity-80"></div>
+<div class="aspect-square bg-primary-container rounded-lg"></div>
+<div class="aspect-square bg-primary-container rounded-lg"></div>
+<div class="aspect-square bg-primary-container rounded-lg opacity-60"></div>
+<div class="aspect-square bg-surface-bright rounded-lg"></div>
+<div class="aspect-square bg-tertiary rounded-lg"></div>
+<!-- Heatmap dots - Row 2 -->
+<div class="aspect-square bg-primary-container rounded-lg"></div>
+<div class="aspect-square bg-primary-container rounded-lg"></div>
+<div class="aspect-square bg-primary-container rounded-lg opacity-90"></div>
+<div class="aspect-square bg-primary-container rounded-lg"></div>
+<div class="aspect-square bg-primary-container rounded-lg"></div>
+<div class="aspect-square bg-primary-container rounded-lg opacity-40"></div>
+<div class="aspect-square bg-primary-container rounded-lg"></div>
+<!-- Heatmap dots - Row 3 -->
+<div class="aspect-square bg-primary-container rounded-lg"></div>
+<div class="aspect-square bg-primary-container rounded-lg opacity-70"></div>
+<div class="aspect-square bg-primary-container rounded-lg"></div>
+<div class="aspect-square bg-primary-container rounded-lg shadow-[0_0_10px_rgba(218,249,0,0.2)] border border-primary"></div>
+<div class="aspect-square bg-surface-bright rounded-lg"></div>
+<div class="aspect-square bg-surface-bright rounded-lg"></div>
+<div class="aspect-square bg-surface-bright rounded-lg"></div>
+</div>
+<div class="mt-8 flex items-center justify-between">
+<div class="flex items-center gap-4 text-xs text-on-surface-variant">
+<span>Compliance: <span class="text-on-surface font-bold">88%</span></span>
+<span>Streak: <span class="text-on-surface font-bold">4 Days</span></span>
+</div>
+<div class="flex items-center gap-1">
+<span class="text-[8px] uppercase font-bold text-on-surface-variant mr-1">Less</span>
+<div class="w-2 h-2 bg-surface-bright rounded-sm"></div>
+<div class="w-2 h-2 bg-primary-container opacity-40 rounded-sm"></div>
+<div class="w-2 h-2 bg-primary-container opacity-70 rounded-sm"></div>
+<div class="w-2 h-2 bg-primary-container rounded-sm"></div>
+<span class="text-[8px] uppercase font-bold text-on-surface-variant ml-1">More</span>
+</div>
+</div>
+</div>
+<!-- Weight Entries List -->
+<div class="col-span-12 lg:col-span-5 bg-surface-container-low rounded-xl p-8 overflow-hidden flex flex-col">
+<div class="flex justify-between items-center mb-6">
+<h3 class="text-lg font-bold font-headline uppercase tracking-tight text-on-surface">Recent Logs</h3>
+<button class="text-primary-container text-[10px] font-bold uppercase tracking-widest hover:underline">View All</button>
+</div>
+<div class="space-y-4 flex-1">
+<!-- Entry 1 -->
+<div class="flex items-center justify-between p-4 bg-surface-container-highest rounded-lg">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded bg-background flex flex-col items-center justify-center border border-outline-variant/10">
+<span class="text-[10px] font-bold text-on-surface-variant uppercase">Oct</span>
+<span class="text-sm font-black text-on-surface leading-none">24</span>
+</div>
+<div>
+<p class="text-sm font-bold text-on-surface">184.2 lbs</p>
+<p class="text-[10px] text-on-surface-variant uppercase font-medium">Post-workout log</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="more_vert">more_vert</span>
+</div>
+<!-- Entry 2 -->
+<div class="flex items-center justify-between p-4 bg-surface-container-highest rounded-lg">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded bg-background flex flex-col items-center justify-center border border-outline-variant/10">
+<span class="text-[10px] font-bold text-on-surface-variant uppercase">Oct</span>
+<span class="text-sm font-black text-on-surface leading-none">23</span>
+</div>
+<div>
+<p class="text-sm font-bold text-on-surface">185.1 lbs</p>
+<p class="text-[10px] text-on-surface-variant uppercase font-medium">High sodium day noted</p>
+</div>
+</div>
+<div class="bg-tertiary-container/10 px-2 py-1 rounded">
+<span class="material-symbols-outlined text-tertiary text-xs" data-icon="error" style="font-variation-settings: 'FILL' 1;">error</span>
+</div>
+</div>
+<!-- Entry 3 -->
+<div class="flex items-center justify-between p-4 bg-surface-container-highest rounded-lg opacity-70">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded bg-background flex flex-col items-center justify-center border border-outline-variant/10">
+<span class="text-[10px] font-bold text-on-surface-variant uppercase">Oct</span>
+<span class="text-sm font-black text-on-surface leading-none">22</span>
+</div>
+<div>
+<p class="text-sm font-bold text-on-surface">185.4 lbs</p>
+<p class="text-[10px] text-on-surface-variant uppercase font-medium">Standard morning</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="more_vert">more_vert</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer Task Bar / CTA -->
+<div class="bg-surface-container-high rounded-xl p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+<div class="flex items-center gap-6">
+<div class="flex -space-x-2">
+<img alt="Coach" class="w-8 h-8 rounded-full border-2 border-background" data-alt="portrait of female fitness coach in cinematic gym lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB98loXrp0qVEgY7kryafmCIWT_YLUFZfY-vWMz_BvFOA2Wnv_yGnlBcF-tQfjrj0FMtE2hGy6MolrFWsHKEfEfzGLjm5vzQMNry00v9qjEc0acE-DVDOs2USeEblO544YoEhRZ4pueWsmd1aRJn5uHa4n80vAKLKd9-3M1LR_vnCAsh2OPV2pWbSTWyzYjCzc7g3z9CzERlDeMlONFdsFKzofCVbsQ-Uybxb2brdWLydF5oOdMAL1u9Qfwc0ZRf-ggPDsX7vggYfs"/>
+<img alt="Nutritionist" class="w-8 h-8 rounded-full border-2 border-background" data-alt="man in activewear smiling slightly in a modern tech lab setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD_OI3ncK6I3qaBrVDdS2P-VftYyXAONBPagtII6br1YUXiwJShZmwCgMsKd0F-43jonN_GDjipnnJhBv8WQMczFNjysTmAYmGgOOmjnP-PCYJyIHJT_69MX-bOK8qJpNJIGTTLfJBvBCIdPpcwfvjLzghFsYxVzeXrG813V_a2EJwNEg3eaecCWmWMozQRPLXw6uGtYfl_041pMEqJspzukd-YZ7Uf6JiazCTTu_hPR-vCnavdrbGys_U80qU260ctUFIc9LWl3Xs"/>
+</div>
+<div>
+<p class="text-sm font-bold text-on-surface font-headline">Coaching Review Pending</p>
+<p class="text-[10px] text-on-surface-variant uppercase tracking-wider">Estimated analysis: 4 hours</p>
+</div>
+</div>
+<div class="flex items-center gap-4 w-full md:w-auto">
+<button class="flex-1 md:flex-none px-6 py-3 bg-surface-variant text-on-surface text-[10px] font-bold uppercase tracking-widest rounded-lg border border-outline-variant/20 hover:bg-surface-bright transition-colors">
+                        Add Note
+                    </button>
+<button class="flex-1 md:flex-none px-6 py-3 neon-gradient text-on-primary text-[10px] font-bold uppercase tracking-widest rounded-lg">
+                        Submit Analysis
+                    </button>
+</div>
+</div>
+</div>
+</main>
+</body></html>

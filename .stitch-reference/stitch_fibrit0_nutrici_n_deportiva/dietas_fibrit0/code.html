@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&amp;family=Inter:wght@300..700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-secondary-container": "#d2cfd2",
+                    "on-secondary": "#525154",
+                    "inverse-on-surface": "#565556",
+                    "tertiary-fixed-dim": "#ff7c6c",
+                    "surface-container-lowest": "#000000",
+                    "tertiary": "#ff7162",
+                    "on-secondary-fixed-variant": "#5c5b5d",
+                    "background": "#0e0e0f",
+                    "on-primary-container": "#505d00",
+                    "primary-fixed-dim": "#cdea00",
+                    "surface-tint": "#f6ffc0",
+                    "tertiary-fixed": "#ff9385",
+                    "on-surface": "#ffffff",
+                    "secondary": "#e4e2e4",
+                    "on-tertiary": "#4a0001",
+                    "inverse-primary": "#586500",
+                    "on-background": "#ffffff",
+                    "surface-bright": "#2c2c2d",
+                    "surface-container-high": "#201f21",
+                    "outline-variant": "#484849",
+                    "tertiary-container": "#f9362c",
+                    "on-primary": "#586500",
+                    "on-tertiary-container": "#000000",
+                    "tertiary-dim": "#e2241f",
+                    "inverse-surface": "#fcf8f9",
+                    "on-error": "#450900",
+                    "primary-container": "#daf900",
+                    "on-primary-fixed": "#3f4900",
+                    "surface-container": "#1a191b",
+                    "on-primary-fixed-variant": "#596700",
+                    "on-tertiary-fixed": "#3a0001",
+                    "primary": "#f6ffc0",
+                    "surface-dim": "#0e0e0f",
+                    "primary-fixed": "#daf900",
+                    "surface-variant": "#262627",
+                    "outline": "#767576",
+                    "on-surface-variant": "#adaaab",
+                    "surface": "#0e0e0f",
+                    "on-tertiary-fixed-variant": "#7a0004",
+                    "secondary-fixed-dim": "#d6d3d6",
+                    "secondary-container": "#474649",
+                    "secondary-dim": "#d6d3d6",
+                    "on-error-container": "#ffd2c8",
+                    "on-secondary-fixed": "#3f3f41",
+                    "error-container": "#b92902",
+                    "surface-container-highest": "#262627",
+                    "surface-container-low": "#131314",
+                    "error": "#ff7351",
+                    "error-dim": "#d53d18",
+                    "primary-dim": "#d0ed00",
+                    "secondary-fixed": "#e4e2e4"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "fontFamily": {
+                    "headline": ["Space Grotesk"],
+                    "body": ["Inter"],
+                    "label": ["Inter"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: #0e0e0f; color: #ffffff; }
+        .font-technical { font-family: 'Space Grotesk', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .active-nav-glow { box-shadow: 0 0 20px rgba(218, 249, 0, 0.1); }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #0e0e0f; }
+        ::-webkit-scrollbar-thumb { background: #262627; border-radius: 2px; }
+    </style>
+</head>
+<body class="bg-background text-on-background selection:bg-primary-container selection:text-on-primary-container">
+<!-- SideNavBar Component -->
+<aside class="h-screen w-64 fixed left-0 top-0 border-r-0 bg-[#0e0e0f] shadow-[0_0_60px_rgba(218,249,0,0.04)] flex flex-col py-8 z-50">
+<div class="px-6 mb-12">
+<div class="text-2xl font-black tracking-tighter text-[#daf900] uppercase font-headline">FIBRIT0</div>
+<div class="font-['Space_Grotesk'] tracking-tight text-[10px] uppercase font-bold text-on-surface-variant/60">KINETIC LAB</div>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="text-[#adaaab] hover:text-white px-6 py-4 flex items-center gap-4 transition-colors group" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-['Space_Grotesk'] tracking-tight text-sm uppercase font-bold">Dashboard</span>
+</a>
+<a class="text-[#daf900] border-l-4 border-[#daf900] bg-[#201f21] px-6 py-4 flex items-center gap-4 transition-all active-nav-glow" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">restaurant</span>
+<span class="font-['Space_Grotesk'] tracking-tight text-sm uppercase font-bold">Diets</span>
+</a>
+<a class="text-[#adaaab] hover:text-white px-6 py-4 flex items-center gap-4 transition-colors" href="#">
+<span class="material-symbols-outlined">insights</span>
+<span class="font-['Space_Grotesk'] tracking-tight text-sm uppercase font-bold">Progress</span>
+</a>
+<a class="text-[#adaaab] hover:text-white px-6 py-4 flex items-center gap-4 transition-colors" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="font-['Space_Grotesk'] tracking-tight text-sm uppercase font-bold">Profile</span>
+</a>
+</nav>
+<div class="px-6 mt-auto">
+<div class="p-4 rounded-xl bg-surface-container-high flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg overflow-hidden bg-primary-container/10 flex items-center justify-center">
+<img alt="User Performance Profile" class="w-full h-full object-cover" data-alt="close-up portrait of a determined fitness professional with soft studio lighting and dark background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCuwNYGdpG4tS9_VOjhUx2Zhn16Ycg72vFjbS_op_TW-myodhS1pnD-ZdtGu1gq0nUgo7lASs7zZqG71IMd5Gqfx0fmD3eSISZSxMob_8vgqiss8yQ1IIRBU-4Av9NMyQE8-E_yK5Lsx2jscvU2OA4c4ZBz758u1fdWRspjZAfRrmKu2dMtYvY_lB_8WYfkSxvek18sdC3xFvROKSUMtKlxPI2vZ9Gkqc2GA3l5x5YLWIACxEGdk7S9OyTBGV60wgWSIHrCK0k0U0I"/>
+</div>
+<div>
+<div class="text-xs font-bold text-on-surface font-headline uppercase tracking-wider">M. Ross</div>
+<div class="text-[10px] text-on-surface-variant font-medium">ELITE TIER</div>
+</div>
+</div>
+</div>
+</aside>
+<!-- TopNavBar Component -->
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-[#0e0e0f]/60 backdrop-blur-xl flex justify-between items-center px-10 py-6">
+<div class="flex items-center gap-8">
+<h1 class="font-headline text-xl font-black text-[#daf900] tracking-tighter uppercase">Diets Management</h1>
+<div class="flex items-center gap-2 text-on-surface-variant text-xs font-label uppercase tracking-widest">
+<span class="material-symbols-outlined text-[14px]">calendar_today</span>
+<span>Thursday, 24 Oct</span>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="relative group">
+<span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant text-lg">search</span>
+<input class="bg-surface-container-lowest border-none text-[10px] tracking-widest font-bold font-headline pl-10 pr-4 py-2 w-48 rounded-md focus:ring-1 focus:ring-primary-container transition-all text-on-surface" placeholder="SEARCH PROTOCOLS..." type="text"/>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:text-[#f6ffc0] transition-colors"><span class="material-symbols-outlined">notifications</span></button>
+<button class="text-on-surface-variant hover:text-[#f6ffc0] transition-colors"><span class="material-symbols-outlined">settings</span></button>
+</div>
+</div>
+</header>
+<main class="ml-64 pt-28 px-10 pb-12 min-h-screen">
+<!-- Summary Dashboard Section -->
+<section class="mb-12">
+<div class="grid grid-cols-12 gap-8 items-end">
+<div class="col-span-12 lg:col-span-5">
+<div class="text-on-surface-variant font-label text-[10px] tracking-[0.2em] mb-2 uppercase">Daily Performance Index</div>
+<div class="flex items-baseline gap-4">
+<span class="font-headline text-6xl font-bold tracking-tighter text-on-surface">2,480</span>
+<span class="font-headline text-2xl font-bold text-primary-dim tracking-tighter uppercase">kcal</span>
+<div class="ml-auto flex flex-col items-end">
+<span class="text-[10px] font-bold text-tertiary uppercase tracking-tighter mb-1">Target: 2,600 kcal</span>
+<div class="w-32 h-1 bg-surface-container-high relative overflow-hidden">
+<div class="absolute inset-0 bg-primary-container w-[92%]"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="col-span-12 lg:col-span-7">
+<div class="grid grid-cols-3 gap-6">
+<!-- Protein Gauge -->
+<div class="bg-surface-container-low p-4 rounded-xl border-t-2 border-primary-container/20">
+<div class="flex justify-between items-center mb-4">
+<span class="font-label text-[9px] tracking-widest uppercase text-on-surface-variant">Protein</span>
+<span class="font-headline text-primary font-bold text-xs">180g / 200g</span>
+</div>
+<div class="h-1.5 w-full bg-surface-bright rounded-full overflow-hidden">
+<div class="h-full bg-primary-container w-[90%]"></div>
+</div>
+</div>
+<!-- Carbs Gauge -->
+<div class="bg-surface-container-low p-4 rounded-xl border-t-2 border-primary-container/20">
+<div class="flex justify-between items-center mb-4">
+<span class="font-label text-[9px] tracking-widest uppercase text-on-surface-variant">Carbs</span>
+<span class="font-headline text-primary font-bold text-xs">245g / 280g</span>
+</div>
+<div class="h-1.5 w-full bg-surface-bright rounded-full overflow-hidden">
+<div class="h-full bg-primary-container w-[87%]"></div>
+</div>
+</div>
+<!-- Fats Gauge -->
+<div class="bg-surface-container-low p-4 rounded-xl border-t-2 border-primary-container/20">
+<div class="flex justify-between items-center mb-4">
+<span class="font-label text-[9px] tracking-widest uppercase text-on-surface-variant">Fats</span>
+<span class="font-headline text-tertiary font-bold text-xs">68g / 60g</span>
+</div>
+<div class="h-1.5 w-full bg-surface-bright rounded-full overflow-hidden">
+<div class="h-full bg-tertiary w-full"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Meal Grid -->
+<section class="grid grid-cols-1 md:grid-cols-2 gap-10">
+<!-- Breakfast Card -->
+<div class="group relative bg-surface-container-low rounded-xl overflow-hidden transition-all duration-300 hover:bg-surface-container">
+<div class="h-48 relative overflow-hidden">
+<img alt="Nutritious Breakfast" class="w-full h-full object-cover desaturate-[0.4] group-hover:scale-105 transition-transform duration-700" data-alt="High-top view of a bowl of overnight oats with blueberries, almonds, and honey on a dark concrete background with dramatic lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBV97McYwDNYWDyGsUuvxBrjygsVUXBjVlgpqpMC5WoT-hRZ2qDOxcAPiOB7R7WWyhjXJMs0wFQRzvWgMj7X4zzR8OA1eFh6xo5UrD5DnZ30oQzIubpssI_eyvWh2fDH3_B9QToP7-Ba-G9sNi5uWSrvbbmJsSV1vcN1eBe2eiGKOYdX6iwNmXQ50QtGF5QU5W6WlnOpslILCnUYtNvH76Hmjo3aUJz8DKnRf2ahaaacr1wysIdnl9sZ-B7MFcrloDG0X9-LxYaLno"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-low via-transparent to-transparent"></div>
+<div class="absolute bottom-4 left-6">
+<span class="font-label text-[10px] tracking-[0.3em] uppercase text-primary mb-1 block">Phase 01</span>
+<h3 class="font-headline text-2xl font-bold tracking-tight uppercase">Breakfast</h3>
+</div>
+<div class="absolute top-4 right-6 bg-primary-container/90 text-on-primary-container px-3 py-1 rounded-sm text-[10px] font-black uppercase tracking-tighter">
+                        540 KCAL
+                    </div>
+</div>
+<div class="p-6">
+<div class="space-y-4 mb-8">
+<div class="flex justify-between items-center pb-3 border-b border-outline-variant/10">
+<div>
+<div class="text-on-surface text-sm font-bold">Oatmeal with Whey</div>
+<div class="text-on-surface-variant text-[10px] uppercase tracking-wider">Suggested: 80g Oats + 30g Iso-Whey</div>
+</div>
+<div class="text-right">
+<div class="text-primary text-xs font-headline font-bold">110g</div>
+<div class="text-[9px] text-on-surface-variant font-label">ACTUAL</div>
+</div>
+</div>
+<div class="flex justify-between items-center pb-3 border-b border-outline-variant/10">
+<div>
+<div class="text-on-surface text-sm font-bold">Raw Almonds</div>
+<div class="text-on-surface-variant text-[10px] uppercase tracking-wider">Suggested: 15g</div>
+</div>
+<div class="text-right">
+<div class="text-primary text-xs font-headline font-bold">15g</div>
+<div class="text-[9px] text-on-surface-variant font-label">ACTUAL</div>
+</div>
+</div>
+<div class="flex justify-between items-center">
+<div>
+<div class="text-on-surface text-sm font-bold">Blueberries</div>
+<div class="text-on-surface-variant text-[10px] uppercase tracking-wider">Suggested: 50g</div>
+</div>
+<div class="text-right">
+<div class="text-primary text-xs font-headline font-bold">65g</div>
+<div class="text-[9px] text-on-surface-variant font-label">ACTUAL</div>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-4 gap-4">
+<button class="flex-1 py-3 px-4 rounded-md bg-surface-container-highest border border-outline-variant/20 flex items-center justify-center gap-2 hover:bg-surface-bright transition-colors text-[10px] font-headline font-bold uppercase tracking-widest text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">swap_horiz</span>
+                            Swap Food
+                        </button>
+<button class="flex-1 py-3 px-4 rounded-md bg-surface-container-highest border border-outline-variant/20 flex items-center justify-center gap-2 hover:bg-surface-bright transition-colors text-[10px] font-headline font-bold uppercase tracking-widest text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">refresh</span>
+                            Regenerate
+                        </button>
+</div>
+</div>
+</div>
+<!-- Pre-workout Card -->
+<div class="group relative bg-surface-container-low rounded-xl overflow-hidden transition-all duration-300 hover:bg-surface-container">
+<div class="h-48 relative overflow-hidden">
+<img alt="Pre-workout Meal" class="w-full h-full object-cover desaturate-[0.4] group-hover:scale-105 transition-transform duration-700" data-alt="Professional culinary shot of a balanced bowl with grilled chicken breast, quinoa, and avocado slices on a textured charcoal surface" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDAEXQw0p7q1MfKqwHYtz1FLgx7Gi4u4JaGnWaMnLFGRkgW1B5du_SQogH_BLOTMpR4prkuBLkJeCRyr8Lln6EYVhevNXUnSIcZSCcbyuG7CKvwH6DfElVYO5DaGX7rZrNaQ0yKecigPZohpbaxyaxxhoBsfzNB7OcqloM8OHgT6FsAORZEU6mI2_tdKwUGM9LuUfURSH2h7kbFXBAMoR_hkuIjh3dEMdc2W74bPKONbIhEpV8Hy_0-SKfa-uMUAxhZIy9g0lkhzjk"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-low via-transparent to-transparent"></div>
+<div class="absolute bottom-4 left-6">
+<span class="font-label text-[10px] tracking-[0.3em] uppercase text-primary mb-1 block">Phase 02</span>
+<h3 class="font-headline text-2xl font-bold tracking-tight uppercase">Pre-workout</h3>
+</div>
+<div class="absolute top-4 right-6 bg-primary-container/90 text-on-primary-container px-3 py-1 rounded-sm text-[10px] font-black uppercase tracking-tighter">
+                        720 KCAL
+                    </div>
+</div>
+<div class="p-6">
+<div class="space-y-4 mb-8">
+<div class="flex justify-between items-center pb-3 border-b border-outline-variant/10">
+<div>
+<div class="text-on-surface text-sm font-bold">Grilled Chicken Breast</div>
+<div class="text-on-surface-variant text-[10px] uppercase tracking-wider">Suggested: 150g</div>
+</div>
+<div class="text-right">
+<div class="text-primary text-xs font-headline font-bold">150g</div>
+<div class="text-[9px] text-on-surface-variant font-label">ACTUAL</div>
+</div>
+</div>
+<div class="flex justify-between items-center pb-3 border-b border-outline-variant/10">
+<div>
+<div class="text-on-surface text-sm font-bold">White Basmati Rice</div>
+<div class="text-on-surface-variant text-[10px] uppercase tracking-wider">Suggested: 100g (Dry)</div>
+</div>
+<div class="text-right">
+<div class="text-primary text-xs font-headline font-bold">100g</div>
+<div class="text-[9px] text-on-surface-variant font-label">ACTUAL</div>
+</div>
+</div>
+<div class="flex justify-between items-center">
+<div>
+<div class="text-on-surface text-sm font-bold">Steamed Broccoli</div>
+<div class="text-on-surface-variant text-[10px] uppercase tracking-wider">Suggested: 100g</div>
+</div>
+<div class="text-right">
+<div class="text-on-surface-variant text-xs font-headline font-bold">—</div>
+<div class="text-[9px] text-on-surface-variant font-label">PENDING</div>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-4 gap-4">
+<button class="flex-1 py-3 px-4 rounded-md bg-primary-container text-on-primary-container flex items-center justify-center gap-2 hover:brightness-110 transition-all text-[10px] font-headline font-bold uppercase tracking-widest">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                            Confirm Intake
+                        </button>
+<button class="w-12 h-12 rounded-md bg-surface-container-highest border border-outline-variant/20 flex items-center justify-center hover:bg-surface-bright transition-colors text-on-surface-variant">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Lunch Card -->
+<div class="group relative bg-surface-container-low rounded-xl overflow-hidden transition-all duration-300 hover:bg-surface-container">
+<div class="h-48 relative overflow-hidden">
+<img alt="Healthy Lunch" class="w-full h-full object-cover desaturate-[0.4] group-hover:scale-105 transition-transform duration-700" data-alt="Modern high-protein salad with grilled salmon, spinach, and roasted sweet potatoes in a matte black ceramic bowl" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCpKMJ-q8WacUhb0kJjrw-mqTcF3UZ1_Gaibb0mk_bO1kHcQXgvJTBGY0igeB2xtVRi5ChQwo0DKNStBcMKFAlbOXHGE47XVP-GbbV_9bmKzFOTC3Z7roftjEA1chb9zrdRo4YXrlm5DSfTNXu51faxU07aSBHenelviKBMIEi07Qf66_SnZyRWCLczGPSnOHJ-9y9FdOZxdF7EYGNx1sVVIp0Ksj8G2nmqN2wKt_uFGexYPxFmiLPUSi7bjf4RL2CQgSJHPwkCB5g"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-low via-transparent to-transparent"></div>
+<div class="absolute bottom-4 left-6">
+<span class="font-label text-[10px] tracking-[0.3em] uppercase text-primary mb-1 block">Phase 03</span>
+<h3 class="font-headline text-2xl font-bold tracking-tight uppercase">Post-workout Lunch</h3>
+</div>
+<div class="absolute top-4 right-6 bg-surface-container-highest/90 text-on-surface-variant px-3 py-1 rounded-sm text-[10px] font-black uppercase tracking-tighter">
+                        610 KCAL
+                    </div>
+</div>
+<div class="p-6 opacity-60">
+<div class="space-y-4 mb-8">
+<div class="flex justify-between items-center pb-3 border-b border-outline-variant/10">
+<div>
+<div class="text-on-surface text-sm font-bold">Salmon Fillet</div>
+<div class="text-on-surface-variant text-[10px] uppercase tracking-wider">Suggested: 180g</div>
+</div>
+</div>
+<div class="flex justify-between items-center">
+<div>
+<div class="text-on-surface text-sm font-bold">Sweet Potato</div>
+<div class="text-on-surface-variant text-[10px] uppercase tracking-wider">Suggested: 200g</div>
+</div>
+</div>
+</div>
+<div class="text-center py-4 bg-surface-container-lowest/50 rounded-lg text-[10px] font-headline font-bold uppercase tracking-widest text-on-surface-variant">
+                        Unlock after phase 02 confirmation
+                    </div>
+</div>
+</div>
+<!-- Dinner Card -->
+<div class="group relative bg-surface-container-low rounded-xl overflow-hidden transition-all duration-300 hover:bg-surface-container">
+<div class="h-48 relative overflow-hidden">
+<img alt="Technical Dinner" class="w-full h-full object-cover desaturate-[0.4] group-hover:scale-105 transition-transform duration-700" data-alt="Top-down shot of a lean steak with asparagus and garlic butter on a minimalist black platter with rim lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD68Cvr60cNDb_kQrLJA01Ztsyy-puYpHZ-oeirVIrULHVUpXLxCKv5nuJpkj6R3wn_o6lIT3bQy-479vbs_EbsjFpFYACCRSAtV64h1P7S8DHNeErMuxyytYpnYz-TGjRO-jO8x4wWa95yqjqUxvry-XzwFD7-QGo3h4rp16EyCdp_OVg5njNQBze5fbD1YoFot4tQV0F2-BbjvJFEUa18KNnOEvP5uxkv_9T6EAyL3DBxs0KwtE1pf3vcXECW4QhTLIBHJRv9_eE"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-low via-transparent to-transparent"></div>
+<div class="absolute bottom-4 left-6">
+<span class="font-label text-[10px] tracking-[0.3em] uppercase text-primary mb-1 block">Phase 04</span>
+<h3 class="font-headline text-2xl font-bold tracking-tight uppercase">Dinner</h3>
+</div>
+<div class="absolute top-4 right-6 bg-surface-container-highest/90 text-on-surface-variant px-3 py-1 rounded-sm text-[10px] font-black uppercase tracking-tighter">
+                        480 KCAL
+                    </div>
+</div>
+<div class="p-6 opacity-60">
+<div class="space-y-4 mb-8">
+<div class="flex justify-between items-center pb-3 border-b border-outline-variant/10">
+<div>
+<div class="text-on-surface text-sm font-bold">Lean Beef Steak</div>
+<div class="text-on-surface-variant text-[10px] uppercase tracking-wider">Suggested: 150g</div>
+</div>
+</div>
+<div class="flex justify-between items-center">
+<div>
+<div class="text-on-surface text-sm font-bold">Mixed Green Asparagus</div>
+<div class="text-on-surface-variant text-[10px] uppercase tracking-wider">Suggested: Unlimited</div>
+</div>
+</div>
+</div>
+<div class="text-center py-4 bg-surface-container-lowest/50 rounded-lg text-[10px] font-headline font-bold uppercase tracking-widest text-on-surface-variant">
+                        Awaiting Schedule
+                    </div>
+</div>
+</div>
+</section>
+<!-- Floating Control -->
+<div class="fixed bottom-8 right-10 flex gap-4">
+<button class="bg-surface-container-high text-on-surface p-4 rounded-full shadow-[0_0_60px_rgba(218,249,0,0.06)] hover:bg-surface-bright transition-all active:scale-95 flex items-center gap-3 border border-outline-variant/10">
+<span class="material-symbols-outlined">history</span>
+<span class="font-headline font-bold text-xs uppercase tracking-widest">Logs</span>
+</button>
+<button class="bg-primary-container text-on-primary-container p-4 rounded-full shadow-[0_0_60px_rgba(218,249,0,0.2)] hover:brightness-110 transition-all active:scale-95 flex items-center gap-3">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">add</span>
+<span class="font-headline font-bold text-xs uppercase tracking-widest">Add Custom Entry</span>
+</button>
+</div>
+</main>
+</body></html>

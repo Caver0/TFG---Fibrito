@@ -70,8 +70,8 @@ function DietGeneratorForm({ error, isGenerating, message, onGenerate }) {
         <p>Partimos de tu distribucion por comidas y la convertimos en alimentos reales mostrando despues si cada alimento se resolvio con Spoonacular, cache local o catalogo interno.</p>
       </div>
 
-      <form className="diet-form" onSubmit={handleSubmit}>
-        <label>
+      <form className="diet-form diet-form-wide" onSubmit={handleSubmit}>
+        <label className="diet-form-field diet-form-field-compact">
           <span>Numero de comidas</span>
           <select
             name="meals_count"
@@ -85,22 +85,28 @@ function DietGeneratorForm({ error, isGenerating, message, onGenerate }) {
           </select>
         </label>
 
-        <div className="distribution-card">
-          <div className="distribution-card-header">
-            <div>
-              <span className="history-label">Plantilla por defecto</span>
-              <strong>{defaultTemplatePreview}</strong>
+        <div className="distribution-card diet-template-card">
+          <div className="diet-template-card-header">
+            <div className="distribution-card-header">
+              <div>
+                <span className="history-label">Plantilla por defecto</span>
+                <strong>{defaultTemplatePreview}</strong>
+              </div>
+              <button
+                type="button"
+                className="secondary-button distribution-reset"
+                onClick={restoreTemplate}
+              >
+                Restaurar plantilla
+              </button>
             </div>
-            <button
-              type="button"
-              className="secondary-button distribution-reset"
-              onClick={restoreTemplate}
-            >
-              Restaurar plantilla
-            </button>
+
+            <p className={`info-note ${validation.isValid ? '' : 'info-note-warning'}`}>
+              Suma actual: {validation.sum.toFixed(1)}%
+            </p>
           </div>
 
-          <div className="distribution-grid">
+          <div className="distribution-grid diet-template-grid">
             {percentages.map((value, index) => (
               <label key={`${mealsCount}-${index}`}>
                 <span>Comida {index + 1} (%)</span>
@@ -115,13 +121,9 @@ function DietGeneratorForm({ error, isGenerating, message, onGenerate }) {
               </label>
             ))}
           </div>
-
-          <p className={`info-note ${validation.isValid ? '' : 'info-note-warning'}`}>
-            Suma actual: {validation.sum.toFixed(1)}%
-          </p>
         </div>
 
-        <label className="diet-toggle">
+        <label className="diet-toggle diet-toggle-wide">
           <input
             type="checkbox"
             checked={useTrainingOptimization}
@@ -136,7 +138,7 @@ function DietGeneratorForm({ error, isGenerating, message, onGenerate }) {
         </label>
 
         {useTrainingOptimization ? (
-          <label>
+          <label className="diet-form-field diet-form-field-secondary">
             <span>Momento del dia</span>
             <select
               value={trainingTimeOfDay}
@@ -151,19 +153,27 @@ function DietGeneratorForm({ error, isGenerating, message, onGenerate }) {
               ))}
             </select>
           </label>
-        ) : null}
+        ) : (
+          <div className="info-note diet-form-placeholder">
+            Si tu horario de entreno es estable, puedes indicarlo para repartir mejor la energia entre comidas.
+          </div>
+        )}
 
-        {!validation.isValid ? <p className="form-error">{validation.message}</p> : null}
-        {trainingValidationError ? <p className="form-error">{trainingValidationError}</p> : null}
-        {error ? <p className="form-error">{error}</p> : null}
-        {message ? <p className="form-success">{message}</p> : null}
+        <div className="diet-form-feedback">
+          {!validation.isValid ? <p className="form-error">{validation.message}</p> : null}
+          {trainingValidationError ? <p className="form-error">{trainingValidationError}</p> : null}
+          {error ? <p className="form-error">{error}</p> : null}
+          {message ? <p className="form-success">{message}</p> : null}
+        </div>
 
-        <button
-          type="submit"
-          disabled={isGenerating || !validation.isValid || Boolean(trainingValidationError)}
-        >
-          {isGenerating ? 'Generando dieta...' : 'Generar dieta por alimentos'}
-        </button>
+        <div className="diet-form-actions">
+          <button
+            type="submit"
+            disabled={isGenerating || !validation.isValid || Boolean(trainingValidationError)}
+          >
+            {isGenerating ? 'Generando dieta...' : 'Generar dieta por alimentos'}
+          </button>
+        </div>
       </form>
     </section>
   )

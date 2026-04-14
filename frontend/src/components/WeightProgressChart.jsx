@@ -12,6 +12,7 @@ import {
   formatCalories,
   formatLongDate,
   formatShortDate,
+  formatSignedCalories,
   formatSignedWeight,
   formatWeight,
 } from '../utils/dashboardFormat'

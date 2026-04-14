@@ -51,7 +51,7 @@ function ActiveDietOverview({ activeDiet }) {
         <p className="info-note">Todavia no hay una dieta generada para mostrar en el dashboard.</p>
       ) : (
         <>
-          <div className="dashboard-diet-grid">
+          <div className="dashboard-diet-grid dashboard-diet-grid-wide">
             <article className="metric-card">
               <span>Calorias diarias</span>
               <strong>{formatCalories(activeDiet.target_calories)}</strong>
@@ -70,28 +70,30 @@ function ActiveDietOverview({ activeDiet }) {
             </article>
           </div>
 
-          <div className="dashboard-chart-shell dashboard-chart-shell-compact">
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={mealData} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
-                <CartesianGrid stroke="rgba(152, 176, 214, 0.16)" strokeDasharray="4 4" />
-                <XAxis dataKey="short_label" tick={{ fill: '#8fa0bd', fontSize: 12 }} />
-                <YAxis tickFormatter={(value) => `${Math.round(Number(value))}`} tick={{ fill: '#8fa0bd', fontSize: 12 }} />
-                <Tooltip content={buildTooltipContent} />
-                <Bar dataKey="target_calories" fill="#72d8ff" radius={[6, 6, 0, 0]} name="Calorias objetivo" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          <div className="dashboard-diet-content-grid">
+            <div className="dashboard-chart-shell dashboard-chart-shell-compact dashboard-diet-chart-shell">
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={mealData} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+                  <CartesianGrid stroke="rgba(152, 176, 214, 0.16)" strokeDasharray="4 4" />
+                  <XAxis dataKey="short_label" tick={{ fill: '#8fa0bd', fontSize: 12 }} />
+                  <YAxis tickFormatter={(value) => `${Math.round(Number(value))}`} tick={{ fill: '#8fa0bd', fontSize: 12 }} />
+                  <Tooltip content={buildTooltipContent} />
+                  <Bar dataKey="target_calories" fill="#72d8ff" radius={[6, 6, 0, 0]} name="Calorias objetivo" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
 
-          <div className="dashboard-meal-list">
-            {mealData.map((meal) => (
-              <article key={meal.meal_number} className="dashboard-meal-card">
-                <strong>{meal.label}</strong>
-                <span>{formatCalories(meal.target_calories)}</span>
-                <p>
-                  {formatMacro(meal.target_protein_grams)} P / {formatMacro(meal.target_carb_grams)} C / {formatMacro(meal.target_fat_grams)} G
-                </p>
-              </article>
-            ))}
+            <div className="dashboard-meal-list dashboard-meal-list-wide">
+              {mealData.map((meal) => (
+                <article key={meal.meal_number} className="dashboard-meal-card">
+                  <strong>{meal.label}</strong>
+                  <span>{formatCalories(meal.target_calories)}</span>
+                  <p>
+                    {formatMacro(meal.target_protein_grams)} P / {formatMacro(meal.target_carb_grams)} C / {formatMacro(meal.target_fat_grams)} G
+                  </p>
+                </article>
+              ))}
+            </div>
           </div>
 
           <p className="info-note">
