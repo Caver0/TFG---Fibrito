@@ -217,6 +217,7 @@ function DietsPage() {
       setLatestDiet(createdDiet)
       setSelectedDiet(createdDiet)
       await loadDietHistory(token)
+      window.dispatchEvent(new CustomEvent('dashboard:refresh'))
       setGenerateMessage('Dieta diaria por alimentos generada y guardada correctamente.')
       return true
     } catch (error) {
@@ -279,6 +280,7 @@ function DietsPage() {
       setDietActionMessage(response.summary.message)
       setDietActionSummary(response.summary)
       await loadDietHistory(token)
+      window.dispatchEvent(new CustomEvent('dashboard:refresh'))
       return true
     } catch (error) {
       setDietActionError(error.message)
@@ -306,6 +308,7 @@ function DietsPage() {
       setDietActionMessage(response.summary.message)
       setDietActionSummary(response.summary)
       await loadDietHistory(token)
+      window.dispatchEvent(new CustomEvent('dashboard:refresh'))
       return true
     } catch (error) {
       setDietActionError(error.message)
@@ -345,6 +348,7 @@ function DietsPage() {
           dietId,
         },
       }))
+      window.dispatchEvent(new CustomEvent('dashboard:refresh'))
       return true
     } catch (error) {
       setAdherenceError(error.message)

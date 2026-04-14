@@ -8,6 +8,7 @@ from app.core.config import get_settings
 from app.core.database import connect_to_mongo
 from app.routes.adherence import router as adherence_router
 from app.routes.auth import router as auth_router
+from app.routes.dashboard import router as dashboard_router
 from app.routes.diets import router as diets_router
 from app.routes.foods import router as foods_router
 from app.routes.progress import router as progress_router
@@ -44,6 +45,7 @@ app.include_router(progress_router)
 app.include_router(diets_router)
 app.include_router(foods_router)
 app.include_router(adherence_router)
+app.include_router(dashboard_router)
 
 
 @app.get("/")

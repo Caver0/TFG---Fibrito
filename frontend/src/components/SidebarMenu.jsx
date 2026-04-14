@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react'
 
 const SECTIONS = [
   {
+    id: 'panel-dashboard',
+    label: 'Dashboard',
+    description: 'Resumen y progreso',
+  },
+  {
     id: 'panel-perfil',
     label: 'Perfil',
     description: 'Datos y nutricion',

@@ -92,6 +92,7 @@ function ProfilePage() {
       const updatedUser = await userApi.updateNutritionProfile(token, profilePayload)
       replaceUser(updatedUser)
       await loadNutritionSummary(token)
+      window.dispatchEvent(new CustomEvent('dashboard:refresh'))
       setSaveMessage('Perfil nutricional actualizado correctamente.')
     } catch (error) {
       setSaveError(error.message)

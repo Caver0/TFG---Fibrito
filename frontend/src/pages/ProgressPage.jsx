@@ -227,6 +227,7 @@ function ProgressPage() {
     try {
       await weightApi.createWeightEntry(token, payload)
       await reloadAll(token)
+      window.dispatchEvent(new CustomEvent('dashboard:refresh'))
       setSaveMessage('Registro de peso guardado correctamente.')
       return true
     } catch (error) {
@@ -249,6 +250,7 @@ function ProgressPage() {
     try {
       await weightApi.deleteWeightEntry(token, entryId)
       await reloadAll(token)
+      window.dispatchEvent(new CustomEvent('dashboard:refresh'))
     } catch (error) {
       setHistoryError(error.message)
     } finally {
@@ -270,6 +272,7 @@ function ProgressPage() {
       setWeeklyAnalysis(response.analysis)
       await refreshUser(token)
       await reloadWeeklyData(token)
+      window.dispatchEvent(new CustomEvent('dashboard:refresh'))
       if (response.analysis.adjustment_reason.startsWith('Ya existe un analisis guardado')) {
         setApplyMessage(response.analysis.adjustment_reason)
       } else if (response.adjustment?.adjustment_applied) {

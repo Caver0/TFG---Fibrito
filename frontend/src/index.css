@@ -1282,12 +1282,207 @@ button {
   overflow-wrap: anywhere;
 }
 
+.dashboard-page,
+.dashboard-page-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.dashboard-secondary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.dashboard-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.dashboard-stat-card {
+  min-height: 138px;
+}
+
+.dashboard-stat-card small,
+.dashboard-event-card span,
+.dashboard-event-card p,
+.dashboard-meal-card p,
+.dashboard-meal-card span {
+  color: #6b6258;
+}
+
+.dashboard-stat-macros {
+  line-height: 1.35;
+}
+
+.dashboard-chart-panel,
+.dashboard-adherence-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.dashboard-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  color: #5f564d;
+  font-size: 0.92rem;
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 8px;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.legend-dot-weight {
+  background: #c96a2a;
+}
+
+.legend-dot-weekly {
+  background: #1c1a17;
+}
+
+.legend-dot-expected {
+  background: #607d5f;
+}
+
+.legend-dot-adjustment {
+  background: #cf2f24;
+}
+
+.dashboard-chart-shell {
+  border-radius: 20px;
+  border: 1px solid rgba(94, 72, 54, 0.08);
+  background: #fffaf4;
+  padding: 18px 12px 8px;
+}
+
+.dashboard-chart-shell-compact {
+  padding-top: 14px;
+}
+
+.chart-tooltip {
+  max-width: 280px;
+  border-radius: 16px;
+  border: 1px solid rgba(94, 72, 54, 0.12);
+  background: rgba(255, 250, 244, 0.98);
+  box-shadow: 0 16px 30px rgba(73, 54, 39, 0.14);
+  padding: 14px 16px;
+}
+
+.chart-tooltip strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.chart-tooltip p {
+  margin: 0 0 6px;
+  color: #5f564d;
+}
+
+.dashboard-signal-card {
+  border-radius: 18px;
+  padding: 18px;
+  background: #fff4e7;
+}
+
+.dashboard-signal-card p {
+  margin: 10px 0 0;
+  color: #5f564d;
+}
+
+.dashboard-event-grid,
+.dashboard-meal-list,
+.dashboard-diet-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.dashboard-event-grid,
+.dashboard-diet-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dashboard-event-card,
+.dashboard-meal-card {
+  border-radius: 16px;
+  border: 1px solid rgba(94, 72, 54, 0.08);
+  background: #fffaf4;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dashboard-event-card strong,
+.dashboard-meal-card strong {
+  font-size: 1.05rem;
+}
+
+.dashboard-event-card p,
+.dashboard-meal-card p {
+  margin: 0;
+}
+
+.dashboard-adherence-summary {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.9fr) minmax(0, 1.2fr);
+  gap: 16px;
+}
+
+.dashboard-adherence-hero {
+  border-radius: 20px;
+  padding: 22px;
+  background: #fff4e7;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dashboard-adherence-hero strong {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.dashboard-adherence-hero span {
+  color: #8a7b6d;
+  font-weight: 700;
+}
+
+.dashboard-adherence-hero p {
+  margin: 0;
+  color: #5f564d;
+}
+
+.dashboard-adherence-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.dashboard-diet-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dashboard-meal-list {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
 @media (max-width: 900px) {
   .dashboard-layout,
   .profile-page,
   .progress-grid,
   .diets-workspace,
-  .diet-overview-grid {
+  .diet-overview-grid,
+  .dashboard-secondary-grid,
+  .dashboard-adherence-summary {
     grid-template-columns: 1fr;
   }
 
@@ -1295,7 +1490,11 @@ button {
   .diet-distribution-grid,
   .diet-meta-grid,
   .adherence-summary-grid,
-  .weekly-adherence-grid {
+  .weekly-adherence-grid,
+  .dashboard-stats-grid,
+  .dashboard-event-grid,
+  .dashboard-diet-grid,
+  .dashboard-adherence-metrics {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -1361,6 +1560,8 @@ button {
   .diets-workspace,
   .diet-overview-grid,
   .diet-highlight-grid,
+  .dashboard-stats-grid,
+  .dashboard-secondary-grid,
   .meal-summary-grid,
   .diet-distribution-grid,
   .food-list-grid,
@@ -1373,7 +1574,11 @@ button {
   .preference-options-grid,
   .replacement-result-grid,
   .adherence-summary-grid,
-  .weekly-adherence-grid {
+  .weekly-adherence-grid,
+  .dashboard-event-grid,
+  .dashboard-diet-grid,
+  .dashboard-adherence-summary,
+  .dashboard-adherence-metrics {
     grid-template-columns: 1fr;
   }
 

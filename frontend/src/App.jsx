@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import DietsPage from './pages/DietsPage'
+import DashboardPage from './pages/DashboardPage'
 import ProfilePage from './pages/ProfilePage'
 import ProgressPage from './pages/ProgressPage'
 import SidebarMenu from './components/SidebarMenu'
@@ -44,9 +45,11 @@ function App() {
               <span className="eyebrow">Sesion activa</span>
               <h1>Perfil de {user.name}</h1>
               <p className="profile-email">{user.email}</p>
-              <p className="profile-email">Planifica nutricion, progreso, preferencias alimentarias, dieta diaria por alimentos y adherencia real en un mismo panel.</p>
+              <p className="profile-email">Planifica nutricion, progreso, adherencia y dieta diaria por alimentos desde un panel con vista principal de seguimiento.</p>
             </div>
           </div>
+
+          <DashboardPage />
 
           <section id="panel-perfil" className="dashboard-scroll-section">
             <ProfilePage />
