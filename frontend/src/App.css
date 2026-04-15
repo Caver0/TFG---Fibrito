@@ -1250,12 +1250,21 @@
   background: var(--lab-surface-3);
 }
 
-.protocol-chip-button-active,
-.profile-goal-option-active,
-.profile-toggle-active {
+.protocol-chip-button-active {
   color: var(--lab-lime);
   background: rgba(218, 249, 0, 0.1);
   border-color: rgba(218, 249, 0, 0.2);
+}
+
+.profile-goal-option.profile-goal-option-active,
+.profile-sex-toggle button.profile-toggle-active {
+  color: #000;
+  background: var(--lab-lime);
+  border-color: var(--lab-lime);
+}
+
+.profile-goal-option-active span {
+  color: #000;
 }
 
 .replacement-lab-layout {
