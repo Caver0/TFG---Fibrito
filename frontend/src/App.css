@@ -745,6 +745,15 @@
   color: var(--lab-muted);
 }
 
+.profile-page,
+.progress-page,
+.diets-page,
+.dashboard-page {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
 .dashboard-main-layout,
 .diets-hero-layout,
 .diets-support-layout,
