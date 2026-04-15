@@ -11,6 +11,8 @@ import os
 import sys
 
 os.environ["MONGODB_URL"] = "mongodb://localhost:27017"
+os.environ.setdefault("MONGO_DB_NAME", "fibrito")
+os.environ.setdefault("JWT_SECRET_KEY", "dev-script-secret")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import matplotlib.patches as mpatches

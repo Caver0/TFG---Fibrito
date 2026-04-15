@@ -1,12 +1,12 @@
-"""Motor de Clasificación de Alimentos (Auto-Tagger) usando Machine Learning (KNN) + reglas híbridas."""
+"""Motor de Clasificación de Alimentos (Auto-Tagger) usando Machine Learning (ExtraTrees) + reglas híbridas."""
 
 import logging
 from pathlib import Path
 
 import joblib
 import numpy as np
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.preprocessing import MultiLabelBinarizer, StandardScaler
+from sklearn.ensemble import ExtraTreesClassifier
+from sklearn.preprocessing import MultiLabelBinarizer
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +19,7 @@ _MODEL_PATH = _MODEL_DIR / "food_classifier.pkl"
 # ---------------------------------------------------------------------------
 # Estado global en memoria (inferencia zero-latency)
 # ---------------------------------------------------------------------------
-_knn_model: KNeighborsClassifier | None = None
-_scaler: StandardScaler | None = None
+_model: ExtraTreesClassifier | None = None
 _mlb: MultiLabelBinarizer | None = None
 _is_trained: bool = False
 _training_samples: int = 0
@@ -54,8 +53,10 @@ CATEGORY_TO_SCORE: dict[str, float] = {
     "otros":         0.5,
 }
 
-# Umbral mínimo de confianza ML para preferir la predicción KNN sobre las reglas
-ML_CONFIDENCE_THRESHOLD = 0.55
+# Umbral mínimo de confianza ML para preferir la predicción sobre las reglas.
+# ExtraTrees da probabilidades continuas (0.01 granularidad con 100 estimadores),
+# por lo que 0.45 es más adecuado que el 0.55 que usábamos con KNN.
+ML_CONFIDENCE_THRESHOLD = 0.45
 
 
 # ---------------------------------------------------------------------------
@@ -70,7 +71,10 @@ def _extract_features(food_data: dict) -> list[float]:
     - Las proporciones calóricas (primeras 3) hacen el vector scale-invariant.
     - fiber_ratio discrimina cereales/frutas (alto) vs arroz/pasta (bajo).
     - sugar_ratio discrimina frutas (alto) vs cereales complejos (bajo).
-    - category_score inyecta conocimiento semántico sin necesidad de one-hot encoding.
+    - category_score inyecta conocimiento semántico sin one-hot encoding.
+
+    ExtraTreesClassifier no requiere normalización — los árboles de decisión son
+    invariantes a la escala de las features.
     """
     cals = float(food_data.get("calories", 0))
 
@@ -106,8 +110,7 @@ def _save_model() -> None:
         _MODEL_DIR.mkdir(parents=True, exist_ok=True)
         joblib.dump(
             {
-                "knn": _knn_model,
-                "scaler": _scaler,
+                "model": _model,
                 "mlb": _mlb,
                 "training_samples": _training_samples,
             },
@@ -120,15 +123,18 @@ def _save_model() -> None:
 
 def _load_model() -> bool:
     """Carga el modelo persistido desde disco. Devuelve True si tuvo éxito."""
-    global _knn_model, _scaler, _mlb, _is_trained, _training_samples
+    global _model, _mlb, _is_trained, _training_samples
 
     if not _MODEL_PATH.exists():
         return False
 
     try:
         state = joblib.load(_MODEL_PATH)
-        _knn_model = state["knn"]
-        _scaler = state["scaler"]
+        # Compatibilidad con el formato antiguo (KNN + scaler)
+        if "knn" in state:
+            logger.info("[Auto-Tagger] Modelo antiguo (KNN) detectado — se reentrenará con ExtraTrees.")
+            return False
+        _model = state["model"]
         _mlb = state["mlb"]
         _training_samples = state.get("training_samples", 0)
         _is_trained = True
@@ -147,8 +153,15 @@ def _load_model() -> bool:
 # ---------------------------------------------------------------------------
 
 def train_classifier(database) -> bool:
-    """Entrena el KNN con todos los alimentos etiquetados de la BBDD y persiste el modelo."""
-    global _knn_model, _scaler, _mlb, _is_trained, _training_samples
+    """Entrena ExtraTreesClassifier con todos los alimentos etiquetados de la BBDD.
+
+    Ventajas sobre KNN:
+    - class_weight='balanced' corrige el sesgo hacia la clase mayoritaria ('main').
+    - Invariante a escala — no necesita StandardScaler.
+    - Feature importance disponible para diagnóstico.
+    - Inference O(log n) en lugar de O(n·d).
+    """
+    global _model, _mlb, _is_trained, _training_samples
 
     collection = database.foods_catalog
     cursor = collection.find({"suitable_meals": {"$exists": True, "$not": {"$size": 0}}})
@@ -158,40 +171,45 @@ def train_classifier(database) -> bool:
         _is_trained = False
         return False
 
-    X_raw = [_extract_features(food) for food in labeled_foods]
+    X = np.array([_extract_features(food) for food in labeled_foods])
     y_raw = [food["suitable_meals"] for food in labeled_foods]
 
-    X_np = np.array(X_raw)
-    _scaler = StandardScaler()
-    X_scaled = _scaler.fit_transform(X_np)
-
     _mlb = MultiLabelBinarizer()
-    y_bin = _mlb.fit_transform(y_raw)
+    y = _mlb.fit_transform(y_raw)
 
-    # k=7 da mejor generalización que k=5 cuando hay suficientes muestras
-    k = min(7, len(labeled_foods))
-    _knn_model = KNeighborsClassifier(n_neighbors=k, weights="distance", metric="euclidean")
-    _knn_model.fit(X_scaled, y_bin)
+    _model = ExtraTreesClassifier(
+        n_estimators=200,        # 200 árboles — mayor estabilidad con datasets pequeños
+        class_weight="balanced", # Corrige el desequilibrio main >> early/late/snack
+        max_features="sqrt",     # Subconjunto aleatorio de features por split
+        min_samples_leaf=1,      # Permite splits muy finos con pocos datos
+        random_state=42,
+        n_jobs=-1,               # Paralelismo completo
+    )
+    _model.fit(X, y)
 
     _training_samples = len(labeled_foods)
     _is_trained = True
 
     _save_model()
+
+    # Log de importancia de features para diagnóstico
+    feature_names = ["protein_ratio", "fat_ratio", "carb_ratio", "fiber_ratio", "sugar_ratio", "category_score"]
+    importances = _model.feature_importances_
+    ranked = sorted(zip(feature_names, importances), key=lambda x: x[1], reverse=True)
+    logger.info("[Auto-Tagger] Feature importances: %s", ranked)
+
     return True
 
 
 def load_or_train_classifier(database) -> bool:
-    """
-    Estrategia de inicio: intenta cargar el modelo desde disco antes de reentrenar.
-    Evita el coste de reentrenamiento en cada startup cuando el catálogo no ha cambiado.
-    """
+    """Estrategia de inicio: carga desde disco antes de reentrenar."""
     if _load_model():
         return True
     return train_classifier(database)
 
 
 def invalidate_model_cache() -> None:
-    """Elimina el modelo persistido en disco para forzar reentrenamiento en el próximo startup."""
+    """Elimina el modelo persistido en disco para forzar reentrenamiento."""
     global _is_trained
     try:
         if _MODEL_PATH.exists():
@@ -231,26 +249,22 @@ def _classify_by_dominant_macro(food_data: dict) -> list[str]:
 def predict_suitable_meals(food_data: dict) -> list[str]:
     """Sistema de clasificación híbrido en 3 niveles (orden decreciente de confianza):
 
-    1. ML (KNN) — si la confianza máxima supera ML_CONFIDENCE_THRESHOLD.
-    2. Reglas por categoría — deterministas y auditables, sin depender de datos.
+    1. ML (ExtraTrees) — si la confianza máxima supera ML_CONFIDENCE_THRESHOLD.
+    2. Reglas por categoría — deterministas y auditables.
     3. Macro dominante — inferencia numérica pura como último recurso.
-
-    Este diseño garantiza que siempre se devuelve una predicción razonable
-    incluso cuando el modelo ML no está entrenado o tiene baja confianza.
     """
     # Nivel 1: predicción ML con control de confianza
-    if _is_trained and _knn_model is not None and _scaler is not None and _mlb is not None:
+    if _is_trained and _model is not None and _mlb is not None:
         try:
-            x_features = _extract_features(food_data)
-            x_scaled = _scaler.transform([x_features])
+            x = np.array([_extract_features(food_data)])
 
-            # predict_proba devuelve una lista de arrays (uno por label binarizado).
+            # predict_proba devuelve lista de arrays (uno por label binarizado).
             # Cada array tiene forma (n_samples, 2): [prob_clase_0, prob_clase_1].
-            proba_list = _knn_model.predict_proba(x_scaled)
+            proba_list = _model.predict_proba(x)
             max_confidence = max(p[0][1] for p in proba_list) if proba_list else 0.0
 
             if max_confidence >= ML_CONFIDENCE_THRESHOLD:
-                prediction_bin = _knn_model.predict(x_scaled)
+                prediction_bin = _model.predict(x)
                 predicted_labels = _mlb.inverse_transform(prediction_bin)
                 if predicted_labels and predicted_labels[0]:
                     return list(predicted_labels[0])
@@ -273,11 +287,18 @@ def predict_suitable_meals(food_data: dict) -> list[str]:
 
 def get_classifier_status() -> dict:
     """Estado del clasificador para health-checks y diagnóstico."""
+    feature_importances = {}
+    if _model is not None:
+        feature_names = ["protein_ratio", "fat_ratio", "carb_ratio", "fiber_ratio", "sugar_ratio", "category_score"]
+        feature_importances = dict(zip(feature_names, _model.feature_importances_.tolist()))
+
     return {
         "is_trained": _is_trained,
+        "model_type": "ExtraTreesClassifier",
         "training_samples": _training_samples,
         "model_cached_on_disk": _MODEL_PATH.exists(),
         "confidence_threshold": ML_CONFIDENCE_THRESHOLD,
         "feature_dimensions": 6,
         "known_classes": list(_mlb.classes_) if _mlb else [],
+        "feature_importances": feature_importances,
     }

@@ -10,6 +10,8 @@ import os
 import sys
 
 os.environ["MONGODB_URL"] = "mongodb://localhost:27017"
+os.environ.setdefault("MONGO_DB_NAME", "fibrito")
+os.environ.setdefault("JWT_SECRET_KEY", "dev-script-secret")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from app.core.database import get_database
@@ -31,9 +33,9 @@ BREAKFAST_FOODS = [
     ("Yogur natural sin azúcar",        3.5,  3.3,  4.7, "lacteos",         0.0,  4.7),
     ("Yogur griego natural",            9.0,  5.0,  4.0, "lacteos",         0.0,  4.0),
     ("Queso fresco batido 0%",         10.5,  0.2,  3.8, "lacteos",         0.0,  3.8),
-    # Huevos: sin fibra, sin azúcar
-    ("Huevo entero crudo",             12.6,  9.5,  0.7, "proteinas",       0.0,  0.7),
-    ("Clara de huevo cruda",           10.9,  0.2,  0.7, "proteinas",       0.0,  0.7),
+    # Huevos: sin fibra, sin azúcar — válidos en desayuno Y comidas principales
+    ("Huevo entero crudo",              12.6,  9.5,  0.7, "proteinas",      0.0,  0.7),
+    ("Clara de huevo cruda",            10.9,  0.2,  0.7, "proteinas",      0.0,  0.7),
     # Frutas: fibra media, azúcar alta
     ("Plátano (Banana)",                1.1,  0.3, 22.8, "frutas",          2.6, 12.2),
     ("Fresas frescas",                  0.7,  0.3,  7.7, "frutas",          2.0,  4.9),
@@ -50,6 +52,9 @@ BREAKFAST_FOODS = [
 ]
 
 LUNCH_FOODS = [
+    # Proteínas versátiles (también válidas en desayuno pero principales en comida/cena)
+    ("Huevo entero crudo",              12.6,  9.5,  0.7, "proteinas",      0.0,  0.7),
+    ("Clara de huevo cruda",            10.9,  0.2,  0.7, "proteinas",      0.0,  0.7),
     # Proteínas magras: nada de fibra, nada de azúcar
     ("Pechuga de pollo cruda",          23.1,  1.2,  0.0, "proteinas",      0.0,  0.0),
     ("Pechuga de pavo cruda",           22.0,  1.0,  0.0, "proteinas",      0.0,  0.0),
