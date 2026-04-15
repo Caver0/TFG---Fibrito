@@ -19,6 +19,7 @@ from app.services.spoonacular_service import (
     search_ingredients,
 )
 from app.utils.normalization import build_food_aliases, normalize_food_name
+from app.services.food_classifier_service import predict_suitable_meals
 
 INTERNAL_FOOD_SOURCE = "internal_catalog"
 LOCAL_CACHE_FOOD_SOURCE = "local_cache"
@@ -496,9 +497,15 @@ def get_cached_food(
 def cache_spoonacular_food(database, food: dict[str, Any]) -> dict[str, Any]:
     collection = database.foods_catalog
     now = datetime.now(UTC)
+    
+    # AI Auto-Tagging
+    food_to_cache = deepcopy(food)
+    if not food_to_cache.get("suitable_meals"):
+        food_to_cache["suitable_meals"] = predict_suitable_meals(food_to_cache)
+        
     document = {
-        **deepcopy(food),
-        "display_name": food["name"],
+        **food_to_cache,
+        "display_name": food_to_cache["name"],
         "source": SPOONACULAR_FOOD_SOURCE,
         "origin_source": SPOONACULAR_FOOD_SOURCE,
         "updated_at": now,

@@ -20,7 +20,17 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    connect_to_mongo()
+    client = connect_to_mongo()
+    db = client[settings.mongo_db_name]
+    try:
+        from app.services.food_classifier_service import load_or_train_classifier
+        success = load_or_train_classifier(db)
+        if success:
+            print("[Auto-Tagger] ML Classifier listo.")
+        else:
+            print("[Auto-Tagger] Datos insuficientes para entrenar. Usando reglas híbridas.")
+    except Exception as e:
+        print(f"[Auto-Tagger] Advertencia: no se pudo inicializar el clasificador ML: {e}")
     yield
 
 

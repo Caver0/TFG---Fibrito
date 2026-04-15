@@ -1,5 +1,5 @@
 """Food-based diet generation and persistence."""
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from itertools import product
 from typing import Any
 
@@ -106,6 +106,17 @@ REPEAT_ESCALATION_BY_ROLE = {
     "dairy": 0.18,
 }
 REPEATED_MAIN_PAIR_PENALTY = 0.5
+# Penalización suave por repetir el mismo alimento a lo largo de la semana.
+# Mucho más baja que la diaria para desincentivar sin prohibir.
+WEEKLY_REPEAT_PENALTY_BY_ROLE = {
+    "protein": 0.12,
+    "carb": 0.08,
+    "fat": 0.0,      # Las grasas (aceite, aguacate) se repiten siempre y está bien
+    "fruit": 0.04,
+    "vegetable": 0.02,
+    "dairy": 0.06,
+}
+WEEKLY_DIVERSITY_WINDOW_DAYS = 6  # Días hacia atrás para calcular la ventana semanal
 
 
 def normalize_diet_food_source(value: str | None) -> str:
@@ -380,6 +391,45 @@ def create_daily_food_usage_tracker() -> dict[str, dict]:
     }
 
 
+def build_weekly_food_usage(database, user_id: str) -> dict[str, int]:
+    """Construye un contador de food_code → nº de apariciones en los últimos WEEKLY_DIVERSITY_WINDOW_DAYS días.
+
+    Consulta el historial de dietas del usuario para penalizar suavemente
+    los alimentos que ya han aparecido mucho durante la semana.
+    Devuelve un dict vacío si no hay historial o si la consulta falla.
+    """
+    try:
+        since = datetime.now(UTC) - timedelta(days=WEEKLY_DIVERSITY_WINDOW_DAYS)
+        cursor = database.diets.find(
+            {"user_id": ObjectId(user_id), "created_at": {"$gte": since}},
+            {"meals.foods.food_code": 1, "_id": 0},
+        )
+        weekly_counts: dict[str, int] = {}
+        for diet in cursor:
+            for meal in diet.get("meals", []):
+                for food in meal.get("foods", []):
+                    code = food.get("food_code")
+                    if code:
+                        weekly_counts[code] = weekly_counts.get(code, 0) + 1
+        return weekly_counts
+    except Exception:
+        return {}
+
+
+def apply_weekly_repeat_penalty(food_code: str, *, role: str, weekly_food_usage: dict | None) -> float:
+    """Penalización suave (semanal) por repetir el mismo alimento.
+
+    Se acumula por encima de la penalización diaria para fomentar variedad
+    a lo largo de la semana sin forzar cambios rígidos.
+    """
+    if not weekly_food_usage:
+        return 0.0
+    weekly_count = int(weekly_food_usage.get(food_code, 0))
+    if weekly_count <= 0:
+        return 0.0
+    return WEEKLY_REPEAT_PENALTY_BY_ROLE.get(role, 0.0) * weekly_count
+
+
 def track_food_usage_across_day(daily_food_usage: dict[str, dict], meal_plan: dict) -> None:
     selected_role_codes = meal_plan.get("selected_role_codes", {})
     protein_code = selected_role_codes.get("protein")
@@ -479,57 +529,50 @@ def get_role_candidate_codes(
     meal_index: int,
     meals_count: int,
     training_focus: bool,
+    food_lookup: dict[str, dict] | None = None,
 ) -> dict[str, list[str]]:
     meal_slot = get_meal_slot(meal_index, meals_count)
     rotation_seed = meal_index + meals_count
     low_fat_focus = training_focus or meal.target_fat_grams <= 10
 
-    if meal_slot == "early":
-        if low_fat_focus:
-            protein_codes = ["egg_whites", "turkey_breast", "greek_yogurt", "chicken_breast"]
-        elif meal.target_carb_grams <= 14:
-            protein_codes = ["eggs", "tuna", "turkey_breast", "chicken_breast"]
-        else:
-            protein_codes = ["turkey_breast", "egg_whites", "greek_yogurt", "eggs", "chicken_breast"]
+    protein_codes = []
+    carb_codes = []
+    fat_codes = []
 
-        if meal.target_carb_grams >= 70:
-            carb_codes = ["oats", "whole_wheat_bread", "rice", "banana", "potato"]
-        elif meal.target_carb_grams >= 30:
-            carb_codes = ["whole_wheat_bread", "oats", "rice", "banana", "potato"]
-        else:
-            carb_codes = ["potato", "whole_wheat_bread", "banana", "rice"]
-    elif meal_slot == "late":
-        if low_fat_focus:
-            protein_codes = ["turkey_breast", "tuna", "chicken_breast", "egg_whites"]
-        elif meal.target_carb_grams <= 14:
-            protein_codes = ["tuna", "eggs", "turkey_breast", "chicken_breast"]
-        else:
-            protein_codes = ["turkey_breast", "tuna", "chicken_breast", "eggs"]
+    # Uso del Algoritmo de ML (suitable_meals) para derivar candidatos si hay catálogo
+    if food_lookup:
+        for code, f_data in food_lookup.items():
+            suitable = f_data.get("suitable_meals", [])
+            # Los alimentos genéricos o desconocidos caen en 'main' por KNN
+            if meal_slot in suitable or (meal_slot == "late" and "main" in suitable):
+                f_group = f_data.get("functional_group")
+                if f_group == "protein" and code not in protein_codes:
+                    protein_codes.append(code)
+                elif f_group == "carb" and code not in carb_codes:
+                    carb_codes.append(code)
+                elif f_group == "fat" and code not in fat_codes:
+                    fat_codes.append(code)
 
-        if meal.target_carb_grams >= 100:
-            carb_codes = ["rice", "pasta", "potato", "banana"]
-        elif meal.target_carb_grams >= 35:
-            carb_codes = ["rice", "potato", "pasta", "whole_wheat_bread", "banana"]
+    # Fallbacks hardcodeados en caso de que la búsqueda dinámica falle por BBDD vacía
+    if len(protein_codes) < 2:
+        if meal_slot == "early":
+            protein_codes.extend(["egg_whites", "turkey_breast", "greek_yogurt", "chicken_breast", "eggs"])
         else:
-            carb_codes = ["potato", "whole_wheat_bread", "rice", "banana"]
-    else:
-        if low_fat_focus:
-            protein_codes = ["chicken_breast", "turkey_breast", "tuna", "egg_whites"]
-        elif meal.target_carb_grams <= 14:
-            protein_codes = ["tuna", "eggs", "chicken_breast", "turkey_breast"]
-        else:
-            protein_codes = ["chicken_breast", "turkey_breast", "tuna", "eggs"]
+            protein_codes.extend(["chicken_breast", "turkey_breast", "tuna", "egg_whites", "eggs"])
 
-        if meal.target_carb_grams >= 120:
-            carb_codes = ["rice", "pasta", "potato"]
-        elif meal.target_carb_grams >= 45:
-            carb_codes = ["rice", "potato", "pasta", "whole_wheat_bread", "banana"]
+    if len(carb_codes) < 2:
+        if meal_slot == "early":
+            carb_codes.extend(["oats", "whole_wheat_bread", "rice", "banana", "potato"])
         else:
-            carb_codes = ["potato", "whole_wheat_bread", "rice", "banana"]
+            carb_codes.extend(["rice", "pasta", "potato", "whole_wheat_bread", "banana"])
 
-    fat_codes = ["olive_oil", "avocado", "mixed_nuts"]
-    if meal.target_fat_grams >= 16 and not training_focus:
-        fat_codes = ["avocado", "olive_oil", "mixed_nuts"]
+    if len(fat_codes) < 2:
+        fat_codes.extend(["olive_oil", "avocado", "mixed_nuts"])
+
+    # Eliminar duplicados manteniendo orden visual
+    protein_codes = list(dict.fromkeys(protein_codes))
+    carb_codes = list(dict.fromkeys(carb_codes))
+    fat_codes = list(dict.fromkeys(fat_codes))
 
     return {
         "protein": rotate_codes(protein_codes, rotation_seed),
@@ -701,6 +744,7 @@ def build_solution_score(
     meal_slot: str,
     preference_profile: dict | None = None,
     daily_food_usage: dict | None = None,
+    weekly_food_usage: dict | None = None,
 ) -> float:
     score = 0.0
 
@@ -721,6 +765,11 @@ def build_solution_score(
             food["code"],
             role=role,
             daily_food_usage=daily_food_usage,
+        )
+        score += apply_weekly_repeat_penalty(
+            food["code"],
+            role=role,
+            weekly_food_usage=weekly_food_usage,
         )
 
         if quantity < soft_minimum:
@@ -778,6 +827,7 @@ def build_exact_meal_solution(
     meal_slot: str,
     preference_profile: dict | None = None,
     daily_food_usage: dict | None = None,
+    weekly_food_usage: dict | None = None,
 ) -> dict | None:
     all_codes = [
         role_foods["protein"]["code"],
@@ -891,6 +941,7 @@ def build_exact_meal_solution(
             meal_slot=meal_slot,
             preference_profile=preference_profile,
             daily_food_usage=daily_food_usage,
+            weekly_food_usage=weekly_food_usage,
         ),
         **exact_actuals,
     }
@@ -905,6 +956,7 @@ def find_exact_solution_for_meal(
     food_lookup: dict[str, dict],
     preference_profile: dict | None = None,
     daily_food_usage: dict | None = None,
+    weekly_food_usage: dict | None = None,
     forced_role_codes: dict[str, str] | None = None,
     forced_support_foods: list[dict] | None = None,
     excluded_food_codes: set[str] | None = None,
@@ -914,6 +966,7 @@ def find_exact_solution_for_meal(
         meal_index=meal_index,
         meals_count=meals_count,
         training_focus=training_focus,
+        food_lookup=food_lookup,
     )
     support_options = get_support_option_specs(
         meal=meal,
@@ -973,6 +1026,7 @@ def find_exact_solution_for_meal(
                     meal_slot=meal_slot,
                     preference_profile=preference_profile,
                     daily_food_usage=daily_food_usage,
+                    weekly_food_usage=weekly_food_usage,
                 )
                 if not candidate_solution:
                     continue
@@ -1300,7 +1354,17 @@ def generate_food_based_diet(
         training_time_of_day=training_time_of_day,
     )
     internal_food_lookup = get_internal_food_lookup()
+    
+    from app.schemas.food import serialize_food_catalog_item
+    from copy import deepcopy
+    full_food_lookup = deepcopy(internal_food_lookup)
+    local_foods_cursor = database.foods_catalog.find({"suitable_meals": {"$exists": True, "$not": {"$size": 0}}})
+    for doc in local_foods_cursor:
+        serialized_dict = serialize_food_catalog_item(doc).model_dump()
+        full_food_lookup[serialized_dict["code"]] = serialized_dict
+        
     daily_food_usage = create_daily_food_usage_tracker()
+    weekly_food_usage = build_weekly_food_usage(database, user.id)
     planned_meals: list[dict] = []
     for meal_index, meal in enumerate(meal_distribution["meals"]):
         planned_meal = find_exact_solution_for_meal(
@@ -1308,19 +1372,26 @@ def generate_food_based_diet(
             meal_index=meal_index,
             meals_count=meals_count,
             training_focus=meal_distribution["training_optimization_applied"] and meal_index in focus_indexes,
-            food_lookup=internal_food_lookup,
+            food_lookup=full_food_lookup,
             preference_profile=preference_profile,
             daily_food_usage=daily_food_usage,
+            weekly_food_usage=weekly_food_usage,
         )
         planned_meals.append(planned_meal)
         track_food_usage_across_day(daily_food_usage, planned_meal)
+        
     selected_food_codes = collect_selected_food_codes(planned_meals)
+    internal_codes_to_resolve = [c for c in selected_food_codes if c in internal_food_lookup]
     resolved_food_lookup, lookup_metadata = resolve_foods_by_codes(
         database,
-        selected_food_codes,
+        internal_codes_to_resolve,
     )
+    
+    # We must mock some metadata properties if no internal codes were resolved 
+    if not internal_codes_to_resolve:
+        lookup_metadata["resolved_foods_count"] = len(selected_food_codes)
     food_lookup = {
-        **internal_food_lookup,
+        **full_food_lookup,
         **resolved_food_lookup,
     }
     generated_meals = [
