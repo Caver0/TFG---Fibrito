@@ -1,25 +1,25 @@
 export const STITCH_DIET_VISUALS = [
   {
-    phase: 'Phase 01',
-    label: 'Breakfast',
+    phase: 'Fase 01',
+    label: 'Desayuno',
     imageUrl:
       'https://lh3.googleusercontent.com/aida-public/AB6AXuBV97McYwDNYWDyGsUuvxBrjygsVUXBjVlgpqpMC5WoT-hRZ2qDOxcAPiOB7R7WWyhjXJMs0wFQRzvWgMj7X4zzR8OA1eFh6xo5UrD5DnZ30oQzIubpssI_eyvWh2fDH3_B9QToP7-Ba-G9sNi5uWSrvbbmJsSV1vcN1eBe2eiGKOYdX6iwNmXQ50QtGF5QU5W6WlnOpslILCnUYtNvH76Hmjo3aUJz8DKnRf2ahaaacr1wysIdnl9sZ-B7MFcrloDG0X9-LxYaLno',
   },
   {
-    phase: 'Phase 02',
-    label: 'Pre-workout',
+    phase: 'Fase 02',
+    label: 'Pre-entrenamiento',
     imageUrl:
       'https://lh3.googleusercontent.com/aida-public/AB6AXuDAEXQw0p7q1MfKqwHYtz1FLgx7Gi4u4JaGnWaMnLFGRkgW1B5du_SQogH_BLOTMpR4prkuBLkJeCRyr8Lln6EYVhevNXUnSIcZSCcbyuG7CKvwH6DfElVYO5DaGX7rZrNaQ0yKecigPZohpbaxyaxxhoBsfzNB7OcqloM8OHgT6FsAORZEU6mI2_tdKwUGM9LuUfURSH2h7kbFXBAMoR_hkuIjh3dEMdc2W74bPKONbIhEpV8Hy_0-SKfa-uMUAxhZIy9g0lkhzjk',
   },
   {
-    phase: 'Phase 03',
-    label: 'Post-workout lunch',
+    phase: 'Fase 03',
+    label: 'Post-entrenamiento',
     imageUrl:
       'https://lh3.googleusercontent.com/aida-public/AB6AXuCpKMJ-q8WacUhb0kJjrw-mqTcF3UZ1_Gaibb0mk_bO1kHcQXgvJTBGY0igeB2xtVRi5ChQwo0DKNStBcMKFAlbOXHGE47XVP-GbbV_9bmKzFOTC3Z7roftjEA1chb9zrdRo4YXrlm5DSfTNXu51faxU07aSBHenelviKBMIEi07Qf66_SnZyRWCLczGPSnOHJ-9y9FdOZxdF7EYGNx1sVVIp0Ksj8G2nmqN2wKt_uFGexYPxFmiLPUSi7bjf4RL2CQgSJHPwkCB5g',
   },
   {
-    phase: 'Phase 04',
-    label: 'Dinner',
+    phase: 'Fase 04',
+    label: 'Cena',
     imageUrl:
       'https://lh3.googleusercontent.com/aida-public/AB6AXuD68Cvr60cNDb_kQrLJA01Ztsyy-puYpHZ-oeirVIrULHVUpXLxCKv5nuJpkj6R3wn_o6lIT3bQy-479vbs_EbsjFpFYACCRSAtV64h1P7S8DHNeErMuxyytYpnYz-TGjRO-jO8x4wWa95yqjqUxvry-XzwFD7-QGo3h4rp16EyCdp_OVg5njNQBze5fbD1YoFot4tQV0F2-BbjvJFEUa18KNnOEvP5uxkv_9T6EAyL3DBxs0KwtE1pf3vcXECW4QhTLIBHJRv9_eE',
   },
@@ -115,12 +115,12 @@ export function formatPercent(value, digits = 1) {
 
 export function formatDateLabel(value, options = {}) {
   if (!value) {
-    return 'No date'
+    return 'Sin fecha'
   }
 
   const parsedDate = new Date(value)
   if (Number.isNaN(parsedDate.getTime())) {
-    return 'No date'
+    return 'Sin fecha'
   }
 
   return new Intl.DateTimeFormat('en-GB', {
@@ -132,12 +132,12 @@ export function formatDateLabel(value, options = {}) {
 
 export function formatDayLabel(value) {
   if (!value) {
-    return 'DAY'
+    return 'DÍA'
   }
 
   const parsedDate = new Date(value)
   if (Number.isNaN(parsedDate.getTime())) {
-    return 'DAY'
+    return 'DÍA'
   }
 
   return new Intl.DateTimeFormat('en-US', {
@@ -149,80 +149,80 @@ export function formatDayLabel(value) {
 
 export function formatGoalLabel(goal) {
   if (goal === 'perder_grasa') {
-    return 'Shred / Cut'
+    return 'Definición / Pérdida'
   }
   if (goal === 'mantener_peso') {
-    return 'Maintenance'
+    return 'Mantenimiento'
   }
   if (goal === 'ganar_masa') {
-    return 'Hypertrophy / Bulk'
+    return 'Hipertrofia / Volumen'
   }
-  return 'Profile setup'
+  return 'Configuración de perfil'
 }
 
 export function formatGoalPhase(goal) {
   if (goal === 'perder_grasa') {
-    return 'PHASE: RECOMPOSITION'
+    return 'FASE: RECOMPOSICIÓN'
   }
   if (goal === 'ganar_masa') {
-    return 'PHASE: GROWTH'
+    return 'FASE: CRECIMIENTO'
   }
   if (goal === 'mantener_peso') {
-    return 'PHASE: MAINTENANCE'
+    return 'FASE: MANTENIMIENTO'
   }
-  return 'PHASE: PROFILE SETUP'
+  return 'FASE: CONFIGURACIÓN'
 }
 
 export function formatGoalDescription(goal) {
   if (goal === 'perder_grasa') {
-    return 'Energy deficit calibrated for body-fat reduction.'
+    return 'Déficit calórico calibrado para reducir grasa corporal.'
   }
   if (goal === 'ganar_masa') {
-    return 'Surplus-focused setup for muscle gain.'
+    return 'Aporte superior centrado en ganar masa muscular.'
   }
   if (goal === 'mantener_peso') {
-    return 'Stable intake to preserve current body composition.'
+    return 'Consumo estable para preservar el estado de tu cuerpo.'
   }
-  return 'Complete the nutrition profile to calibrate targets.'
+  return 'Completa tu perfil nutricional para calibrar las metas.'
 }
 
 export function formatSexLabel(value) {
   if (value === 'Masculino') {
-    return 'Male'
+    return 'Hombre'
   }
   if (value === 'Femenino') {
-    return 'Female'
+    return 'Mujer'
   }
-  return 'Unspecified'
+  return 'No especificado'
 }
 
 export function formatTrainingFrequency(value) {
   const numericValue = toFiniteNumber(value)
   if (numericValue === null) {
-    return 'Unspecified'
+    return 'No especificado'
   }
 
   if (numericValue === 0) {
-    return 'Rest dominant'
+    return 'Mayormente descanso'
   }
   if (numericValue === 1) {
-    return '1 day / week'
+    return '1 día / semana'
   }
 
-  return `${numericValue} days / week`
+  return `${numericValue} días / semana`
 }
 
 export function formatAdherenceLevel(level) {
   if (level === 'alta') {
-    return 'Optimal'
+    return 'Óptimo'
   }
   if (level === 'media') {
-    return 'Moderate'
+    return 'Moderado'
   }
   if (level === 'baja') {
-    return 'Low'
+    return 'Bajo'
   }
-  return 'Pending'
+  return 'Pendiente'
 }
 
 export function formatDataSource(source) {
@@ -230,19 +230,19 @@ export function formatDataSource(source) {
     return 'Spoonacular'
   }
   if (source === 'cache') {
-    return 'Cache'
+    return 'Caché'
   }
   if (source === 'mixed') {
-    return 'Hybrid'
+    return 'Híbrida'
   }
-  return 'Internal'
+  return 'Interno'
 }
 
 export function getMealVisual(mealNumber) {
   const visual = STITCH_DIET_VISUALS[(Number(mealNumber) - 1) % STITCH_DIET_VISUALS.length]
   return visual ?? {
-    phase: `Phase ${String(mealNumber).padStart(2, '0')}`,
-    label: `Meal ${mealNumber}`,
+    phase: `Fase ${String(mealNumber).padStart(2, '0')}`,
+    label: `Comida ${mealNumber}`,
     imageUrl: '',
   }
 }

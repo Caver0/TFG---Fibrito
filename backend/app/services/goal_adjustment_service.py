@@ -65,28 +65,35 @@ def calculate_calorie_adjustment(
     goal: str,
     weekly_change: float,
     current_weight: float | None = None,
+    adherence_level: str = "alta"
 ) -> dict[str, Any]:
     if goal == "ganar_masa":
         if weekly_change <= 0:
+            status = "needs_adjustment" if adherence_level != "baja" else "needs_attention"
             return _build_adjustment_decision(
-                progress_status="needs_adjustment",
-                adjustment_needed=True,
+                progress_status=status,
+                adjustment_needed=(status == "needs_adjustment"),
                 calorie_change=150,
                 progress_direction_ok=False,
                 progress_rate_ok=False,
                 adjustment_reason=(
-                    "El usuario no esta subiendo de peso pese a tener objetivo de ganancia."
+                    "No estás subiendo de peso. " + 
+                    ("El plan requiere más energía." if adherence_level != "baja" else 
+                     "Con baja adherencia es normal; intenta cumplir el plan antes de subir calorías.")
                 ),
             )
         if weekly_change > 0.2:
+            status = "needs_adjustment" if adherence_level != "baja" else "needs_attention"
             return _build_adjustment_decision(
-                progress_status="needs_adjustment",
-                adjustment_needed=True,
+                progress_status=status,
+                adjustment_needed=(status == "needs_adjustment"),
                 calorie_change=-100,
                 progress_direction_ok=True,
                 progress_rate_ok=False,
                 adjustment_reason=(
-                    "El usuario esta subiendo demasiado rapido para un objetivo de ganancia."
+                    "Subida demasiado rápida. " +
+                    ("Ajustamos para minimizar ganancia de grasa." if adherence_level != "baja" else 
+                     "Es posible que se deba a excesos puntuales. ¿Quieres ajustar o ser más estricto?")
                 ),
             )
         return _build_adjustment_decision(
@@ -106,38 +113,47 @@ def calculate_calorie_adjustment(
         weekly_loss = abs(weekly_change)
 
         if weekly_change >= 0:
+            status = "needs_adjustment" if adherence_level != "baja" else "needs_attention"
             return _build_adjustment_decision(
-                progress_status="needs_adjustment",
-                adjustment_needed=True,
+                progress_status=status,
+                adjustment_needed=(status == "needs_adjustment"),
                 calorie_change=-150,
                 progress_direction_ok=False,
                 progress_rate_ok=False,
                 adjustment_reason=(
-                    "El usuario no esta bajando de peso pese a tener objetivo de perdida."
+                    "No hay pérdida de peso. " +
+                    ("Es necesario recortar calorías." if adherence_level != "baja" else 
+                     "La baja adherencia explica el estancamiento. Cumple el plan antes de recortar más.")
                 ),
                 max_weekly_loss=max_weekly_loss,
             )
         if weekly_loss > max_weekly_loss:
+            status = "needs_adjustment" if adherence_level != "baja" else "needs_attention"
             return _build_adjustment_decision(
-                progress_status="needs_adjustment",
-                adjustment_needed=True,
+                progress_status=status,
+                adjustment_needed=(status == "needs_adjustment"),
                 calorie_change=100,
                 progress_direction_ok=True,
                 progress_rate_ok=False,
                 adjustment_reason=(
-                    "El usuario esta bajando demasiado rapido para un objetivo de perdida."
+                    "Pérdida excesivamente rápida. " +
+                    ("Subimos calorías para proteger tu masa muscular." if adherence_level != "baja" else 
+                     "Baja adherencia: puede ser pérdida de líquidos o error de medición por falta de registros.")
                 ),
                 max_weekly_loss=max_weekly_loss,
             )
         if weekly_loss < 0.3:
+            status = "needs_adjustment" if adherence_level != "baja" else "needs_attention"
             return _build_adjustment_decision(
-                progress_status="needs_adjustment",
-                adjustment_needed=True,
+                progress_status=status,
+                adjustment_needed=(status == "needs_adjustment"),
                 calorie_change=-100,
                 progress_direction_ok=True,
                 progress_rate_ok=False,
                 adjustment_reason=(
-                    "El usuario esta bajando de peso demasiado lento para un objetivo de perdida."
+                    "Ritmo de pérdida muy lento. " +
+                    ("Ajuste necesario para mantener la tendencia." if adherence_level != "baja" else 
+                     "Probablemente los excesos registrados impiden la bajada. ¡Mejora tu adherencia!")
                 ),
                 max_weekly_loss=max_weekly_loss,
             )

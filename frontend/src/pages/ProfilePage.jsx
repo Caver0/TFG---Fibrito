@@ -12,10 +12,10 @@ import {
 } from '../utils/stitch'
 
 const PROTOCOL_OPTIONS = [
-  { value: 'vegetariano', label: 'Vegetarian', icon: 'nutrition' },
-  { value: 'vegano', label: 'Vegan protocol', icon: 'eco' },
-  { value: 'sin_lactosa', label: 'Lactose-Free', icon: 'water_drop' },
-  { value: 'sin_gluten', label: 'Gluten-Free', icon: 'grain' },
+  { value: 'vegetariano', label: 'Vegetariano', icon: 'nutrition' },
+  { value: 'vegano', label: 'Protocolo vegano', icon: 'eco' },
+  { value: 'sin_lactosa', label: 'Sin lactosa', icon: 'water_drop' },
+  { value: 'sin_gluten', label: 'Sin gluten', icon: 'grain' },
 ]
 
 function buildProfileForm(user) {
@@ -162,7 +162,7 @@ function ProfilePage() {
       replaceUser(updatedUser)
       await loadNutritionSummary(token)
       window.dispatchEvent(new CustomEvent('dashboard:refresh'))
-      setSaveMessage('Biometric profile updated correctly.')
+      setSaveMessage('Perfil biométrico actualizado.')
     } catch (error) {
       setSaveError(error.message)
     } finally {
@@ -178,7 +178,7 @@ function ProfilePage() {
     try {
       await userApi.updateFoodPreferences(token, foodPreferences)
       await refreshUser(token)
-      setFoodPreferencesMessage('Food preferences updated correctly.')
+      setFoodPreferencesMessage('Preferencias alimentarias actualizadas.')
     } catch (error) {
       setFoodPreferencesError(error.message)
     } finally {
@@ -191,15 +191,15 @@ function ProfilePage() {
       {(nutritionError || foodPreferencesError || saveError) ? <p className="page-status page-status-error">{nutritionError || foodPreferencesError || saveError}</p> : null}
 
       <div className="profile-top-layout">
-        <SectionPanel eyebrow="Biometric Lab Data" title="Technical precision metrics" className="profile-biometric-panel">
+        <SectionPanel eyebrow="Datos Biométricos del Laboratorio" title="Métricas de precisión técnica" className="profile-biometric-panel">
           <div className="profile-biometric-grid">
-            <label><span>Weight (kg)</span><input name="current_weight" type="number" step="0.1" value={profileForm.current_weight} onChange={handleProfileChange} /></label>
-            <label><span>Height (cm)</span><input name="height" type="number" step="0.1" value={profileForm.height} onChange={handleProfileChange} /></label>
-            <label><span>Age</span><input name="age" type="number" min="0" value={profileForm.age} onChange={handleProfileChange} /></label>
-            <label><span>Training days</span><input name="training_days_per_week" type="number" min="0" max="7" value={profileForm.training_days_per_week} onChange={handleProfileChange} /></label>
-            <div className="profile-biometric-summary-card"><small>Activity level</small><strong>{formatTrainingFrequency(profileForm.training_days_per_week)}</strong></div>
+            <label><span>Peso (kg)</span><input name="current_weight" type="number" step="0.1" value={profileForm.current_weight} onChange={handleProfileChange} /></label>
+            <label><span>Altura (cm)</span><input name="height" type="number" step="0.1" value={profileForm.height} onChange={handleProfileChange} /></label>
+            <label><span>Edad</span><input name="age" type="number" min="0" value={profileForm.age} onChange={handleProfileChange} /></label>
+            <label><span>Días de entreno</span><input name="training_days_per_week" type="number" min="0" max="7" value={profileForm.training_days_per_week} onChange={handleProfileChange} /></label>
+            <div className="profile-biometric-summary-card"><small>Nivel de actividad</small><strong>{formatTrainingFrequency(profileForm.training_days_per_week)}</strong></div>
             <div className="profile-sex-toggle">
-              <span>Biological sex</span>
+              <span>Sexo biológico</span>
               <div>
                 {['Masculino', 'Femenino'].map((sex) => (
                   <button key={sex} type="button" className={profileForm.sex === sex ? 'profile-toggle-active' : ''} onClick={() => setProfileForm((current) => ({ ...current, sex }))}>
@@ -211,20 +211,20 @@ function ProfilePage() {
           </div>
 
           <div className="profile-calibration-strip">
-            <div><small>Target calories</small><strong>{isNutritionLoading ? 'Loading...' : formatCalories(nutrition?.target_calories)}</strong></div>
-            <div><small>Protein</small><strong>{nutrition?.protein_grams ? `${nutrition.protein_grams}g` : 'N/A'}</strong></div>
-            <div><small>Carbs</small><strong>{nutrition?.carb_grams ? `${nutrition.carb_grams}g` : 'N/A'}</strong></div>
-            <div><small>Fats</small><strong>{nutrition?.fat_grams ? `${nutrition.fat_grams}g` : 'N/A'}</strong></div>
+            <div><small>Calorías objetivo</small><strong>{isNutritionLoading ? 'Cargando...' : formatCalories(nutrition?.target_calories)}</strong></div>
+            <div><small>Proteína</small><strong>{nutrition?.protein_grams ? `${nutrition.protein_grams}g` : 'N/A'}</strong></div>
+            <div><small>Carbos</small><strong>{nutrition?.carb_grams ? `${nutrition.carb_grams}g` : 'N/A'}</strong></div>
+            <div><small>Grasas</small><strong>{nutrition?.fat_grams ? `${nutrition.fat_grams}g` : 'N/A'}</strong></div>
           </div>
         </SectionPanel>
 
-        <SectionPanel eyebrow="Performance Target" className="profile-goal-panel">
+        <SectionPanel eyebrow="Objetivo de Rendimiento" className="profile-goal-panel">
           <div className="profile-goal-background"><img src={STITCH_PROFILE_TARGET_BACKGROUND} alt="" /></div>
           <div className="profile-goal-stack">
             {[
-              { value: 'mantener_peso', label: 'Maintenance' },
-              { value: 'perder_grasa', label: 'Shred / Cut' },
-              { value: 'ganar_masa', label: 'Hypertrophy / Bulk' },
+              { value: 'mantener_peso', label: 'Mantenimiento' },
+              { value: 'perder_grasa', label: 'Definición / Pérdida' },
+              { value: 'ganar_masa', label: 'Hipertrofia / Volumen' },
             ].map((goalOption) => (
               <button
                 key={goalOption.value}
@@ -241,7 +241,7 @@ function ProfilePage() {
       </div>
 
       <div className="profile-bottom-layout">
-        <SectionPanel title="Dietary Protocols">
+        <SectionPanel title="Protocolos Dietéticos">
           <div className="profile-protocol-list">
             {PROTOCOL_OPTIONS.map((option) => {
               const isActive = (foodPreferences?.dietary_restrictions ?? []).includes(option.value)
@@ -255,40 +255,40 @@ function ProfilePage() {
           </div>
         </SectionPanel>
 
-        <SectionPanel eyebrow="Refined Restriction Engine" title="Excluded compounds" actions={<button type="button" className="protocol-secondary-button" onClick={handleSavePreferences} disabled={isFoodPreferencesSaving || isFoodPreferencesLoading}>{isFoodPreferencesSaving ? 'Saving...' : 'Save Preferences'}</button>}>
+        <SectionPanel eyebrow="Motor de Restricción Refinado" title="Compuestos excluidos" actions={<button type="button" className="protocol-secondary-button" onClick={handleSavePreferences} disabled={isFoodPreferencesSaving || isFoodPreferencesLoading}>{isFoodPreferencesSaving ? 'Guardando...' : 'Guardar Preferencias'}</button>}>
           <div className="profile-chip-group">
-            <small>Disliked foods</small>
+            <small>Alimentos no deseados</small>
             <div className="profile-chip-list">
               {(foodPreferences?.disliked_foods ?? []).map((item) => (
                 <button key={item} type="button" className="profile-chip" onClick={() => removePreferenceItem('disliked_foods', item)}>{item}<span>x</span></button>
               ))}
             </div>
-            <div className="profile-chip-input"><input name="disliked_foods" value={preferenceInputs.disliked_foods} onChange={handlePreferenceInputChange} placeholder="Add exclusion" /><button type="button" onClick={() => addPreferenceItem('disliked_foods')}>Add</button></div>
+            <div className="profile-chip-input"><input name="disliked_foods" value={preferenceInputs.disliked_foods} onChange={handlePreferenceInputChange} placeholder="Añadir exclusión" /><button type="button" onClick={() => addPreferenceItem('disliked_foods')}>Añadir</button></div>
           </div>
 
           <div className="profile-chip-group">
-            <small>Allergies</small>
+            <small>Alergias</small>
             <div className="profile-chip-list">
               {(foodPreferences?.allergies ?? []).map((item) => (
                 <button key={item} type="button" className="profile-chip profile-chip-danger" onClick={() => removePreferenceItem('allergies', item)}>{item}<span>x</span></button>
               ))}
             </div>
-            <div className="profile-chip-input"><input name="allergies" value={preferenceInputs.allergies} onChange={handlePreferenceInputChange} placeholder="Add allergy" /><button type="button" onClick={() => addPreferenceItem('allergies')}>Add</button></div>
+            <div className="profile-chip-input"><input name="allergies" value={preferenceInputs.allergies} onChange={handlePreferenceInputChange} placeholder="Añadir alergia" /><button type="button" onClick={() => addPreferenceItem('allergies')}>Añadir</button></div>
           </div>
 
           <div className="profile-chip-group">
-            <small>Preferred foods</small>
+            <small>Alimentos preferidos</small>
             <div className="profile-chip-list">
               {(foodPreferences?.preferred_foods ?? []).map((item) => (
                 <button key={item} type="button" className="profile-chip profile-chip-positive" onClick={() => removePreferenceItem('preferred_foods', item)}>{item}<span>x</span></button>
               ))}
             </div>
-            <div className="profile-chip-input"><input name="preferred_foods" value={preferenceInputs.preferred_foods} onChange={handlePreferenceInputChange} placeholder="Add preference" /><button type="button" onClick={() => addPreferenceItem('preferred_foods')}>Add</button></div>
+            <div className="profile-chip-input"><input name="preferred_foods" value={preferenceInputs.preferred_foods} onChange={handlePreferenceInputChange} placeholder="Añadir preferencia" /><button type="button" onClick={() => addPreferenceItem('preferred_foods')}>Añadir</button></div>
           </div>
 
           <div className="profile-engine-note">
-            <strong>Engine note</strong>
-            <p>{foodPreferencesMessage || 'Preferences are applied to diet generation, replacement options and compatibility filtering.'}</p>
+            <strong>Nota del motor</strong>
+            <p>{foodPreferencesMessage || 'Las preferencias se aplican a la generación de dieta, reemplazo y filtrado de compatibilidad.'}</p>
           </div>
         </SectionPanel>
       </div>
@@ -296,9 +296,9 @@ function ProfilePage() {
       <SectionPanel className="profile-footer-bar">
         <div>
           <strong>{formatGoalLabel(profileForm.goal)}</strong>
-          <span>{nutrition?.target_calories ? `Current target ${formatCalories(nutrition.target_calories)}` : 'Complete the profile to compute calorie targets.'}</span>
+          <span>{nutrition?.target_calories ? `Objetivo actual ${formatCalories(nutrition.target_calories)}` : 'Completa el perfil para calcular objetivos calóricos.'}</span>
         </div>
-        <button type="button" className="panel-cta-button" onClick={handleSaveProfile} disabled={isSaving}>{isSaving ? 'Saving profile...' : 'Commit To Profile'}</button>
+        <button type="button" className="panel-cta-button" onClick={handleSaveProfile} disabled={isSaving}>{isSaving ? 'Guardando perfil...' : 'Confirmar Perfil'}</button>
       </SectionPanel>
 
       {saveMessage ? <p className="page-status page-status-success">{saveMessage}</p> : null}

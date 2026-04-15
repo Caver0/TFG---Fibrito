@@ -5,7 +5,7 @@ function AuthShell({ children }) {
         <div className="auth-shell-surface">
           <div className="auth-shell-brand">
             <h1>FIBRIT0</h1>
-            <span>KINETIC LAB</span>
+            <span>LABORATORIO CINÉTICO</span>
           </div>
 
           <div className="auth-deco auth-deco-left" aria-hidden="true">
@@ -28,17 +28,17 @@ function AuthShell({ children }) {
 
           <footer className="auth-shell-footer">
             <div className="auth-footer-block">
-              <small>System Status</small>
+              <small>Estado del Sistema</small>
               <strong>
                 <span className="auth-footer-dot" aria-hidden="true" />
-                ONLINE
+                EN LÍNEA
               </strong>
             </div>
 
             <div className="auth-footer-divider" aria-hidden="true" />
 
             <div className="auth-footer-block">
-              <small>Encryption</small>
+              <small>Cifrado</small>
               <strong>AES-256</strong>
             </div>
 

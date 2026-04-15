@@ -37,10 +37,10 @@ function buildInitialGeneratorForm() {
 }
 
 function formatMealStatus(status) {
-  if (status === 'completed') return 'Completed'
-  if (status === 'modified') return 'Modified'
-  if (status === 'omitted') return 'Omitted'
-  return 'Pending'
+  if (status === 'completed') return 'Completado'
+  if (status === 'modified') return 'Modificado'
+  if (status === 'omitted') return 'Omitido'
+  return 'Pendiente'
 }
 
 function DietsPage() {
@@ -276,7 +276,7 @@ function DietsPage() {
       setSelectedDiet(createdDiet)
       await loadDietHistory(token)
       window.dispatchEvent(new CustomEvent('dashboard:refresh'))
-      setGenerateMessage('Food-based protocol generated and saved correctly.')
+      setGenerateMessage('Protocolo basado en alimentos generado y guardado correctamente.')
     } catch (error) {
       setGenerateError(error.message)
     } finally {
@@ -427,14 +427,14 @@ function DietsPage() {
       ) : null}
 
       <div className="diets-hero-layout">
-        <SectionPanel eyebrow="Daily Performance Index" className="diet-performance-panel">
+        <SectionPanel eyebrow="Índice de Rendimiento Diario" className="diet-performance-panel">
           <div className="diet-performance-kcal">
             <strong>{formatCompactNumber(currentDiet?.actual_calories, { maximumFractionDigits: 0 })}</strong>
             <span>KCAL</span>
           </div>
 
           <div className="diet-performance-target">
-            <small>Target: {formatCalories(currentDiet?.target_calories)}</small>
+            <small>Objetivo: {formatCalories(currentDiet?.target_calories)}</small>
             <div className="diet-performance-track">
               <div
                 className="diet-performance-fill"
@@ -473,19 +473,19 @@ function DietsPage() {
           </div>
 
           <div className="diet-performance-meta">
-            <span>Source stack: {(currentDiet?.food_data_sources ?? []).map(formatDataSource).join(' / ') || 'Internal'}</span>
-            <span>Resolved foods: {currentDiet?.resolved_foods_count ?? 0}</span>
+            <span>Pila de fuentes: {(currentDiet?.food_data_sources ?? []).map(formatDataSource).join(' / ') || 'Interno'}</span>
+            <span>Alimentos resueltos: {currentDiet?.resolved_foods_count ?? 0}</span>
           </div>
         </SectionPanel>
 
         <SectionPanel
-          eyebrow="Protocol Generator"
-          title="Generate a calibrated daily diet"
-          description="This panel talks directly to the existing food-based diet endpoint."
+          eyebrow="Generador de Protocolo"
+          title="Genera una dieta diaria calibrada"
+          description="Este panel se comunica directamente con el endpoint de dietas basado en alimentos."
         >
           <form className="protocol-generator-form" onSubmit={handleGenerate}>
             <label>
-              <span>Meals count</span>
+              <span>Número de comidas</span>
               <select name="mealsCount" value={generatorForm.mealsCount} onChange={handleGeneratorBaseChange}>
                 {[3, 4, 5, 6].map((value) => (
                   <option key={value} value={value}>
@@ -496,9 +496,9 @@ function DietsPage() {
             </label>
 
             <label>
-              <span>Training time</span>
+              <span>Hora de entrenamiento</span>
               <select name="trainingTimeOfDay" value={generatorForm.trainingTimeOfDay} onChange={handleGeneratorBaseChange}>
-                <option value="">Not specified</option>
+                <option value="">No especificado</option>
                 {TRAINING_TIME_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
@@ -509,7 +509,7 @@ function DietsPage() {
 
             <label className="protocol-generator-toggle">
               <input checked={generatorForm.useCustomDistribution} name="useCustomDistribution" type="checkbox" onChange={handleGeneratorBaseChange} />
-              <span>Use custom calorie distribution</span>
+              <span>Usar distribución calórica personalizada</span>
             </label>
 
             {generatorForm.useCustomDistribution ? (
@@ -527,7 +527,7 @@ function DietsPage() {
             {generateMessage ? <p className="page-status page-status-success">{generateMessage}</p> : null}
 
             <button type="submit" className="panel-cta-button" disabled={isGenerating}>
-              {isGenerating ? 'Generating protocol...' : 'Generate Diet'}
+              {isGenerating ? 'Generando protocolo...' : 'Generar Dieta'}
             </button>
           </form>
         </SectionPanel>
@@ -536,26 +536,26 @@ function DietsPage() {
       {currentDiet ? (
         <>
           <SectionPanel
-            eyebrow="Tracking Window"
+            eyebrow="Ventana de Seguimiento"
             className="diet-tracking-strip"
             actions={(
               <label className="inline-date-field">
-                <span>Tracking date</span>
+                <span>Fecha de seguimiento</span>
                 <input type="date" value={selectedAdherenceDate} onChange={(event) => setSelectedAdherenceDate(event.target.value)} />
               </label>
             )}
           >
             <div className="diet-tracking-metrics">
               <div>
-                <small>Daily adherence</small>
+                <small>Adherencia diaria</small>
                 <strong>{formatPercent(dietAdherence?.daily_summary?.adherence_percentage ?? 0, 0)}</strong>
               </div>
               <div>
-                <small>Weekly adherence</small>
+                <small>Adherencia semanal</small>
                 <strong>{formatPercent(weeklyAdherenceSummary?.adherence_percentage ?? 0, 0)}</strong>
               </div>
               <div>
-                <small>Coverage</small>
+                <small>Cobertura</small>
                 <strong>{formatPercent(weeklyAdherenceSummary?.tracking_coverage_percentage ?? 0, 0)}</strong>
               </div>
             </div>
@@ -582,7 +582,7 @@ function DietsPage() {
 
                   <div className="protocol-meal-body">
                     <div className="protocol-meal-summary">
-                      <span>Status</span>
+                      <span>Estado</span>
                       <strong className={`status-badge status-badge-${mealStatus}`}>{formatMealStatus(mealStatus)}</strong>
                     </div>
 
@@ -599,7 +599,7 @@ function DietsPage() {
                           <div className="protocol-food-meta">
                             <span>{food.grams ? `${formatCompactNumber(food.grams, { maximumFractionDigits: 0 })}g` : `${formatCompactNumber(food.quantity, { maximumFractionDigits: 0 })} ${food.unit}`}</span>
                             <button type="button" onClick={() => openReplacementLab(meal.meal_number, food)}>
-                              Swap
+                              Cambiar
                             </button>
                           </div>
                         </div>
@@ -620,7 +620,7 @@ function DietsPage() {
                         onClick={() => handleRegenerateMeal(meal.meal_number)}
                         disabled={isMealActionLoading && activeMealNumber === meal.meal_number}
                       >
-                        {isMealActionLoading && activeMealNumber === meal.meal_number ? 'Regenerating...' : 'Regenerate'}
+                        {isMealActionLoading && activeMealNumber === meal.meal_number ? 'Regenerando...' : 'Regenerar'}
                       </button>
 
                       <button
@@ -629,7 +629,7 @@ function DietsPage() {
                         onClick={() => handleSaveMealAdherence(meal.meal_number, 'completed')}
                         disabled={isBusyMeal || isSavingMealAdherence}
                       >
-                        {isSavingMealAdherence && activeAdherenceMealNumber === meal.meal_number ? 'Saving...' : 'Confirm Intake'}
+                        {isSavingMealAdherence && activeAdherenceMealNumber === meal.meal_number ? 'Guardando...' : 'Confirmar Ingesta'}
                       </button>
                     </div>
 
@@ -642,7 +642,7 @@ function DietsPage() {
                           onClick={() => handleSaveMealAdherence(meal.meal_number, status)}
                           disabled={isBusyMeal}
                         >
-                          {status === 'pending' ? 'Reset' : formatMealStatus(status)}
+                          {status === 'pending' ? 'Restablecer' : formatMealStatus(status)}
                         </button>
                       ))}
                     </div>
@@ -653,25 +653,25 @@ function DietsPage() {
           </div>
         </>
       ) : (
-        <SectionPanel title="No active diet protocol">
-          <p className="panel-placeholder">Generate your first food-based diet to unlock the Stitch-inspired meal grid.</p>
+        <SectionPanel title="Sin protocolo de dieta activo">
+          <p className="panel-placeholder">Genera tu primera dieta basada en alimentos para desbloquear la cuadrícula de comidas.</p>
         </SectionPanel>
       )}
 
       {replacementLab ? (
         <SectionPanel
-          eyebrow={`Swap Lab // Meal ${String(replacementLab.mealNumber).padStart(2, '0')}`}
+          eyebrow={`Laboratorio de Cambio // Comida ${String(replacementLab.mealNumber).padStart(2, '0')}`}
           title={replacementLab.food.name}
-          description="Replacement options are generated by the real backend based on the selected food."
-          actions={<button type="button" className="protocol-secondary-button" onClick={() => setReplacementLab(null)}>Close</button>}
+          description="Las opciones de reemplazo son generadas por el backend basado en el alimento seleccionado."
+          actions={<button type="button" className="protocol-secondary-button" onClick={() => setReplacementLab(null)}>Cerrar</button>}
         >
-          {isReplacementLoading ? <p className="page-status">Loading replacement options...</p> : null}
+          {isReplacementLoading ? <p className="page-status">Cargando opciones de reemplazo...</p> : null}
           {replacementError ? <p className="page-status page-status-error">{replacementError}</p> : null}
 
           {!isReplacementLoading && replacementLab.options.length > 0 ? (
             <div className="replacement-lab-layout">
               <label>
-                <span>Replacement candidate</span>
+                <span>Candidato de reemplazo</span>
                 <select value={selectedReplacementCode} onChange={(event) => setSelectedReplacementCode(event.target.value)}>
                   {replacementLab.options.map((option) => (
                     <option key={option.food_code} value={option.food_code}>
@@ -698,7 +698,7 @@ function DietsPage() {
               </div>
 
               <button type="button" className="panel-cta-button" disabled={isMealActionLoading || !selectedReplacementCode} onClick={handleApplyReplacement}>
-                {isMealActionLoading ? 'Applying replacement...' : 'Apply Replacement'}
+                {isMealActionLoading ? 'Aplicando reemplazo...' : 'Aplicar Reemplazo'}
               </button>
             </div>
           ) : null}
@@ -706,34 +706,34 @@ function DietsPage() {
       ) : null}
 
       <div className="diets-support-layout">
-        <SectionPanel eyebrow="Daily Adherence Snapshot">
-          {isDietAdherenceLoading ? <p className="page-status">Loading meal adherence...</p> : null}
+        <SectionPanel eyebrow="Resumen de Adherencia Diaria">
+          {isDietAdherenceLoading ? <p className="page-status">Cargando adherencia de comidas...</p> : null}
           {!isDietAdherenceLoading ? (
             <div className="key-value-stack">
-              <div className="key-value-row"><span>Completed meals</span><strong>{dietAdherence?.daily_summary?.completed_meals ?? 0}</strong></div>
-              <div className="key-value-row"><span>Modified meals</span><strong>{dietAdherence?.daily_summary?.modified_meals ?? 0}</strong></div>
-              <div className="key-value-row"><span>Omitted meals</span><strong>{dietAdherence?.daily_summary?.omitted_meals ?? 0}</strong></div>
-              <div className="key-value-row"><span>Pending meals</span><strong>{dietAdherence?.daily_summary?.pending_meals ?? 0}</strong></div>
+              <div className="key-value-row"><span>Comidas completadas</span><strong>{dietAdherence?.daily_summary?.completed_meals ?? 0}</strong></div>
+              <div className="key-value-row"><span>Comidas modificadas</span><strong>{dietAdherence?.daily_summary?.modified_meals ?? 0}</strong></div>
+              <div className="key-value-row"><span>Comidas omitidas</span><strong>{dietAdherence?.daily_summary?.omitted_meals ?? 0}</strong></div>
+              <div className="key-value-row"><span>Comidas pendientes</span><strong>{dietAdherence?.daily_summary?.pending_meals ?? 0}</strong></div>
             </div>
           ) : null}
         </SectionPanel>
 
-        <SectionPanel eyebrow="Weekly Interpretation">
-          {isWeeklyAdherenceLoading ? <p className="page-status">Loading weekly adherence...</p> : null}
+        <SectionPanel eyebrow="Interpretación Semanal">
+          {isWeeklyAdherenceLoading ? <p className="page-status">Cargando adherencia semanal...</p> : null}
           {!isWeeklyAdherenceLoading ? (
             <>
               <div className="key-value-stack">
-                <div className="key-value-row"><span>Adherence</span><strong>{formatPercent(weeklyAdherenceSummary?.adherence_percentage ?? 0, 0)}</strong></div>
-                <div className="key-value-row"><span>Coverage</span><strong>{formatPercent(weeklyAdherenceSummary?.tracking_coverage_percentage ?? 0, 0)}</strong></div>
-                <div className="key-value-row"><span>Week window</span><strong>{weeklyAdherenceSummary?.week_label ?? 'N/A'}</strong></div>
+                <div className="key-value-row"><span>Adherencia</span><strong>{formatPercent(weeklyAdherenceSummary?.adherence_percentage ?? 0, 0)}</strong></div>
+                <div className="key-value-row"><span>Cobertura</span><strong>{formatPercent(weeklyAdherenceSummary?.tracking_coverage_percentage ?? 0, 0)}</strong></div>
+                <div className="key-value-row"><span>Ventana semanal</span><strong>{weeklyAdherenceSummary?.week_label ?? 'N/A'}</strong></div>
               </div>
-              <p className="panel-placeholder">{weeklyAdherenceSummary?.interpretation_message || 'Weekly adherence interpretation will appear here after meal tracking begins.'}</p>
+              <p className="panel-placeholder">{weeklyAdherenceSummary?.interpretation_message || 'La interpretación de adherencia semanal aparecerá aquí tras comenzar el registro.'}</p>
             </>
           ) : null}
         </SectionPanel>
       </div>
 
-      <SectionPanel eyebrow="Protocol Archive" title="Recent diet generations">
+      <SectionPanel eyebrow="Archivo de Protocolos" title="Generaciones de dietas recientes">
         {dietHistory.length > 0 ? (
           <div className="protocol-history-list">
             {dietHistory.map((diet) => (
@@ -746,15 +746,15 @@ function DietsPage() {
               >
                 <div>
                   <strong>{formatDateLabel(diet.created_at, { month: 'short', day: '2-digit', year: 'numeric' })}</strong>
-                  <small>{diet.meals_count} meals // {formatDataSource(diet.food_data_source)}</small>
+                  <small>{diet.meals_count} comidas // {formatDataSource(diet.food_data_source)}</small>
                 </div>
                 <span>{formatCalories(diet.target_calories)}</span>
-                <span>{diet.food_preferences_applied ? 'Preferences applied' : 'Standard profile'}</span>
+                <span>{diet.food_preferences_applied ? 'Preferencias aplicadas' : 'Perfil estándar'}</span>
               </button>
             ))}
           </div>
         ) : (
-          <p className="panel-placeholder">{isHistoryLoading ? 'Loading history...' : 'Diet history will appear here after the first generation.'}</p>
+          <p className="panel-placeholder">{isHistoryLoading ? 'Cargando historial...' : 'El historial de dietas aparecerá aquí tras la primera generación.'}</p>
         )}
       </SectionPanel>
 

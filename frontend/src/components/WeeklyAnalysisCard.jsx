@@ -11,6 +11,10 @@ function getStatusLabel(status) {
   if (status === 'needs_adjustment') {
     return 'Requiere ajuste'
   }
+  // Añadimos el nuevo label para el estado de atención por adherencia
+  if (status === 'needs_attention') {
+    return 'Revisión por adherencia'
+  }
   if (status === 'insufficient_data') {
     return 'Faltan datos'
   }
@@ -37,6 +41,9 @@ function WeeklyAnalysisCard({
   isLoading,
   onApply,
 }) {
+  // Identificamos si es un caso de baja adherencia para cambiar el comportamiento del botón
+  const isOptionalAdjustment = analysis?.progress_status === 'needs_attention'
+
   return (
     <section className="profile-section">
       <div className="section-heading">
@@ -129,7 +136,11 @@ function WeeklyAnalysisCard({
 
       <div className="analysis-actions">
         <button type="button" onClick={onApply} disabled={isApplying}>
-          {isApplying ? 'Aplicando ajuste...' : 'Analizar y aplicar ajuste semanal'}
+          {isApplying 
+            ? 'Aplicando ajuste...' 
+            : isOptionalAdjustment 
+              ? 'Aplicar ajuste correctivo opcional' 
+              : 'Analizar y aplicar ajuste semanal'}
         </button>
       </div>
     </section>

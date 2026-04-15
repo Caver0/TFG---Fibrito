@@ -38,20 +38,20 @@ function RegisterPage({ onSwitch }) {
     <AuthShell>
       <AuthCard
         mode="register"
-        title="Recruitment Protocol"
-        subtitle="Create a live operative profile connected to the FIBRIT0 backend."
+        title="Protocolo de Reclutamiento"
+        subtitle="Crea un perfil de operativo en vivo conectado al sistema FIBRIT0."
         footer={(
           <p className="auth-switch-line">
-            <span>Already authorized?</span>{' '}
+            <span>¿Ya estás autorizado?</span>{' '}
             <button type="button" className="auth-inline-link" onClick={onSwitch}>
-              Return To Access Gate
+              Volver a la Puerta de Acceso
             </button>
           </p>
         )}
       >
         <form className="auth-command-form" onSubmit={handleSubmit}>
           <label className="auth-field">
-            <span>Operative Name</span>
+            <span>Nombre de Operativo</span>
             <div className="auth-input-shell">
               <i className="material-symbols-outlined" aria-hidden="true">
                 badge
@@ -59,7 +59,7 @@ function RegisterPage({ onSwitch }) {
               <input
                 name="name"
                 type="text"
-                placeholder="Athlete designation"
+                placeholder="Designación de atleta"
                 autoComplete="name"
                 value={form.name}
                 onChange={handleChange}
@@ -69,7 +69,7 @@ function RegisterPage({ onSwitch }) {
           </label>
 
           <label className="auth-field">
-            <span>Laboratory ID (Email)</span>
+            <span>ID de Laboratorio (Email)</span>
             <div className="auth-input-shell">
               <i className="material-symbols-outlined" aria-hidden="true">
                 alternate_email
@@ -77,7 +77,7 @@ function RegisterPage({ onSwitch }) {
               <input
                 name="email"
                 type="email"
-                placeholder="user@kineticlab.io"
+                placeholder="usuario@laboratoriocinetico.io"
                 autoComplete="email"
                 value={form.email}
                 onChange={handleChange}
@@ -87,7 +87,7 @@ function RegisterPage({ onSwitch }) {
           </label>
 
           <label className="auth-field">
-            <span>Secure Access Key</span>
+            <span>Clave de Acceso Segura</span>
             <div className="auth-input-shell">
               <i className="material-symbols-outlined" aria-hidden="true">
                 lock
@@ -95,7 +95,7 @@ function RegisterPage({ onSwitch }) {
               <input
                 name="password"
                 type="password"
-                placeholder="Minimum 8 characters"
+                placeholder="Mínimo 8 caracteres"
                 autoComplete="new-password"
                 value={form.password}
                 onChange={handleChange}
@@ -108,7 +108,7 @@ function RegisterPage({ onSwitch }) {
           {error ? <p className="auth-feedback auth-feedback-error">{error}</p> : null}
 
           <button type="submit" className="auth-primary-button" disabled={isSubmitting}>
-            <span>{isSubmitting ? 'Recruiting Operative...' : 'Initiate Recruitment'}</span>
+            <span>{isSubmitting ? 'Reclutando Operativo...' : 'Iniciar Reclutamiento'}</span>
             <i className="material-symbols-outlined" aria-hidden="true">
               arrow_forward
             </i>

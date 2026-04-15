@@ -37,27 +37,27 @@ function LoginPage({ onSwitch }) {
 
   function handleRecoverKey() {
     setError('')
-    setInfoMessage('Recover Key is not available in the current backend yet.')
+    setInfoMessage('La recuperación de clave aún no está disponible en el servidor actual.')
   }
 
   return (
     <AuthShell>
       <AuthCard
         mode="login"
-        title="Authorization Required"
-        subtitle="Initialize your performance profile to enter the lab."
+        title="Autorización Requerida"
+        subtitle="Inicializa tu perfil de rendimiento para entrar al laboratorio."
         footer={(
           <p className="auth-switch-line">
-            <span>New operative?</span>{' '}
+            <span>¿Nuevo operativo?</span>{' '}
             <button type="button" className="auth-inline-link" onClick={onSwitch}>
-              Begin Recruitment
+              Comenzar Reclutamiento
             </button>
           </p>
         )}
       >
         <form className="auth-command-form" onSubmit={handleSubmit}>
           <label className="auth-field">
-            <span>Laboratory ID (Email)</span>
+            <span>ID de Laboratorio (Email)</span>
             <div className="auth-input-shell">
               <i className="material-symbols-outlined" aria-hidden="true">
                 alternate_email
@@ -65,7 +65,7 @@ function LoginPage({ onSwitch }) {
               <input
                 name="email"
                 type="email"
-                placeholder="user@kineticlab.io"
+                placeholder="usuario@laboratoriocinetico.io"
                 autoComplete="email"
                 value={form.email}
                 onChange={handleChange}
@@ -76,9 +76,9 @@ function LoginPage({ onSwitch }) {
 
           <label className="auth-field">
             <span className="auth-field-row">
-              <span>Secure Access Key</span>
+              <span>Clave de Acceso Segura</span>
               <button type="button" className="auth-inline-link auth-inline-link-utility" onClick={handleRecoverKey}>
-                Recover Key
+                Recuperar Clave
               </button>
             </span>
             <div className="auth-input-shell">
@@ -102,7 +102,7 @@ function LoginPage({ onSwitch }) {
           {infoMessage ? <p className="auth-feedback auth-feedback-info">{infoMessage}</p> : null}
 
           <button type="submit" className="auth-primary-button" disabled={isSubmitting}>
-            <span>{isSubmitting ? 'Entering The Lab...' : 'Enter The Kinetic Lab'}</span>
+            <span>{isSubmitting ? 'Entrando al Laboratorio...' : 'Entrar al Laboratorio Cinético'}</span>
             <i className="material-symbols-outlined" aria-hidden="true">
               arrow_forward
             </i>

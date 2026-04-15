@@ -13,35 +13,35 @@ import { formatDateLabel, formatGoalPhase } from './utils/stitch'
 const APP_VIEWS = [
   {
     id: 'dashboard',
-    sidebarLabel: 'Dashboard',
+    sidebarLabel: 'Panel',
     icon: 'dashboard',
-    topbarTitle: 'DASHBOARD_V2.0',
-    searchPlaceholder: 'SEARCH METRICS...',
+    topbarTitle: 'PANEL_V2.0',
+    searchPlaceholder: 'BUSCAR MÉTRICAS...',
     getTopbarContext: (user) => formatGoalPhase(user?.goal),
   },
   {
     id: 'diets',
-    sidebarLabel: 'Diets',
+    sidebarLabel: 'Dietas',
     icon: 'restaurant',
-    topbarTitle: 'DIETS MANAGEMENT',
-    searchPlaceholder: 'SEARCH PROTOCOLS...',
+    topbarTitle: 'GESTIÓN DE DIETAS',
+    searchPlaceholder: 'BUSCAR PROTOCOLOS...',
     getTopbarContext: () => formatDateLabel(new Date(), { month: 'long' }).toUpperCase(),
   },
   {
     id: 'progress',
-    sidebarLabel: 'Progress',
+    sidebarLabel: 'Progreso',
     icon: 'insights',
-    topbarTitle: 'ADHERENCE ANALYSIS',
-    searchPlaceholder: 'SEARCH METRICS...',
-    getTopbarContext: () => 'SYSTEM RELIABILITY // WEIGHT TREND',
+    topbarTitle: 'ANÁLISIS DE ADHERENCIA',
+    searchPlaceholder: 'BUSCAR MÉTRICAS...',
+    getTopbarContext: () => 'FIABILIDAD DEL SISTEMA // TENDENCIA DE PESO',
   },
   {
     id: 'profile',
-    sidebarLabel: 'Profile',
+    sidebarLabel: 'Perfil',
     icon: 'person',
-    topbarTitle: 'USER PREFERENCES',
-    searchPlaceholder: 'LAB COMMAND...',
-    getTopbarContext: () => 'CURRENT STATE /',
+    topbarTitle: 'PREFERENCIAS DE USUARIO',
+    searchPlaceholder: 'COMANDO DEL LAB...',
+    getTopbarContext: () => 'ESTADO ACTUAL /',
   },
 ]
 
@@ -101,7 +101,7 @@ function App() {
     return (
       <main className="app-loading-screen">
         <div className="lab-frame auth-lab-frame app-loading-frame">
-          <p>Initializing FIBRIT0 core...</p>
+          <p>Inicializando núcleo FIBRIT0...</p>
         </div>
       </main>
     )

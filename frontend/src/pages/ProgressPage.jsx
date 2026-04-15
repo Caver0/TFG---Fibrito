@@ -76,7 +76,7 @@ function TrendTooltip({ active, payload, label }) {
     <div className="chart-tooltip">
       <strong>{label}</strong>
       {actual ? <p>Actual: {formatMass(actual.value)}</p> : null}
-      {expected ? <p>Expected: {formatMass(expected.value)}</p> : null}
+      {expected ? <p>Esperado: {formatMass(expected.value)}</p> : null}
     </div>
   )
 }
@@ -268,7 +268,7 @@ function ProgressPage() {
       })
       await reloadAll(token)
       window.dispatchEvent(new CustomEvent('dashboard:refresh'))
-      setSaveMessage('Weight log saved correctly.')
+      setSaveMessage('Registro de peso guardado correctamente.')
       setWeightForm((current) => ({ ...current, weight: '' }))
     } catch (error) {
       setSaveError(error.message)
@@ -302,7 +302,7 @@ function ProgressPage() {
       await refreshUser(token)
       await reloadAll(token)
       window.dispatchEvent(new CustomEvent('dashboard:refresh'))
-      setApplyMessage(response.adjustment?.adjustment_applied ? 'Weekly adjustment applied and stored.' : response.analysis.adjustment_reason)
+      setApplyMessage(response.adjustment?.adjustment_applied ? 'Ajuste semanal aplicado y guardado.' : response.analysis.adjustment_reason)
     } catch (error) {
       setApplyError(error.message)
     } finally {
@@ -322,37 +322,37 @@ function ProgressPage() {
   return (
     <div className="progress-page">
       {(isHistoryLoading || isSummaryLoading || isWeeklyAveragesLoading || isWeeklyAnalysisLoading || isWeeklyAdherenceLoading || isDashboardLoading)
-        ? <p className="page-status">Loading adherence analysis...</p>
+        ? <p className="page-status">Cargando análisis de adherencia...</p>
         : null}
       {(historyError || summaryError || weeklyAveragesError || weeklyAnalysisError || weeklyAdherenceError || dashboardError || saveError || applyError)
         ? <p className="page-status page-status-error">{historyError || summaryError || weeklyAveragesError || weeklyAnalysisError || weeklyAdherenceError || dashboardError || saveError || applyError}</p>
         : null}
 
       <div className="progress-hero-grid">
-        <SectionPanel eyebrow="System Status" className="progress-hero-card progress-hero-copy">
-          <h3>Data Reliability: <span>{formatAdherenceLevel(weeklyAdherenceSummary?.adherence_level)}</span></h3>
-          <p>{weeklyAdherenceSummary?.interpretation_message || dashboardSnapshot?.summary?.adherence_interpretation || 'Adherence tracking will unlock reliability interpretation once meal logging starts.'}</p>
-          <button type="button" className="panel-cta-button" onClick={() => window.location.hash = '#diets'}>Review Diet Logs</button>
+        <SectionPanel eyebrow="Estado del Sistema" className="progress-hero-card progress-hero-copy">
+          <h3>Fiabilidad de Datos: <span>{formatAdherenceLevel(weeklyAdherenceSummary?.adherence_level)}</span></h3>
+          <p>{weeklyAdherenceSummary?.interpretation_message || dashboardSnapshot?.summary?.adherence_interpretation || 'El seguimiento de adherencia desbloqueará la interpretación de fiabilidad tras registrar comidas.'}</p>
+          <button type="button" className="panel-cta-button" onClick={() => window.location.hash = '#diets'}>Revisar Registros de Dieta</button>
         </SectionPanel>
 
         <SectionPanel className="progress-hero-card progress-gauge-card">
-          <CircularGauge value={confidenceScore} label="Confidence" />
+          <CircularGauge value={confidenceScore} label="Confianza" />
           <div className="progress-gauge-meta">
-            <div><small>Tracking</small><strong>{formatPercent(weeklyAdherenceSummary?.tracking_coverage_percentage ?? 0, 0)}</strong></div>
-            <div><small>Precision</small><strong>{weeklyAnalysis?.can_analyze ? 'Ultra' : 'Pending'}</strong></div>
+            <div><small>Seguimiento</small><strong>{formatPercent(weeklyAdherenceSummary?.tracking_coverage_percentage ?? 0, 0)}</strong></div>
+            <div><small>Precisión</small><strong>{weeklyAnalysis?.can_analyze ? 'Ultra' : 'Pendiente'}</strong></div>
           </div>
         </SectionPanel>
 
         <div className="progress-quick-stats">
-          <SectionPanel className="progress-quick-card"><small>Weekly Delta</small><strong>{formatSignedMass(weeklyAnalysis?.weekly_change, { maximumFractionDigits: 2, minimumFractionDigits: 2 })}</strong></SectionPanel>
-          <SectionPanel className="progress-quick-card progress-quick-card-danger"><small>Caloric Flux</small><strong>{formatSignedCalories(weeklyAnalysis?.calorie_change)}</strong></SectionPanel>
+          <SectionPanel className="progress-quick-card"><small>Delta Semanal</small><strong>{formatSignedMass(weeklyAnalysis?.weekly_change, { maximumFractionDigits: 2, minimumFractionDigits: 2 })}</strong></SectionPanel>
+          <SectionPanel className="progress-quick-card progress-quick-card-danger"><small>Flujo Calórico</small><strong>{formatSignedCalories(weeklyAnalysis?.calorie_change)}</strong></SectionPanel>
         </div>
       </div>
 
       <SectionPanel
-        title="Weight Analysis Trend"
-        description="Actual (neon) vs. expected projection from the current backend model."
-        actions={<div className="legend-group"><span><i className="legend-dot legend-dot-primary" />Actual</span><span><i className="legend-dot legend-dot-muted" />Target</span></div>}
+        title="Tendencia de Análisis de Peso"
+        description="Actual (neón) vs. proyección esperada del modelo actual del backend."
+        actions={<div className="legend-group"><span><i className="legend-dot legend-dot-primary" />Actual</span><span><i className="legend-dot legend-dot-muted" />Objetivo</span></div>}
       >
         <div className="dashboard-chart-wrap">
           {chartSeries.length > 0 ? (
@@ -366,23 +366,23 @@ function ProgressPage() {
                 <Line type="monotone" dataKey="actualWeight" stroke="#daf900" strokeWidth={4} dot={false} />
               </ComposedChart>
             </ResponsiveContainer>
-          ) : <p className="panel-placeholder">Weight trend data will appear after the first logs are available.</p>}
+          ) : <p className="panel-placeholder">Los datos de tendencia de peso aparecerán tras los primeros registros.</p>}
         </div>
       </SectionPanel>
 
       <div className="progress-bottom-layout">
-        <SectionPanel title="Adherence Heatmap">
+        <SectionPanel title="Mapa de Calor de Adherencia">
           <div className="adherence-heatmap-grid">
             {(dailyBreakdown.length > 0 ? dailyBreakdown : new Array(7).fill(null)).map((day, index) => (
               <div key={`heat-${index}`} className="adherence-heatmap-cell-wrap">
-                <span>{day ? day.day_label : ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'][index]}</span>
+                <span>{day ? day.day_label : ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM'][index]}</span>
                 <div className={`adherence-heatmap-cell adherence-heatmap-level-${day ? Math.max(0, Math.min(4, Math.round((day.adherence_percentage || 0) / 25))) : 0}`} />
               </div>
             ))}
           </div>
         </SectionPanel>
 
-        <SectionPanel title="Recent Logs">
+        <SectionPanel title="Registros Recientes">
           {recentEntries.length > 0 ? (
             <div className="recent-log-list">
               {recentEntries.map((entry) => (
@@ -392,29 +392,29 @@ function ProgressPage() {
                     <small>{formatDayLabel(entry.date)} // {formatDateLabel(entry.date, { month: 'short', day: '2-digit', year: 'numeric' })}</small>
                   </div>
                   <button type="button" className="protocol-chip-button" disabled={deletingEntryId === entry.id} onClick={() => handleDelete(entry.id)}>
-                    {deletingEntryId === entry.id ? 'Deleting...' : 'Delete'}
+                    {deletingEntryId === entry.id ? 'Borrando...' : 'Borrar'}
                   </button>
                 </article>
               ))}
             </div>
-          ) : <p className="panel-placeholder">Recent weight logs will appear here.</p>}
+          ) : <p className="panel-placeholder">Los registros de peso recientes aparecerán aquí.</p>}
         </SectionPanel>
       </div>
 
       <SectionPanel className="progress-footer-bar">
         <form className="progress-log-form" onSubmit={handleSave}>
-          <label><span>Weight (kg)</span><input type="number" step="0.1" min="0" value={weightForm.weight} onChange={(event) => setWeightForm((current) => ({ ...current, weight: event.target.value }))} required /></label>
-          <label><span>Date</span><input type="date" value={weightForm.date} onChange={(event) => setWeightForm((current) => ({ ...current, date: event.target.value }))} required /></label>
-          <button type="submit" className="protocol-secondary-button" disabled={isSaving}>{isSaving ? 'Saving...' : 'Log Weight'}</button>
+          <label><span>Peso (kg)</span><input type="number" step="0.1" min="0" value={weightForm.weight} onChange={(event) => setWeightForm((current) => ({ ...current, weight: event.target.value }))} required /></label>
+          <label><span>Fecha</span><input type="date" value={weightForm.date} onChange={(event) => setWeightForm((current) => ({ ...current, date: event.target.value }))} required /></label>
+          <button type="submit" className="protocol-secondary-button" disabled={isSaving}>{isSaving ? 'Guardando...' : 'Registrar Peso'}</button>
         </form>
 
         <div className="progress-footer-copy">
-          <strong>{summary?.latest_weight ? `Latest weight ${formatMass(summary.latest_weight)}` : 'No latest weight yet'}</strong>
-          <span>{summary?.number_of_entries ? `${summary.number_of_entries} entries tracked` : 'Start logging weight to enable weekly analysis.'}</span>
+          <strong>{summary?.latest_weight ? `Último peso ${formatMass(summary.latest_weight)}` : 'Aún no hay último peso'}</strong>
+          <span>{summary?.number_of_entries ? `${summary.number_of_entries} registros observados` : 'Comienza a registrar tu peso para activar el análisis.'}</span>
         </div>
 
         <button type="button" className="panel-cta-button" disabled={isApplyingAdjustment} onClick={handleApplyAdjustment}>
-          {isApplyingAdjustment ? 'Applying...' : 'Apply Weekly Adjustment'}
+          {isApplyingAdjustment ? 'Aplicando...' : 'Aplicar Ajuste Semanal'}
         </button>
       </SectionPanel>
 

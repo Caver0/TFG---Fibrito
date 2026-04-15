@@ -45,7 +45,7 @@ function AppShell({
               {getInitials(user?.name)}
             </div>
             <div>
-              <strong>{user?.name ?? 'Active Profile'}</strong>
+              <strong>{user?.name ?? 'Perfil Activo'}</strong>
               <span>{phaseLabel.replace('PHASE: ', '')}</span>
             </div>
           </div>
@@ -54,7 +54,7 @@ function AppShell({
             <i className="material-symbols-outlined" aria-hidden="true">
               logout
             </i>
-            <span>Close session</span>
+            <span>Cerrar sesión</span>
           </button>
         </aside>
 
