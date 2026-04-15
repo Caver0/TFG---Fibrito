@@ -190,15 +190,23 @@ function DietsPage() {
     loadWeeklyAdherence(selectedAdherenceDate, token)
   }, [token, currentDietId, selectedAdherenceDate])
 
+  // Localiza la función syncUpdatedDiet (alrededor de la línea 158) y reemplázala:
   function syncUpdatedDiet(updatedDiet) {
-    setSelectedDiet(updatedDiet)
-    setLatestDiet((currentLatestDiet) => {
-      if (!currentLatestDiet || currentLatestDiet.id === updatedDiet.id) {
-        return updatedDiet
+    // 1. Actualizamos la dieta que se está viendo actualmente
+    setSelectedDiet(updatedDiet);
+    
+    // 2. Actualizamos la referencia de 'latestDiet' si es la misma dieta
+    setLatestDiet((currentLatest) => {
+      if (!currentLatest || currentLatest.id === updatedDiet.id) {
+        return updatedDiet;
       }
+      return currentLatest;
+    });
 
-      return currentLatestDiet
-    })
+    // 3. CRITICO: Actualizamos el historial para que la lista de la derecha refleje los cambios
+    setDietHistory((currentHistory) =>
+      currentHistory.map((d) => (d.id === updatedDiet.id ? updatedDiet : d))
+    );
   }
 
   function handleGeneratorBaseChange(event) {

@@ -458,10 +458,15 @@ def persist_updated_meal_in_diet(
     preference_profile: dict[str, Any] | None,
     metadata_overrides: dict[str, Any] | None = None,
 ) -> DailyDiet:
-    updated_meals = [
-        updated_meal if index == meal_index else current_meal.model_dump()
-        for index, current_meal in enumerate(diet.meals)
-    ]
+    # Aseguramos que todas las comidas (la nueva y las existentes) sean diccionarios planos
+    updated_meals = []
+    for index, current_meal in enumerate(diet.meals):
+        if index == meal_index:
+            updated_meals.append(updated_meal)
+        else:
+            # Forzamos la conversión a dict para evitar conflictos de tipos
+            updated_meals.append(current_meal.model_dump())
+
     updated_diet_payload = build_updated_diet_payload(
         existing_diet=diet,
         meals=updated_meals,
@@ -469,7 +474,6 @@ def persist_updated_meal_in_diet(
         metadata_overrides=metadata_overrides,
     )
     return update_diet(database, user.id, diet_id, updated_diet_payload)
-
 
 def regenerate_meal(
     database,
