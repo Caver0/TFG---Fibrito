@@ -41,6 +41,22 @@ def get_current_target_calories(user: UserPublic) -> float | None:
         return None
 
 
+def _build_macro_snapshot(
+    *,
+    reference_weight: float | None,
+    target_calories: float | None,
+) -> dict[str, float] | None:
+    if reference_weight is None or target_calories is None:
+        return None
+
+    macros = calculate_macros(reference_weight, target_calories)
+    return {
+        "protein_grams": round(float(macros["protein_grams"]), 1),
+        "fat_grams": round(float(macros["fat_grams"]), 1),
+        "carb_grams": round(float(macros["carb_grams"]), 1),
+    }
+
+
 def _build_adjustment_decision(
     *,
     progress_status: str,
@@ -203,6 +219,8 @@ def calculate_calorie_adjustment(
 def analyze_weekly_progress(
     user: UserPublic,
     weekly_averages: list[WeeklyAverage],
+    *,
+    adherence_level: str = "alta",
 ) -> WeeklyAnalysisResponse:
     if user.goal is None:
         adjustment_reason = MISSING_GOAL_REASON
@@ -302,6 +320,7 @@ def analyze_weekly_progress(
         user.goal,
         weekly_change,
         current_weight=user.current_weight,
+        adherence_level=adherence_level,
     )
     new_target_calories = current_target_calories + adjustment_decision["calorie_change"]
     adjustment_reason = adjustment_decision["adjustment_reason"]
@@ -405,6 +424,7 @@ def apply_calorie_adjustment(
                 database, user_id, analysis.new_target_calories, current_weight
             )
 
+    reference_weight = current_weight if current_weight is not None else analysis.current_week_avg
     adjustment_document = {
         "user_id": ObjectId(user_id),
         "created_at": datetime.now(UTC),
@@ -422,6 +442,15 @@ def apply_calorie_adjustment(
         "calorie_change": analysis.calorie_change,
         "previous_target_calories": analysis.previous_target_calories,
         "new_target_calories": analysis.new_target_calories,
+        "macro_reference_weight": reference_weight,
+        "previous_target_macros": _build_macro_snapshot(
+            reference_weight=reference_weight,
+            target_calories=analysis.previous_target_calories,
+        ),
+        "new_target_macros": _build_macro_snapshot(
+            reference_weight=reference_weight,
+            target_calories=analysis.new_target_calories,
+        ),
         "adjustment_reason": analysis.adjustment_reason,
         "reason": analysis.adjustment_reason,
     }

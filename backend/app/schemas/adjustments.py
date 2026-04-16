@@ -7,6 +7,13 @@ from pydantic import BaseModel, ConfigDict
 
 from app.schemas.progress import WeeklyAnalysisResponse
 from app.schemas.user import GoalType
+from app.services.nutrition_service import calculate_macros
+
+
+class AdjustmentMacroTargets(BaseModel):
+    protein_grams: float
+    fat_grams: float
+    carb_grams: float
 
 
 class AdjustmentHistoryEntry(BaseModel):
@@ -26,6 +33,8 @@ class AdjustmentHistoryEntry(BaseModel):
     calorie_change: int
     previous_target_calories: float
     new_target_calories: float
+    previous_target_macros: AdjustmentMacroTargets | None = None
+    new_target_macros: AdjustmentMacroTargets | None = None
     adjustment_reason: str
     reason: str
 
@@ -48,8 +57,44 @@ def _round_progress_metric(value: float | None) -> float | None:
     return float(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
+def _serialize_macro_targets(snapshot: dict[str, Any] | None) -> AdjustmentMacroTargets | None:
+    if not snapshot:
+        return None
+
+    protein_grams = snapshot.get("protein_grams")
+    fat_grams = snapshot.get("fat_grams")
+    carb_grams = snapshot.get("carb_grams")
+    if protein_grams is None or fat_grams is None or carb_grams is None:
+        return None
+
+    return AdjustmentMacroTargets(
+        protein_grams=float(Decimal(str(protein_grams)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)),
+        fat_grams=float(Decimal(str(fat_grams)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)),
+        carb_grams=float(Decimal(str(carb_grams)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)),
+    )
+
+
+def _build_macro_targets_from_history(
+    *,
+    document: dict[str, Any],
+    target_calories_key: str,
+) -> AdjustmentMacroTargets | None:
+    reference_weight = (
+        document.get("macro_reference_weight")
+        or document.get("current_week_avg")
+        or document.get("previous_week_avg")
+    )
+    target_calories = document.get(target_calories_key)
+    if reference_weight is None or target_calories is None:
+        return None
+
+    return _serialize_macro_targets(calculate_macros(float(reference_weight), float(target_calories)))
+
+
 def serialize_adjustment_entry(document: dict[str, Any]) -> AdjustmentHistoryEntry:
     adjustment_reason = document.get("adjustment_reason", document["reason"])
+    previous_target_macros = _serialize_macro_targets(document.get("previous_target_macros"))
+    new_target_macros = _serialize_macro_targets(document.get("new_target_macros"))
 
     return AdjustmentHistoryEntry(
         id=str(document["_id"]),
@@ -68,6 +113,14 @@ def serialize_adjustment_entry(document: dict[str, Any]) -> AdjustmentHistoryEnt
         calorie_change=document["calorie_change"],
         previous_target_calories=document["previous_target_calories"],
         new_target_calories=document["new_target_calories"],
+        previous_target_macros=previous_target_macros or _build_macro_targets_from_history(
+            document=document,
+            target_calories_key="previous_target_calories",
+        ),
+        new_target_macros=new_target_macros or _build_macro_targets_from_history(
+            document=document,
+            target_calories_key="new_target_calories",
+        ),
         adjustment_reason=adjustment_reason,
         reason=adjustment_reason,
     )

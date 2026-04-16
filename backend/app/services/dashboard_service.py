@@ -374,6 +374,12 @@ def build_dashboard_overview(
         current_user.id,
         week_label=adherence_week_label,
     )
+    if weekly_analysis.can_analyze:
+        weekly_analysis = analyze_weekly_progress(
+            current_user,
+            weekly_averages_for_analysis,
+            adherence_level=adherence_overview.adherence_level,
+        )
     active_diet_overview = get_active_diet_overview(database, current_user.id)
     adjustment_events = get_calorie_adjustment_events(database, current_user.id)
     expected_weight_trend, expected_trend_label = get_expected_weight_trend(

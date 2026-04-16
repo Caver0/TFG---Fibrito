@@ -9,6 +9,7 @@ from app.schemas.adjustments import (
 )
 from app.schemas.progress import WeeklyAnalysisResponse, WeeklyAveragesResponse
 from app.schemas.user import UserPublic
+from app.services.adherence_service import calculate_weekly_adherence_summary
 from app.services.goal_adjustment_service import (
     analyze_weekly_progress,
     apply_calorie_adjustment,
@@ -23,6 +24,27 @@ from app.services.progress_service import (
 )
 
 router = APIRouter(prefix="/progress", tags=["progress"])
+
+
+def _build_weekly_analysis_with_adherence(
+    database,
+    current_user: UserPublic,
+    weekly_averages,
+) -> WeeklyAnalysisResponse:
+    analysis = analyze_weekly_progress(current_user, weekly_averages)
+    if not analysis.can_analyze or not analysis.current_week_label:
+        return analysis
+
+    weekly_adherence_summary = calculate_weekly_adherence_summary(
+        database,
+        current_user.id,
+        week_label=analysis.current_week_label,
+    )
+    return analyze_weekly_progress(
+        current_user,
+        weekly_averages,
+        adherence_level=weekly_adherence_summary.adherence_level,
+    )
 
 
 @router.get("/weekly-averages", response_model=WeeklyAveragesResponse)
@@ -42,7 +64,7 @@ def read_weekly_analysis(
     database = get_database()
     entries = list_weight_entries(database, current_user.id)
     weekly_averages = calculate_weekly_averages(entries)
-    return analyze_weekly_progress(current_user, weekly_averages)
+    return _build_weekly_analysis_with_adherence(database, current_user, weekly_averages)
 
 
 @router.post("/apply-weekly-adjustment", response_model=ApplyWeeklyAdjustmentResponse)
@@ -52,7 +74,7 @@ def apply_weekly_adjustment(
     database = get_database()
     entries = list_weight_entries(database, current_user.id)
     weekly_averages = calculate_weekly_averages(entries)
-    analysis = analyze_weekly_progress(current_user, weekly_averages)
+    analysis = _build_weekly_analysis_with_adherence(database, current_user, weekly_averages)
     existing_adjustment = get_existing_adjustment(
         database,
         current_user.id,

@@ -47,15 +47,15 @@ def calculate_target_calories(tdee: float, goal: str) -> float:
     return tdee * goal_factors[goal]
 
 
-_FAT_CALORIE_FLOOR_PCT = 0.25  # La grasa debe cubrir al menos el 25 % de las calorías totales.
-                                # Evita que superávits altos (ganar masa) generen objetivos de
-                                # carbohidratos imposibles de cubrir por el solver de dietas.
+_PROTEIN_GRAMS_PER_KG = 2.0
+_FAT_GRAMS_PER_KG = 0.8
 
 
 def calculate_macros(current_weight: float, target_calories: float) -> dict[str, float]:
-    protein_grams = current_weight * 2.0
-    # Grasa: al menos 0.8 g/kg; si las calorías son altas, sube hasta el 25 % del total.
-    fat_grams = max(current_weight * 0.8, target_calories * _FAT_CALORIE_FLOOR_PCT / 9)
+    protein_grams = current_weight * _PROTEIN_GRAMS_PER_KG
+    # Mantenemos la grasa contenida y estable; los reajustes de calorías deben
+    # empujar principalmente carbohidratos, no inflar la grasa objetivo.
+    fat_grams = current_weight * _FAT_GRAMS_PER_KG
     protein_calories = protein_grams * 4
     fat_calories = fat_grams * 9
     carb_calories = max(0.0, target_calories - protein_calories - fat_calories)

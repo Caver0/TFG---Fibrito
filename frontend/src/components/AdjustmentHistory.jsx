@@ -4,6 +4,7 @@ import {
   formatProgressMetric,
   formatRateStatus,
 } from '../utils/progressFormat'
+import { formatCalories, formatMacro } from '../utils/stitch'
 
 function AdjustmentHistory({ entries, error, isLoading }) {
   const [isExpanded, setIsExpanded] = useState(false)
@@ -52,7 +53,20 @@ function AdjustmentHistory({ entries, error, isLoading }) {
               {entry.max_weekly_loss !== null && entry.max_weekly_loss !== undefined ? (
                 <p>Limite maximo de bajada: {formatProgressMetric(entry.max_weekly_loss)}</p>
               ) : null}
-              <p>Calorias: {entry.previous_target_calories} {'->'} {entry.new_target_calories}</p>
+              <p>Calorias: {formatCalories(entry.previous_target_calories)} {'->'} {formatCalories(entry.new_target_calories)}</p>
+              {entry.previous_target_macros && entry.new_target_macros ? (
+                <>
+                  <p>
+                    Proteina: {formatMacro(entry.previous_target_macros.protein_grams)} {'->'} {formatMacro(entry.new_target_macros.protein_grams)}
+                  </p>
+                  <p>
+                    Carbohidratos: {formatMacro(entry.previous_target_macros.carb_grams)} {'->'} {formatMacro(entry.new_target_macros.carb_grams)}
+                  </p>
+                  <p>
+                    Grasas: {formatMacro(entry.previous_target_macros.fat_grams)} {'->'} {formatMacro(entry.new_target_macros.fat_grams)}
+                  </p>
+                </>
+              ) : null}
               <p>{entry.adjustment_reason}</p>
             </article>
           ))}
