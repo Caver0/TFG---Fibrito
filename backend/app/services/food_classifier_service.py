@@ -246,6 +246,49 @@ def _classify_by_dominant_macro(food_data: dict) -> list[str]:
     return {"protein": ["main", "late"], "carb": ["main"], "fat": ["main", "late"]}[dominant]
 
 
+def _build_rule_based_slot_scores(food_data: dict) -> dict[str, float]:
+    scores = {slot: 0.0 for slot in ("early", "main", "late", "snack")}
+
+    category_result = _classify_by_category_rules(food_data)
+    if category_result:
+        for slot in category_result:
+            scores[slot] = 0.85
+        return scores
+
+    for slot in _classify_by_dominant_macro(food_data):
+        scores[slot] = 0.65
+
+    return scores
+
+
+def predict_meal_slot_scores(food_data: dict) -> dict[str, float]:
+    """Returns per-slot affinity scores for ranking already valid candidates."""
+    if _is_trained and _model is not None and _mlb is not None:
+        try:
+            x = np.array([_extract_features(food_data)])
+            proba_list = _model.predict_proba(x)
+            classes_per_output = _model.classes_
+            slot_scores = {slot: 0.0 for slot in _mlb.classes_}
+
+            for slot, output_classes, probabilities in zip(_mlb.classes_, classes_per_output, proba_list, strict=True):
+                classes = [int(class_value) for class_value in np.atleast_1d(output_classes).tolist()]
+                if 1 not in classes:
+                    slot_scores[str(slot)] = 1.0 if classes == [1] else 0.0
+                    continue
+
+                positive_index = classes.index(1)
+                slot_scores[str(slot)] = float(probabilities[0][positive_index])
+
+            for slot in ("early", "main", "late", "snack"):
+                slot_scores.setdefault(slot, 0.0)
+
+            return slot_scores
+        except Exception as exc:
+            logger.warning("[Auto-Tagger] Error obteniendo scores ML, usando fallback: %s", exc)
+
+    return _build_rule_based_slot_scores(food_data)
+
+
 def predict_suitable_meals(food_data: dict) -> list[str]:
     """Sistema de clasificación híbrido en 3 niveles (orden decreciente de confianza):
 
@@ -256,14 +299,11 @@ def predict_suitable_meals(food_data: dict) -> list[str]:
     # Nivel 1: predicción ML con control de confianza
     if _is_trained and _model is not None and _mlb is not None:
         try:
-            x = np.array([_extract_features(food_data)])
-
-            # predict_proba devuelve lista de arrays (uno por label binarizado).
-            # Cada array tiene forma (n_samples, 2): [prob_clase_0, prob_clase_1].
-            proba_list = _model.predict_proba(x)
-            max_confidence = max(p[0][1] for p in proba_list) if proba_list else 0.0
+            slot_scores = predict_meal_slot_scores(food_data)
+            max_confidence = max(slot_scores.values(), default=0.0)
 
             if max_confidence >= ML_CONFIDENCE_THRESHOLD:
+                x = np.array([_extract_features(food_data)])
                 prediction_bin = _model.predict(x)
                 predicted_labels = _mlb.inverse_transform(prediction_bin)
                 if predicted_labels and predicted_labels[0]:

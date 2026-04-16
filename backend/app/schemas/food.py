@@ -30,6 +30,8 @@ def _derive_functional_group(document: dict) -> FoodFunctionalGroup:
         return "protein"
     if category == "carbohidratos":
         return "carb"
+    if category == "cereales":
+        return "carb"
     if category == "grasas":
         return "fat"
     if category == "frutas":

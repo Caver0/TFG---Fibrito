@@ -27,6 +27,7 @@ from app.services.food_catalog_service import (
     get_internal_food_lookup,
     resolve_foods_by_codes,
 )
+from app.services.food_group_service import derive_functional_group
 from app.services.food_preferences_service import FoodPreferenceConflictError, build_user_food_preferences_profile
 from app.services.meal_distribution_service import get_training_focus_indexes
 
@@ -55,34 +56,6 @@ def build_diet_context_food_lookup(database, diet: DailyDiet) -> dict[str, dict[
             food_lookup[food_code] = matched_food or build_catalog_food_from_diet_food(food.model_dump())
 
     return food_lookup
-
-
-def derive_functional_group(food: dict[str, Any]) -> str:
-    explicit_group = str(food.get("functional_group") or "").strip().lower()
-    if explicit_group:
-        return explicit_group
-
-    category = str(food.get("category") or "").strip().lower()
-    if category == "proteinas":
-        return "protein"
-    if category == "carbohidratos":
-        return "carb"
-    if category == "grasas":
-        return "fat"
-    if category == "frutas":
-        return "fruit"
-    if category == "vegetales":
-        return "vegetable"
-    if category == "lacteos":
-        protein_grams = float(food.get("protein_grams") or 0.0)
-        fat_grams = float(food.get("fat_grams") or 0.0)
-        carb_grams = float(food.get("carb_grams") or 0.0)
-        if protein_grams >= max(fat_grams, carb_grams):
-            return "protein"
-
-        return "dairy"
-
-    return "other"
 
 
 def _build_food_entry(food_lookup: dict[str, dict[str, Any]], food: Any) -> dict[str, Any]:

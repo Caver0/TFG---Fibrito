@@ -30,9 +30,9 @@ from app.services.food_preferences_service import (
     count_food_preference_matches,
     is_food_allowed_for_user,
 )
+from app.services.food_group_service import derive_functional_group
 from app.services.meal_regeneration_service import (
     build_diet_context_food_lookup,
-    derive_functional_group,
     get_training_focus_for_meal,
     infer_existing_meal_plan,
     persist_updated_meal_in_diet,

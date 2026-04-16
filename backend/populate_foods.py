@@ -1,7 +1,7 @@
-"""Pobla MongoDB con alimentos de entrenamiento etiquetados para el KNN.
+"""Pobla MongoDB con alimentos de entrenamiento etiquetados para ExtraTrees.
 
 Formato de cada fila: (Nombre, Proteína, Grasa, Carbohidratos, Categoría, Fibra, Azúcar)
-- Categoría correcta para que el feature category_score sea útil al KNN.
+- Categoría correcta para que el feature category_score sea útil al modelo.
 - Fibra y azúcar para que fiber_ratio y sugar_ratio diferencien
   cereales de desayuno (alto azúcar) de almidones (bajo azúcar).
 """
@@ -154,6 +154,11 @@ EXTRA_FATS = [
 ]
 
 
+def _has_any_token(name: str, tokens: tuple[str, ...]) -> bool:
+    normalized_name = normalize_food_name(name)
+    return any(token in normalized_name for token in tokens)
+
+
 def get_suitable_meals(name: str) -> list[str]:
     labels: list[str] = []
     if any(row[0] == name for row in BREAKFAST_FOODS):
@@ -162,10 +167,33 @@ def get_suitable_meals(name: str) -> list[str]:
         labels.append("main")
     if any(row[0] == name for row in DINNER_FOODS):
         labels.append("late")
-    # Los extras son válidos en cualquier comida principal
-    extras = EXTRA_PROTEINS + EXTRA_CARBS + EXTRA_VEGS + EXTRA_FATS
-    if any(row[0] == name for row in extras):
-        labels.extend(["early", "main", "late", "snack"])
+    # Los extras usan reglas más finas para no contaminar el entrenamiento.
+    if any(row[0] == name for row in EXTRA_PROTEINS):
+        if _has_any_token(name, ("yogur", "yogurt", "cottage", "leche", "milk")):
+            labels.extend(["early", "snack"])
+        elif _has_any_token(name, ("huevo", "egg", "claras")):
+            labels.extend(["early", "main"])
+        else:
+            labels.extend(["main", "late"])
+
+    if any(row[0] == name for row in EXTRA_CARBS):
+        if _has_any_token(name, ("avena", "oats", "pan", "bread", "muesli", "granola")):
+            labels.extend(["early", "snack"])
+            if _has_any_token(name, ("pan", "bread")):
+                labels.append("main")
+        else:
+            labels.extend(["main", "late"])
+
+    if any(row[0] == name for row in EXTRA_VEGS):
+        labels.extend(["main", "late", "snack"])
+
+    if any(row[0] == name for row in EXTRA_FATS):
+        if _has_any_token(name, ("almendra", "nueces", "cacahuete", "chia", "lino")):
+            labels.extend(["early", "snack"])
+        elif _has_any_token(name, ("aguacate", "avocado")):
+            labels.extend(["early", "main", "late", "snack"])
+        else:
+            labels.extend(["main", "late"])
     return list(dict.fromkeys(labels)) if labels else ["main"]
 
 

@@ -8,7 +8,9 @@ from fastapi import HTTPException, status
 
 from app.schemas.diet import DailyDiet, DietListItem, DietMeal, TrainingTimeOfDay, serialize_daily_diet, serialize_diet_list_item
 from app.schemas.user import UserPublic
+from app.services.food_classifier_service import predict_meal_slot_scores
 from app.services.food_catalog_service import get_food_catalog_version, get_internal_food_lookup, resolve_foods_by_codes
+from app.services.food_group_service import derive_functional_group
 from app.services.food_preferences_service import (
     FoodPreferenceConflictError,
     apply_user_food_preferences,
@@ -17,6 +19,7 @@ from app.services.food_preferences_service import (
     count_preferred_food_matches_in_meals,
 )
 from app.services.meal_distribution_service import generate_meal_distribution_targets, round_distribution_value
+from app.utils.normalization import normalize_food_name
 
 DEFAULT_FOOD_DATA_SOURCE = "internal"
 CACHE_FOOD_DATA_SOURCE = "cache"
@@ -117,6 +120,96 @@ WEEKLY_REPEAT_PENALTY_BY_ROLE = {
     "dairy": 0.06,
 }
 WEEKLY_DIVERSITY_WINDOW_DAYS = 6  # Días hacia atrás para calcular la ventana semanal
+DEFAULT_PROTEIN_ROLE_DAILY_MAX_USAGE = 1
+PROTEIN_ROLE_DAILY_MAX_USAGE_BY_CODE = {
+    "egg_whites": 1,
+    "eggs": 1,
+    "greek_yogurt": 2,
+}
+SWEET_BREAKFAST_CARB_TOKENS = (
+    "avena",
+    "oats",
+    "muesli",
+    "granola",
+    "cereal",
+    "cornflakes",
+    "flakes",
+    "porridge",
+)
+SAVORY_STARCH_TOKENS = (
+    "arroz",
+    "rice",
+    "pasta",
+    "patata",
+    "potato",
+    "quinoa",
+    "couscous",
+    "boniato",
+    "batata",
+    "lentil",
+    "lenteja",
+    "garbanzo",
+    "chickpea",
+    "judia",
+    "bean",
+    "tortilla",
+)
+SAVORY_PROTEIN_TOKENS = (
+    "chicken",
+    "pollo",
+    "turkey",
+    "pavo",
+    "tuna",
+    "atun",
+    "beef",
+    "ternera",
+    "pork",
+    "cerdo",
+    "salmon",
+    "merluza",
+    "bacalao",
+    "fish",
+    "gamba",
+    "shrimp",
+    "prawn",
+    "marisco",
+    "sepia",
+    "sausage",
+    "salchicha",
+)
+BREAKFAST_PROTEIN_TOKENS = (
+    "egg",
+    "huevo",
+    "claras",
+    "yogur",
+    "yogurt",
+    "cottage",
+    "skyr",
+    "quark",
+)
+BREAKFAST_ONLY_DAIRY_TOKENS = (
+    "yogur",
+    "yogurt",
+    "cottage",
+    "skyr",
+    "quark",
+    "leche",
+    "milk",
+)
+BREAKFAST_FAT_TOKENS = (
+    "almendra",
+    "almond",
+    "nueces",
+    "walnut",
+    "peanut",
+    "cacahuete",
+    "chia",
+    "lino",
+    "flax",
+    "seed",
+)
+COOKING_FAT_TOKENS = ("aceite", "olive oil", "oil")
+BREAKFAST_BREAD_TOKENS = ("pan", "bread", "toast", "tostada")
 
 
 def normalize_diet_food_source(value: str | None) -> str:
@@ -383,6 +476,237 @@ def rotate_codes(codes: list[str], rotation_seed: int) -> list[str]:
     return codes[shift:] + codes[:shift]
 
 
+def get_food_text_signature(food: dict[str, Any]) -> str:
+    aliases = " ".join(str(alias) for alias in food.get("aliases", []))
+    return normalize_food_name(" ".join(
+        value
+        for value in (
+            str(food.get("code", "")).replace("_", " "),
+            str(food.get("name", "")),
+            str(food.get("display_name", "")),
+            str(food.get("original_name", "")),
+            str(food.get("category", "")),
+            aliases,
+        )
+        if value
+    ))
+
+
+def _food_has_any_token(food: dict[str, Any], tokens: tuple[str, ...]) -> bool:
+    food_text = get_food_text_signature(food)
+    return any(token in food_text for token in tokens)
+
+
+def get_allowed_meal_slots_for_food(food: dict[str, Any]) -> set[str]:
+    slots = {
+        str(slot).strip().lower()
+        for slot in food.get("suitable_meals", [])
+        if str(slot).strip()
+    }
+
+    if not slots:
+        functional_group = derive_functional_group(food)
+        if functional_group in {"protein", "carb", "fat", "vegetable"}:
+            slots.update({"main", "late"})
+        elif functional_group in {"fruit", "dairy"}:
+            slots.update({"early", "snack"})
+
+    if "main" in slots:
+        slots.add("late")
+    if "snack" in slots and "early" not in slots and "main" not in slots and "late" not in slots:
+        slots.add("early")
+
+    return slots
+
+
+def is_sweet_breakfast_carb(food: dict[str, Any]) -> bool:
+    category = str(food.get("category") or "").strip().lower()
+    if category in {"frutas", "cereales"}:
+        return True
+
+    return _food_has_any_token(food, SWEET_BREAKFAST_CARB_TOKENS)
+
+
+def is_savory_starch(food: dict[str, Any]) -> bool:
+    if _food_has_any_token(food, SAVORY_STARCH_TOKENS):
+        return True
+
+    functional_group = derive_functional_group(food)
+    category = str(food.get("category") or "").strip().lower()
+    if functional_group != "carb" or category == "cereales":
+        return False
+    if _food_has_any_token(food, BREAKFAST_BREAD_TOKENS):
+        return False
+
+    allowed_slots = get_allowed_meal_slots_for_food(food)
+    return "main" in allowed_slots or "late" in allowed_slots
+
+
+def is_breakfast_only_protein(food: dict[str, Any]) -> bool:
+    category = str(food.get("category") or "").strip().lower()
+    if category == "lacteos":
+        return True
+
+    return _food_has_any_token(food, BREAKFAST_ONLY_DAIRY_TOKENS)
+
+
+def is_savory_protein(food: dict[str, Any]) -> bool:
+    if _food_has_any_token(food, SAVORY_PROTEIN_TOKENS):
+        return True
+
+    if derive_functional_group(food) != "protein":
+        return False
+    if is_breakfast_only_protein(food):
+        return False
+    if _food_has_any_token(food, BREAKFAST_PROTEIN_TOKENS):
+        return False
+
+    return True
+
+
+def is_breakfast_fat(food: dict[str, Any]) -> bool:
+    return _food_has_any_token(food, BREAKFAST_FAT_TOKENS)
+
+
+def is_cooking_fat(food: dict[str, Any]) -> bool:
+    return str(food.get("code") or "").strip().lower() == "olive_oil" or _food_has_any_token(food, COOKING_FAT_TOKENS)
+
+
+def get_candidate_role_for_food(food: dict[str, Any], meal_slot: str) -> str | None:
+    functional_group = derive_functional_group(food)
+    if functional_group == "protein":
+        return "protein"
+    if functional_group == "carb":
+        return "carb"
+    if functional_group == "fat":
+        return "fat"
+    if meal_slot == "early" and functional_group == "fruit":
+        return "carb"
+
+    return None
+
+
+def is_food_allowed_for_role_and_slot(food: dict[str, Any], *, role: str, meal_slot: str) -> bool:
+    if meal_slot not in get_allowed_meal_slots_for_food(food):
+        return False
+
+    functional_group = derive_functional_group(food)
+    if role == "protein":
+        if functional_group != "protein":
+            return False
+
+        if meal_slot == "early":
+            return not is_savory_protein(food)
+
+        return not is_breakfast_only_protein(food)
+
+    if role == "carb":
+        if meal_slot == "early":
+            return functional_group in {"carb", "fruit"} and not is_savory_starch(food)
+
+        return functional_group == "carb" and not is_sweet_breakfast_carb(food)
+
+    if role == "fat":
+        if functional_group != "fat":
+            return False
+
+        if meal_slot == "early":
+            return not is_cooking_fat(food)
+
+        return not is_breakfast_fat(food)
+
+    return False
+
+
+def get_food_slot_affinity_score(food: dict[str, Any], meal_slot: str) -> float:
+    slot_scores = predict_meal_slot_scores(food)
+    score = float(slot_scores.get(meal_slot, 0.0))
+    if meal_slot == "late":
+        score = max(score, float(slot_scores.get("main", 0.0)) * 0.9)
+
+    allowed_slots = get_allowed_meal_slots_for_food(food)
+    if meal_slot in allowed_slots:
+        score += 1.0
+    elif meal_slot == "late" and "main" in allowed_slots:
+        score += 0.75
+
+    if meal_slot == "early":
+        if is_sweet_breakfast_carb(food) or is_breakfast_only_protein(food):
+            score += 0.12
+        if is_breakfast_fat(food):
+            score += 0.08
+    else:
+        if is_savory_starch(food) or is_savory_protein(food) or is_cooking_fat(food):
+            score += 0.14
+        if derive_functional_group(food) == "carb" and _food_has_any_token(food, BREAKFAST_BREAD_TOKENS):
+            score -= 0.05
+
+    return score
+
+
+def sort_codes_by_slot_affinity(
+    codes: list[str],
+    *,
+    meal_slot: str,
+    food_lookup: dict[str, dict],
+) -> list[str]:
+    return sorted(
+        codes,
+        key=lambda code: -get_food_slot_affinity_score(food_lookup[code], meal_slot),
+    )
+
+
+def apply_daily_usage_candidate_limits(
+    candidate_codes: dict[str, list[str]],
+    *,
+    daily_food_usage: dict | None,
+) -> dict[str, list[str]]:
+    if not daily_food_usage:
+        return candidate_codes
+
+    protein_role_counts = daily_food_usage.get("role_counts", {}).get("protein", {})
+    limited_candidate_codes: dict[str, list[str]] = {}
+
+    for role, codes in candidate_codes.items():
+        if role != "protein":
+            limited_candidate_codes[role] = codes
+            continue
+
+        filtered_codes = [
+            code
+            for code in codes
+            if int(protein_role_counts.get(code, 0)) < PROTEIN_ROLE_DAILY_MAX_USAGE_BY_CODE.get(
+                code,
+                DEFAULT_PROTEIN_ROLE_DAILY_MAX_USAGE,
+            )
+        ]
+        limited_candidate_codes[role] = filtered_codes or codes
+
+    return limited_candidate_codes
+
+
+def is_role_combination_coherent(role_foods: dict[str, dict], *, meal_slot: str) -> bool:
+    protein_food = role_foods["protein"]
+    carb_food = role_foods["carb"]
+    fat_food = role_foods["fat"]
+
+    if meal_slot == "early":
+        return not (
+            is_savory_protein(protein_food)
+            or is_savory_starch(carb_food)
+            or is_cooking_fat(fat_food)
+        )
+
+    if is_sweet_breakfast_carb(carb_food):
+        return False
+    if is_breakfast_only_protein(protein_food):
+        return False
+    if is_breakfast_fat(fat_food) and is_savory_protein(protein_food):
+        return False
+
+    return True
+
+
 def create_daily_food_usage_tracker() -> dict[str, dict]:
     return {
         "food_counts": {},
@@ -533,51 +857,94 @@ def get_role_candidate_codes(
 ) -> dict[str, list[str]]:
     meal_slot = get_meal_slot(meal_index, meals_count)
     rotation_seed = meal_index + meals_count
-    low_fat_focus = training_focus or meal.target_fat_grams <= 10
 
     protein_codes = []
     carb_codes = []
     fat_codes = []
 
-    # Uso del Algoritmo de ML (suitable_meals) para derivar candidatos si hay catálogo
+    # Primero filtramos por reglas duras del slot y luego ordenamos por afinidad del modelo.
     if food_lookup:
         for code, f_data in food_lookup.items():
-            suitable = f_data.get("suitable_meals", [])
-            # Los alimentos genéricos o desconocidos caen en 'main' por KNN
-            if meal_slot in suitable or (meal_slot == "late" and "main" in suitable):
-                f_group = f_data.get("functional_group")
-                if f_group == "protein" and code not in protein_codes:
-                    protein_codes.append(code)
-                elif f_group == "carb" and code not in carb_codes:
-                    carb_codes.append(code)
-                elif f_group == "fat" and code not in fat_codes:
-                    fat_codes.append(code)
+            candidate_role = get_candidate_role_for_food(f_data, meal_slot)
+            if not candidate_role or not is_food_allowed_for_role_and_slot(f_data, role=candidate_role, meal_slot=meal_slot):
+                continue
 
-    # Fallbacks hardcodeados en caso de que la búsqueda dinámica falle por BBDD vacía
+            if candidate_role == "protein" and code not in protein_codes:
+                protein_codes.append(code)
+            elif candidate_role == "carb" and code not in carb_codes:
+                carb_codes.append(code)
+            elif candidate_role == "fat" and code not in fat_codes:
+                fat_codes.append(code)
+
+    # Fallbacks seguros en caso de que la búsqueda dinámica encuentre muy pocas opciones.
     if len(protein_codes) < 2:
         if meal_slot == "early":
-            protein_codes.extend(["egg_whites", "turkey_breast", "greek_yogurt", "chicken_breast", "eggs"])
+            protein_codes.extend(["greek_yogurt", "eggs", "egg_whites"])
         else:
-            protein_codes.extend(["chicken_breast", "turkey_breast", "tuna", "egg_whites", "eggs"])
+            protein_codes.extend(["chicken_breast", "turkey_breast", "tuna", "eggs", "egg_whites"])
 
     if len(carb_codes) < 2:
         if meal_slot == "early":
-            carb_codes.extend(["oats", "whole_wheat_bread", "rice", "banana", "potato"])
+            carb_codes.extend(["oats", "whole_wheat_bread", "banana"])
         else:
-            carb_codes.extend(["rice", "pasta", "potato", "whole_wheat_bread", "banana"])
+            carb_codes.extend(["rice", "pasta", "potato", "whole_wheat_bread"])
 
     if len(fat_codes) < 2:
-        fat_codes.extend(["olive_oil", "avocado", "mixed_nuts"])
+        if meal_slot == "early":
+            fat_codes.extend(["avocado", "mixed_nuts"])
+        else:
+            fat_codes.extend(["olive_oil", "avocado"])
 
-    # Eliminar duplicados manteniendo orden visual
-    protein_codes = list(dict.fromkeys(protein_codes))
-    carb_codes = list(dict.fromkeys(carb_codes))
-    fat_codes = list(dict.fromkeys(fat_codes))
+    protein_codes = [
+        code
+        for code in dict.fromkeys(protein_codes)
+        if not food_lookup or (
+            code in food_lookup
+            and is_food_allowed_for_role_and_slot(food_lookup[code], role="protein", meal_slot=meal_slot)
+        )
+    ]
+    carb_codes = [
+        code
+        for code in dict.fromkeys(carb_codes)
+        if not food_lookup or (
+            code in food_lookup
+            and is_food_allowed_for_role_and_slot(food_lookup[code], role="carb", meal_slot=meal_slot)
+        )
+    ]
+    fat_codes = [
+        code
+        for code in dict.fromkeys(fat_codes)
+        if not food_lookup or (
+            code in food_lookup
+            and is_food_allowed_for_role_and_slot(food_lookup[code], role="fat", meal_slot=meal_slot)
+        )
+    ]
+
+    if food_lookup:
+        protein_codes = sort_codes_by_slot_affinity(
+            rotate_codes(protein_codes, rotation_seed),
+            meal_slot=meal_slot,
+            food_lookup=food_lookup,
+        )
+        carb_codes = sort_codes_by_slot_affinity(
+            rotate_codes(carb_codes, rotation_seed + 1),
+            meal_slot=meal_slot,
+            food_lookup=food_lookup,
+        )
+        fat_codes = sort_codes_by_slot_affinity(
+            rotate_codes(fat_codes, rotation_seed + 2),
+            meal_slot=meal_slot,
+            food_lookup=food_lookup,
+        )
+    else:
+        protein_codes = rotate_codes(protein_codes, rotation_seed)
+        carb_codes = rotate_codes(carb_codes, rotation_seed + 1)
+        fat_codes = rotate_codes(fat_codes, rotation_seed + 2)
 
     return {
-        "protein": rotate_codes(protein_codes, rotation_seed),
-        "carb": rotate_codes(carb_codes, rotation_seed + 1),
-        "fat": rotate_codes(fat_codes, rotation_seed + 2),
+        "protein": protein_codes,
+        "carb": carb_codes,
+        "fat": fat_codes,
     }
 
 
@@ -837,6 +1204,8 @@ def build_exact_meal_solution(
     ]
     if len(set(all_codes)) != len(all_codes):
         return None
+    if not is_role_combination_coherent(role_foods, meal_slot=meal_slot):
+        return None
 
     support_totals = calculate_support_totals(support_food_specs, food_lookup)
     remaining_targets = {
@@ -981,6 +1350,10 @@ def find_exact_solution_for_meal(
             food_lookup=food_lookup,
             preference_profile=preference_profile,
         )
+    candidate_codes = apply_daily_usage_candidate_limits(
+        candidate_codes,
+        daily_food_usage=daily_food_usage,
+    )
     candidate_codes = apply_meal_candidate_constraints(
         candidate_codes,
         food_lookup=food_lookup,
@@ -1049,6 +1422,18 @@ def find_exact_solution_for_meal(
         "carb": ROLE_FALLBACK_CODE_POOLS["carb"],
         "fat": ROLE_FALLBACK_CODE_POOLS["fat"],
     }
+    fallback_role_codes = {
+        role: [
+            code
+            for code in codes
+            if code in food_lookup and is_food_allowed_for_role_and_slot(food_lookup[code], role=role, meal_slot=meal_slot)
+        ]
+        for role, codes in fallback_role_codes.items()
+    }
+    fallback_role_codes = apply_daily_usage_candidate_limits(
+        fallback_role_codes,
+        daily_food_usage=daily_food_usage,
+    )
     fallback_role_codes = apply_meal_candidate_constraints(
         fallback_role_codes,
         food_lookup=food_lookup,
