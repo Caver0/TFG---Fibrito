@@ -46,6 +46,12 @@ class ExpectedWeightTrendPoint(BaseModel):
     expected_weight: float
 
 
+class RegressionTrendPoint(BaseModel):
+    date: date
+    weight: float
+    is_projection: bool
+
+
 class CalorieAdjustmentEventPoint(BaseModel):
     id: str
     date: date
@@ -63,6 +69,8 @@ class WeightProgressOverview(BaseModel):
     weekly_averages: list[WeeklyWeightAveragePoint] = Field(default_factory=list)
     expected_trend: list[ExpectedWeightTrendPoint] = Field(default_factory=list)
     expected_trend_label: str | None = None
+    regression_trend: list[RegressionTrendPoint] = Field(default_factory=list)
+    regression_weekly_change: float | None = None
     adjustment_events: list[CalorieAdjustmentEventPoint] = Field(default_factory=list)
     latest_analysis: WeeklyAnalysisResponse | None = None
 

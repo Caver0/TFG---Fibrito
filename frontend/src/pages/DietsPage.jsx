@@ -607,10 +607,25 @@ function DietsPage() {
                     </div>
 
                     <div className="protocol-meal-macros">
-                      <span>{formatCalories(meal.actual_calories)} / {formatCalories(meal.target_calories)}</span>
-                      <span>{formatMacro(meal.actual_protein_grams)} P</span>
-                      <span>{formatMacro(meal.actual_carb_grams)} C</span>
-                      <span>{formatMacro(meal.actual_fat_grams)} F</span>
+                      <div className="protocol-meal-macros-kcal">
+                        <span>{formatCalories(meal.actual_calories)}</span>
+                        <span className="protocol-meal-macros-sep">/</span>
+                        <span className="protocol-meal-macros-target">{formatCalories(meal.target_calories)}</span>
+                      </div>
+                      <div className="protocol-meal-macros-grid">
+                        <div className="protocol-meal-macro-item">
+                          <strong>{formatMacro(meal.actual_protein_grams)}</strong>
+                          <small>Proteína</small>
+                        </div>
+                        <div className="protocol-meal-macro-item">
+                          <strong>{formatMacro(meal.actual_carb_grams)}</strong>
+                          <small>Carbos</small>
+                        </div>
+                        <div className="protocol-meal-macro-item">
+                          <strong>{formatMacro(meal.actual_fat_grams)}</strong>
+                          <small>Grasas</small>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="protocol-meal-actions">

@@ -11,6 +11,7 @@ from app.schemas.user import UserPublic
 from app.services.nutrition_service import (
     NutritionProfileIncompleteError,
     build_nutrition_summary,
+    calculate_macros,
 )
 from app.services.progress_service import get_last_two_weeks_for_analysis, round_progress_value
 
@@ -326,10 +327,70 @@ def analyze_weekly_progress(
     )
 
 
+def _update_latest_diet_macro_targets(
+    database,
+    user_id: str,
+    new_target_calories: float,
+    current_weight: float,
+) -> None:
+    """Recalcula los targets de macros en la dieta más reciente sin tocar los alimentos."""
+    latest_diet = database.diets.find_one(
+        {"user_id": ObjectId(user_id)},
+        sort=[("created_at", -1)],
+    )
+    if not latest_diet:
+        return
+
+    macros = calculate_macros(current_weight, new_target_calories)
+    protein = round(macros["protein_grams"], 1)
+    fat = round(macros["fat_grams"], 1)
+    carbs = round(macros["carb_grams"], 1)
+
+    updated_meals = []
+    for meal in latest_diet.get("meals", []):
+        pct = (meal.get("distribution_percentage") or 0.0) / 100.0
+        t_cal = round(new_target_calories * pct, 1)
+        t_p   = round(protein * pct, 1)
+        t_f   = round(fat * pct, 1)
+        t_c   = round(carbs * pct, 1)
+        updated_meals.append({
+            **meal,
+            "target_calories":        t_cal,
+            "target_protein_grams":   t_p,
+            "target_fat_grams":       t_f,
+            "target_carb_grams":      t_c,
+            "calorie_difference":     round(meal["actual_calories"]        - t_cal, 1),
+            "protein_difference":     round(meal["actual_protein_grams"]   - t_p,   1),
+            "fat_difference":         round(meal["actual_fat_grams"]       - t_f,   1),
+            "carb_difference":        round(meal["actual_carb_grams"]      - t_c,   1),
+        })
+
+    act_cal = latest_diet.get("actual_calories", 0.0)
+    act_p   = latest_diet.get("actual_protein_grams", 0.0)
+    act_f   = latest_diet.get("actual_fat_grams", 0.0)
+    act_c   = latest_diet.get("actual_carb_grams", 0.0)
+
+    database.diets.update_one(
+        {"_id": latest_diet["_id"]},
+        {"$set": {
+            "target_calories":        round(new_target_calories, 1),
+            "protein_grams":          protein,
+            "fat_grams":              fat,
+            "carb_grams":             carbs,
+            "calorie_difference":     round(act_cal - new_target_calories, 1),
+            "protein_difference":     round(act_p   - protein, 1),
+            "fat_difference":         round(act_f   - fat, 1),
+            "carb_difference":        round(act_c   - carbs, 1),
+            "meals":                  updated_meals,
+        }},
+    )
+
+
 def apply_calorie_adjustment(
     database,
     user_id: str,
     analysis: WeeklyAnalysisResponse,
+    current_weight: float | None = None,
 ) -> AdjustmentHistoryEntry | None:
     if not analysis.can_analyze:
         return None
@@ -339,6 +400,10 @@ def apply_calorie_adjustment(
             {"_id": ObjectId(user_id)},
             {"$set": {"target_calories": analysis.new_target_calories}},
         )
+        if current_weight is not None:
+            _update_latest_diet_macro_targets(
+                database, user_id, analysis.new_target_calories, current_weight
+            )
 
     adjustment_document = {
         "user_id": ObjectId(user_id),

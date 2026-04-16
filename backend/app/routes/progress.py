@@ -65,7 +65,7 @@ def apply_weekly_adjustment(
             adjustment=existing_adjustment,
         )
 
-    adjustment = apply_calorie_adjustment(database, current_user.id, analysis)
+    adjustment = apply_calorie_adjustment(database, current_user.id, analysis, current_user.current_weight)
     return ApplyWeeklyAdjustmentResponse(analysis=analysis, adjustment=adjustment)
 
 

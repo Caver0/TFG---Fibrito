@@ -5,7 +5,6 @@ import {
   LabelList,
   Line,
   ResponsiveContainer,
-  Scatter,
   Tooltip,
   XAxis,
   YAxis,
@@ -86,8 +85,12 @@ function buildWeightChartPayload(weightProgress) {
   const entries = Array.isArray(weightProgress?.entries) ? weightProgress.entries : []
   const weeklyAverages = Array.isArray(weightProgress?.weekly_averages) ? weightProgress.weekly_averages : []
   const adjustmentEvents = Array.isArray(weightProgress?.adjustment_events) ? weightProgress.adjustment_events : []
+  const regressionTrend = Array.isArray(weightProgress?.regression_trend) ? weightProgress.regression_trend : []
 
-  const sourcePoints = entries.length > 0
+  // Build map of historical points keyed by date string
+  const pointsByDate = new Map()
+
+  const historicalPoints = entries.length > 0
     ? entries.map((point) => ({
         chartDate: point.date,
         axisLabel: formatDateLabel(point.date),
@@ -99,24 +102,54 @@ function buildWeightChartPayload(weightProgress) {
         weight: Number(point.average_weight),
       }))
 
-  const byDate = Object.fromEntries(sourcePoints.map((point) => [point.chartDate, point]))
-
-  const adjustmentPoints = adjustmentEvents
-    .map((event) => {
-      const matchedPoint = byDate[event.date]
-      return {
-        chartDate: event.date,
-        axisLabel: matchedPoint?.axisLabel ?? formatDateLabel(event.date),
-        adjustmentWeight: Number(event.reference_weight ?? matchedPoint?.weight ?? sourcePoints[sourcePoints.length - 1]?.weight ?? 0),
-        calorieChange: event.calorie_change,
-      }
-    })
-    .filter((point) => Number.isFinite(point.adjustmentWeight))
-
-  return {
-    sourcePoints,
-    adjustmentPoints,
+  for (const p of historicalPoints) {
+    pointsByDate.set(p.chartDate, p)
   }
+
+  // Merge regression fitted values into historical points
+  for (const r of regressionTrend) {
+    if (!r.is_projection) {
+      const existing = pointsByDate.get(r.date)
+      if (existing) {
+        existing.regressionWeight = Number(r.weight)
+      }
+    }
+  }
+
+  // Add future projection points (no actual weight)
+  const projectionPoints = regressionTrend
+    .filter((r) => r.is_projection)
+    .map((r) => ({
+      chartDate: r.date,
+      axisLabel: formatDateLabel(r.date),
+      projectedWeight: Number(r.weight),
+    }))
+
+  const sourcePoints = [...historicalPoints, ...projectionPoints]
+
+  if (sourcePoints.length === 0) {
+    return { sourcePoints: [] }
+  }
+
+  // Anclar cada evento de ajuste al punto de peso más cercano por fecha
+  for (const event of adjustmentEvents) {
+    const eventTime = new Date(event.date).getTime()
+    let closest = historicalPoints[0] ?? sourcePoints[0]
+    let minDiff = Math.abs(new Date(closest.chartDate).getTime() - eventTime)
+
+    for (const point of historicalPoints) {
+      const diff = Math.abs(new Date(point.chartDate).getTime() - eventTime)
+      if (diff < minDiff) {
+        minDiff = diff
+        closest = point
+      }
+    }
+
+    closest.calorieChange = event.calorie_change
+    closest.adjustmentLabel = `${event.calorie_change > 0 ? '+' : ''}${event.calorie_change} KCAL`
+  }
+
+  return { sourcePoints }
 }
 
 function DashboardTooltip({ active, payload, label }) {
@@ -125,13 +158,17 @@ function DashboardTooltip({ active, payload, label }) {
   }
 
   const weightPoint = payload.find((entry) => entry.dataKey === 'weight')
-  const adjustmentPoint = payload.find((entry) => entry.dataKey === 'adjustmentWeight')
+  const regressionPoint = payload.find((entry) => entry.dataKey === 'regressionWeight')
+  const projectionPoint = payload.find((entry) => entry.dataKey === 'projectedWeight')
+  const calorieChange = weightPoint?.payload?.calorieChange
 
   return (
     <div className="chart-tooltip">
       <strong>{label}</strong>
-      {weightPoint ? <p>Peso: {formatMass(weightPoint.value)}</p> : null}
-      {adjustmentPoint ? <p>Ajuste: {adjustmentPoint.payload.calorieChange > 0 ? '+' : ''}{adjustmentPoint.payload.calorieChange} kcal</p> : null}
+      {weightPoint ? <p>Peso real: {formatMass(weightPoint.value)}</p> : null}
+      {regressionPoint ? <p>Tendencia: {formatMass(regressionPoint.value)}</p> : null}
+      {projectionPoint ? <p>Proyección: {formatMass(projectionPoint.value)}</p> : null}
+      {calorieChange !== undefined ? <p>Ajuste: {calorieChange > 0 ? '+' : ''}{calorieChange} kcal</p> : null}
     </div>
   )
 }
@@ -300,6 +337,8 @@ function DashboardPage() {
                 actions={(
                   <div className="legend-group">
                     <span><i className="legend-dot legend-dot-primary" />Peso</span>
+                    <span><i className="legend-dot legend-dot-info" />Tendencia</span>
+                    <span><i className="legend-dot legend-dot-info legend-dot-dashed" />Proyección</span>
                     <span><i className="legend-dot legend-dot-danger" />Ajuste</span>
                   </div>
                 )}
@@ -322,17 +361,39 @@ function DashboardPage() {
                           dataKey="weight"
                           stroke="#daf900"
                           strokeWidth={3}
-                          dot={false}
+                          connectNulls={false}
+                          dot={(props) => {
+                            if (props.payload?.calorieChange === undefined) return null
+                            return <circle key={props.key} cx={props.cx} cy={props.cy} r={7} fill="#ff7162" stroke="#ff7162" strokeWidth={2} />
+                          }}
                           activeDot={{ r: 4, fill: '#f6ffc0', stroke: '#daf900', strokeWidth: 2 }}
-                        />
-                        <Scatter data={chartPayload.adjustmentPoints} dataKey="adjustmentWeight" fill="#ff7162">
+                        >
                           <LabelList
-                            dataKey="calorieChange"
+                            dataKey="adjustmentLabel"
                             position="top"
-                            formatter={(value) => `${value > 0 ? '+' : ''}${value} KCAL`}
                             style={{ fill: '#ff7162', fontSize: 10, fontWeight: 700 }}
+                            formatter={(value) => value ?? ''}
                           />
-                        </Scatter>
+                        </Line>
+                        <Line
+                          type="linear"
+                          dataKey="regressionWeight"
+                          stroke="#00d4ff"
+                          strokeWidth={2}
+                          dot={false}
+                          activeDot={false}
+                          connectNulls={false}
+                        />
+                        <Line
+                          type="linear"
+                          dataKey="projectedWeight"
+                          stroke="#00d4ff"
+                          strokeWidth={2}
+                          strokeDasharray="6 4"
+                          dot={false}
+                          activeDot={false}
+                          connectNulls={false}
+                        />
                       </ComposedChart>
                     </ResponsiveContainer>
                   ) : (

@@ -1,6 +1,7 @@
 """Business logic for the aggregated user dashboard overview."""
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from typing import NamedTuple
 
 from app.schemas.dashboard import (
     ActiveDietMealOverview,
@@ -12,6 +13,7 @@ from app.schemas.dashboard import (
     DashboardOverviewResponse,
     DashboardSummaryMetrics,
     ExpectedWeightTrendPoint,
+    RegressionTrendPoint,
     WeightProgressOverview,
     WeightProgressPoint,
     WeeklyWeightAveragePoint,
@@ -303,6 +305,60 @@ def get_active_diet_overview(database, user_id: str) -> ActiveDietOverview | Non
     )
 
 
+_REGRESSION_MIN_POINTS = 3
+_REGRESSION_PROJECTION_WEEKS = 4
+
+
+class _RegressionResult(NamedTuple):
+    points: list[RegressionTrendPoint]
+    weekly_change: float | None
+
+
+def compute_weight_regression(
+    weight_progress_series: list[WeightProgressPoint],
+) -> _RegressionResult:
+    """Least-squares linear regression on actual weight entries + 4-week projection."""
+    if len(weight_progress_series) < _REGRESSION_MIN_POINTS:
+        return _RegressionResult(points=[], weekly_change=None)
+
+    base_date = weight_progress_series[0].date
+    xs = [(p.date - base_date).days for p in weight_progress_series]
+    ys = [p.weight for p in weight_progress_series]
+    n = len(xs)
+
+    sum_x = sum(xs)
+    sum_y = sum(ys)
+    sum_xy = sum(x * y for x, y in zip(xs, ys))
+    sum_x2 = sum(x * x for x in xs)
+
+    denom = n * sum_x2 - sum_x ** 2
+    if denom == 0:
+        return _RegressionResult(points=[], weekly_change=None)
+
+    slope = (n * sum_xy - sum_x * sum_y) / denom  # kg per day
+    intercept = (sum_y - slope * sum_x) / n
+
+    points: list[RegressionTrendPoint] = []
+
+    # Fitted values for historical dates
+    for entry in weight_progress_series:
+        x = (entry.date - base_date).days
+        fitted = round(slope * x + intercept, 2)
+        points.append(RegressionTrendPoint(date=entry.date, weight=fitted, is_projection=False))
+
+    # Projected values: weekly steps for the next N weeks
+    last_date = weight_progress_series[-1].date
+    last_x = xs[-1]
+    for week in range(1, _REGRESSION_PROJECTION_WEEKS + 1):
+        proj_date = last_date + timedelta(days=7 * week)
+        x = last_x + 7 * week
+        proj_weight = round(slope * x + intercept, 2)
+        points.append(RegressionTrendPoint(date=proj_date, weight=proj_weight, is_projection=True))
+
+    weekly_change = round(slope * 7, 3)
+    return _RegressionResult(points=points, weekly_change=weekly_change)
+
+
 def build_dashboard_overview(
     database,
     current_user: UserPublic,
@@ -325,6 +381,7 @@ def build_dashboard_overview(
         weight_progress_series,
         weekly_weight_averages,
     )
+    regression_result = compute_weight_regression(weight_progress_series)
     nutrition_summary = _get_current_nutrition_summary(current_user)
 
     latest_weight = (
@@ -385,6 +442,8 @@ def build_dashboard_overview(
             weekly_averages=weekly_weight_averages,
             expected_trend=expected_weight_trend,
             expected_trend_label=expected_trend_label,
+            regression_trend=regression_result.points,
+            regression_weekly_change=regression_result.weekly_change,
             adjustment_events=adjustment_events,
             latest_analysis=weekly_analysis,
         ),

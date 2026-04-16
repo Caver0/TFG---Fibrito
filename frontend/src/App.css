@@ -804,6 +804,15 @@
   background: var(--lab-red);
 }
 
+.legend-dot-info {
+  background: #00d4ff;
+}
+
+.legend-dot-dashed {
+  background: transparent;
+  border: 2px dashed #00d4ff;
+}
+
 .legend-dot-muted {
   background: #484849;
 }
@@ -1047,7 +1056,6 @@
 .diet-performance-target small,
 .diet-performance-meta span,
 .protocol-food-row small,
-.protocol-meal-macros span,
 .recent-log-item small,
 .profile-engine-note p {
   color: var(--lab-muted);
@@ -1218,6 +1226,61 @@
   border-radius: 10px;
   background: var(--lab-surface-3);
   color: var(--lab-lime-soft);
+}
+
+.protocol-meal-macros {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 0 4px;
+  border-top: 1px solid rgba(72, 72, 73, 0.18);
+}
+
+.protocol-meal-macros-kcal {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.protocol-meal-macros-sep {
+  color: var(--lab-muted);
+  font-weight: 400;
+}
+
+.protocol-meal-macros-target {
+  color: var(--lab-muted);
+  font-weight: 400;
+}
+
+.protocol-meal-macros-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.protocol-meal-macro-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  background: var(--lab-surface-3);
+  border-radius: 10px;
+}
+
+.protocol-meal-macro-item strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--lab-text);
+}
+
+.protocol-meal-macro-item small {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--lab-muted);
 }
 
 .protocol-meal-actions,

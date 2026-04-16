@@ -12,6 +12,7 @@ import * as adherenceApi from '../api/adherenceApi'
 import * as dashboardApi from '../api/dashboardApi'
 import * as progressApi from '../api/progressApi'
 import * as weightApi from '../api/weightApi'
+import AdjustmentHistory from '../components/AdjustmentHistory'
 import CircularGauge from '../components/CircularGauge'
 import SectionPanel from '../components/SectionPanel'
 import { useAuth } from '../context/AuthContext'
@@ -417,6 +418,8 @@ function ProgressPage() {
           {isApplyingAdjustment ? 'Aplicando...' : 'Aplicar Ajuste Semanal'}
         </button>
       </SectionPanel>
+
+      <AdjustmentHistory entries={adjustmentHistory} isLoading={false} error="" />
 
       {saveMessage ? <p className="page-status page-status-success">{saveMessage}</p> : null}
       {applyMessage ? <p className="page-status page-status-success">{applyMessage}</p> : null}

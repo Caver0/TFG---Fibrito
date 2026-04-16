@@ -5,6 +5,7 @@ import { useAuth } from './context/AuthContext'
 import DashboardPage from './pages/DashboardPage'
 import DietsPage from './pages/DietsPage'
 import LoginPage from './pages/LoginPage'
+import OnboardingPage from './pages/OnboardingPage'
 import ProfilePage from './pages/ProfilePage'
 import ProgressPage from './pages/ProgressPage'
 import RegisterPage from './pages/RegisterPage'
@@ -113,6 +114,10 @@ function App() {
     ) : (
       <RegisterPage onSwitch={() => setAuthView('login')} />
     )
+  }
+
+  if (!user?.goal) {
+    return <OnboardingPage />
   }
 
   return (

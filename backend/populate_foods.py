@@ -95,10 +95,62 @@ DINNER_FOODS = [
     ("Calabacín fresco crudo",           1.2,  0.3,  3.1, "vegetales",      1.1,  2.5),
     ("Cebolla blanca cruda",             1.1,  0.1,  9.3, "vegetales",      1.7,  4.2),
     # Carbohidratos de cena
-    ("Boniato crudo / Batata",           1.6,  0.1, 20.1, "carbohidratos",  3.0, 4.2),
-    ("Ajo pelado crudo",                 6.4,  0.5, 33.1, "carbohidratos",  2.1, 1.0),
+    ("Boniato crudo / Batata",           1.6,  0.1, 20.1, "carbohidratos",  3.0,  4.2),
+    ("Ajo pelado crudo",                 6.4,  0.5, 33.1, "carbohidratos",  2.1,  1.0),
     # Lácteo de cena
     ("Queso Mozzarella fresco",         22.2, 22.4,  2.2, "lacteos",        0.0,  1.1),
+]
+
+# Alimentos adicionales que no llegó a cubrir la cuota de Spoonacular
+EXTRA_PROTEINS = [
+    ("Pechuga de pollo cocida",         31.0,  3.6,  0.0, "proteinas",      0.0,  0.0),
+    ("Pechuga de pavo cocida",          29.0,  1.0,  0.0, "proteinas",      0.0,  0.0),
+    ("Atún al natural (lata escurrida)",25.5,  0.8,  0.0, "proteinas",      0.0,  0.0),
+    ("Claras de huevo cocidas",         11.0,  0.2,  0.7, "proteinas",      0.0,  0.7),
+    ("Yogur griego 0% sin azúcar",      10.2,  0.4,  3.6, "lacteos",        0.0,  3.6),
+    ("Queso cottage desnatado",         11.1,  0.3,  3.4, "lacteos",        0.0,  3.4),
+    ("Leche desnatada",                  3.4,  0.1,  4.9, "lacteos",        0.0,  4.9),
+    ("Tofu firme",                      8.1,   4.8,  1.9, "proteinas",      0.3,  0.6),
+    ("Edamame cocido",                  11.9,  5.2,  8.9, "proteinas",      5.2,  2.2),
+    ("Ternera magra cocida",            26.3,  5.9,  0.0, "proteinas",      0.0,  0.0),
+    ("Bacalao al horno",                20.1,  0.9,  0.0, "proteinas",      0.0,  0.0),
+    ("Gambas cocidas",                  20.5,  1.7,  0.9, "proteinas",      0.0,  0.0),
+]
+
+EXTRA_CARBS = [
+    ("Arroz blanco cocido",              2.7,  0.3, 28.2, "carbohidratos",  0.4,  0.0),
+    ("Arroz integral cocido",            2.3,  0.8, 23.5, "carbohidratos",  1.8,  0.4),
+    ("Pasta cocida",                     5.8,  0.9, 30.9, "carbohidratos",  1.8,  0.6),
+    ("Pasta integral cocida",            5.3,  0.8, 28.1, "carbohidratos",  3.9,  0.5),
+    ("Quinoa cocida",                    4.4,  1.9, 21.3, "carbohidratos",  2.8,  0.9),
+    ("Boniato cocido",                   1.4,  0.1, 20.7, "carbohidratos",  3.3,  6.5),
+    ("Patata cocida sin piel",           1.9,  0.1, 17.6, "carbohidratos",  1.5,  0.8),
+    ("Lentejas cocidas",                 9.0,  0.4, 20.1, "carbohidratos",  7.9,  1.8),
+    ("Garbanzos cocidos",                8.9,  2.6, 27.4, "carbohidratos",  7.6,  4.8),
+    ("Judías negras cocidas",            8.9,  0.5, 23.7, "carbohidratos",  8.7,  0.3),
+    ("Copos de avena cocidos",           2.4,  1.4, 12.0, "carbohidratos",  1.7,  0.0),
+    ("Tortilla de maíz",                 5.7,  2.9, 44.6, "carbohidratos",  4.1,  0.4),
+    ("Pan de centeno integral",         8.5,   2.0, 48.3, "carbohidratos",  6.2,  3.8),
+]
+
+EXTRA_VEGS = [
+    ("Brócoli cocido",                   2.8,  0.3,  6.6, "vegetales",      2.6,  1.6),
+    ("Espinacas cocidas",                3.0,  0.4,  3.7, "vegetales",      2.4,  0.4),
+    ("Kale crudo",                       4.3,  0.9,  8.8, "vegetales",      3.6,  2.3),
+    ("Judías verdes cocidas",            1.8,  0.1,  7.1, "vegetales",      2.7,  3.3),
+    ("Pimiento rojo cocido",             0.8,  0.2,  6.7, "vegetales",      2.0,  5.0),
+    ("Zanahoria cruda",                  0.9,  0.2,  9.6, "vegetales",      2.8,  4.7),
+    ("Tomate cherry",                    0.9,  0.2,  3.5, "vegetales",      1.2,  2.6),
+    ("Pepino crudo",                     0.7,  0.1,  3.6, "vegetales",      0.5,  1.7),
+    ("Setas cocidas",                    3.5,  0.5,  5.3, "vegetales",      1.8,  3.0),
+]
+
+EXTRA_FATS = [
+    ("Almendras crudas",                21.2, 49.9, 21.6, "grasas",        12.5,  4.4),
+    ("Nueces peladas",                  15.2, 65.2, 13.7, "grasas",         6.7,  2.6),
+    ("Aguacate",                         2.0, 14.7,  8.5, "grasas",         6.7,  0.7),
+    ("Mantequilla de cacahuete natural",25.0, 50.0, 20.0, "grasas",         6.0,  9.0),
+    ("Semillas de lino molidas",         18.3, 42.2, 28.9, "grasas",        27.3,  1.6),
 ]
 
 
@@ -110,6 +162,10 @@ def get_suitable_meals(name: str) -> list[str]:
         labels.append("main")
     if any(row[0] == name for row in DINNER_FOODS):
         labels.append("late")
+    # Los extras son válidos en cualquier comida principal
+    extras = EXTRA_PROTEINS + EXTRA_CARBS + EXTRA_VEGS + EXTRA_FATS
+    if any(row[0] == name for row in extras):
+        labels.extend(["early", "main", "late", "snack"])
     return list(dict.fromkeys(labels)) if labels else ["main"]
 
 
@@ -124,7 +180,10 @@ def populate() -> None:
         print("Asegúrate de que el contenedor de MongoDB está corriendo.")
         return
 
-    all_raw_foods = BREAKFAST_FOODS + LUNCH_FOODS + DINNER_FOODS
+    all_raw_foods = (
+        BREAKFAST_FOODS + LUNCH_FOODS + DINNER_FOODS
+        + EXTRA_PROTEINS + EXTRA_CARBS + EXTRA_VEGS + EXTRA_FATS
+    )
     print(f"\n2. Inyectando {len(all_raw_foods)} ingredientes con macros, fibra y azúcar reales.")
     print("-" * 70)
 
@@ -155,7 +214,7 @@ def populate() -> None:
             "sugar_grams": sugar,          # Nuevo: para sugar_ratio en features 6D
             "default_quantity": 100.0,
             "min_quantity": 50.0,
-            "max_quantity": 300.0,
+            "max_quantity": 550.0 if category == "carbohidratos" else 300.0,
             "step": 10.0,
             "matched_query": name,
             "image": None,
