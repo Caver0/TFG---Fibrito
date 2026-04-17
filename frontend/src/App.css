@@ -1148,9 +1148,86 @@
 .protocol-meal-hero {
   position: relative;
   min-height: 228px;
+  overflow: hidden;
+  --meal-accent: rgba(218, 249, 0, 0.24);
+  --meal-accent-soft: rgba(218, 249, 0, 0.12);
+  --meal-chip-bg: rgba(218, 249, 0, 0.92);
+  --meal-chip-text: #505d00;
+  background:
+    radial-gradient(circle at top right, var(--meal-accent) 0%, transparent 48%),
+    radial-gradient(circle at bottom left, var(--meal-accent-soft) 0%, transparent 42%),
+    linear-gradient(145deg, rgba(32, 34, 39, 0.96) 0%, rgba(15, 16, 18, 0.98) 58%, rgba(8, 8, 9, 1) 100%);
 }
 
-.protocol-meal-image,
+.protocol-meal-hero::before,
+.protocol-meal-hero::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+}
+
+.protocol-meal-hero::before {
+  top: -26px;
+  right: -32px;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--meal-accent) 0%, transparent 72%);
+  opacity: 0.95;
+}
+
+.protocol-meal-hero::after {
+  left: 22px;
+  bottom: 20px;
+  width: 130px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--meal-accent), transparent);
+  opacity: 0.9;
+}
+
+.protocol-meal-hero--breakfast {
+  --meal-accent: rgba(255, 196, 112, 0.34);
+  --meal-accent-soft: rgba(255, 196, 112, 0.18);
+  --meal-chip-bg: rgba(255, 214, 153, 0.94);
+  --meal-chip-text: #5a3a00;
+}
+
+.protocol-meal-hero--pre-workout {
+  --meal-accent: rgba(102, 204, 255, 0.34);
+  --meal-accent-soft: rgba(102, 204, 255, 0.16);
+  --meal-chip-bg: rgba(130, 220, 255, 0.94);
+  --meal-chip-text: #053b50;
+}
+
+.protocol-meal-hero--post-workout {
+  --meal-accent: rgba(74, 222, 128, 0.3);
+  --meal-accent-soft: rgba(74, 222, 128, 0.14);
+  --meal-chip-bg: rgba(157, 244, 189, 0.94);
+  --meal-chip-text: #11412b;
+}
+
+.protocol-meal-hero--dinner {
+  --meal-accent: rgba(255, 113, 98, 0.28);
+  --meal-accent-soft: rgba(255, 113, 98, 0.14);
+  --meal-chip-bg: rgba(255, 172, 162, 0.94);
+  --meal-chip-text: #5a1f18;
+}
+
+.protocol-meal-hero--training-focus {
+  --meal-accent: rgba(218, 249, 0, 0.3);
+  --meal-accent-soft: rgba(218, 249, 0, 0.14);
+  --meal-chip-bg: rgba(218, 249, 0, 0.94);
+  --meal-chip-text: #485400;
+}
+
+.protocol-meal-hero--meal {
+  --meal-accent: rgba(174, 179, 186, 0.22);
+  --meal-accent-soft: rgba(174, 179, 186, 0.1);
+  --meal-chip-bg: rgba(224, 228, 235, 0.9);
+  --meal-chip-text: #2d3238;
+}
+
 .profile-goal-background img {
   position: absolute;
   inset: 0;
@@ -1162,7 +1239,7 @@
 .protocol-meal-overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.04), rgba(16, 16, 18, 0.18) 44%, rgba(16, 16, 18, 0.98));
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(16, 16, 18, 0.08) 40%, rgba(10, 10, 12, 0.96));
 }
 
 .protocol-meal-copy,
@@ -1178,6 +1255,14 @@
   gap: 8px;
 }
 
+.protocol-meal-copy span {
+  color: var(--lab-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
 .protocol-meal-copy h3 {
   font-size: clamp(1.9rem, 2vw, 2.4rem);
   text-transform: uppercase;
@@ -1187,8 +1272,8 @@
   top: 18px;
   right: 18px;
   padding: 10px 14px;
-  background: rgba(218, 249, 0, 0.92);
-  color: #505d00;
+  background: var(--meal-chip-bg);
+  color: var(--meal-chip-text);
   font-size: 0.76rem;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -1202,6 +1287,9 @@
 }
 
 .protocol-food-row {
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   padding-bottom: 12px;
   border-bottom: 1px solid rgba(72, 72, 73, 0.18);
 }
@@ -1215,8 +1303,48 @@
   border-color: rgba(218, 249, 0, 0.4);
 }
 
+.protocol-food-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  flex: 0 1 220px;
+}
+
+.protocol-food-inline-metrics {
+  display: flex;
+  flex: 1 1 320px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.protocol-food-breakdown,
+.protocol-food-macros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.protocol-food-breakdown span,
+.protocol-food-macros span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--lab-surface-3);
+  color: var(--lab-soft);
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.protocol-food-macros span {
+  color: var(--lab-text);
+}
+
 .protocol-food-meta {
   min-width: 140px;
+  justify-content: flex-end;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .protocol-food-meta button,
@@ -1673,6 +1801,21 @@
 
   .auth-card {
     padding: 28px 22px 24px;
+  }
+
+  .protocol-food-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .protocol-food-copy,
+  .protocol-food-inline-metrics {
+    flex: initial;
+  }
+
+  .protocol-food-meta {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .auth-shell-footer {

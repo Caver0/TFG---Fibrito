@@ -20,6 +20,7 @@ from app.services.food_preferences_service import (
     prioritize_preferred_foods,
 )
 from app.services.meal_distribution_service import generate_meal_distribution_targets, round_distribution_value
+from app.utils.meal_roles import get_meal_slot as _resolve_meal_slot
 from app.utils.normalization import normalize_food_name
 
 DEFAULT_FOOD_DATA_SOURCE = "internal"
@@ -213,6 +214,19 @@ BREAKFAST_FAT_TOKENS = (
 )
 COOKING_FAT_TOKENS = ("aceite", "olive oil", "oil")
 BREAKFAST_BREAD_TOKENS = ("pan", "bread", "toast", "tostada")
+VALID_MEAL_SLOTS = {"early", "main", "late"}
+VALID_MEAL_ROLES = {"meal", "breakfast", "pre_workout", "post_workout", "dinner", "training_focus"}
+LOW_FAT_MEAL_ROLES = {"pre_workout", "post_workout", "training_focus"}
+MAX_ROLE_CANDIDATES_PER_MEAL = {
+    "protein": 10,
+    "carb": 10,
+    "fat": 8,
+}
+MAX_SUPPORT_CANDIDATES_PER_ROLE = 3
+LEAN_PROTEIN_CODES = {"chicken_breast", "turkey_breast", "tuna", "egg_whites", "greek_yogurt"}
+FAST_DIGESTING_CARB_CODES = {"rice", "potato", "pasta", "oats", "banana", "whole_wheat_bread"}
+EARLY_SWEET_FAT_CODES = {"mixed_nuts"}
+SAVORY_FAT_CODES = {"olive_oil", "avocado"}
 
 
 def normalize_diet_food_source(value: str | None) -> str:
@@ -470,11 +484,55 @@ def calculate_difference_summary(
 
 
 def get_meal_slot(meal_index: int, meals_count: int) -> str:
-    if meal_index == 0 or (meals_count >= 5 and meal_index == 1):
-        return "early"
+    return _resolve_meal_slot(meal_index, meals_count)
+
+
+def normalize_meal_slot(meal_slot: str | None, *, meal_index: int, meals_count: int) -> str:
+    normalized_slot = str(meal_slot or "").strip().lower()
+    if normalized_slot in VALID_MEAL_SLOTS:
+        return normalized_slot
+
+    return get_meal_slot(meal_index, meals_count)
+
+
+def normalize_meal_role(
+    meal_role: str | None,
+    *,
+    meal_index: int,
+    meals_count: int,
+    training_focus: bool,
+) -> str:
+    normalized_role = str(meal_role or "").strip().lower()
+    if normalized_role in VALID_MEAL_ROLES:
+        if training_focus and normalized_role == "meal":
+            return "training_focus"
+        return normalized_role
+
+    if training_focus:
+        return "training_focus"
+    if meal_index == 0:
+        return "breakfast"
     if meal_index == meals_count - 1:
-        return "late"
-    return "main"
+        return "dinner"
+    return "meal"
+
+
+def resolve_meal_context(
+    meal: DietMeal,
+    *,
+    meal_index: int,
+    meals_count: int,
+    training_focus: bool,
+) -> tuple[str, str]:
+    return (
+        normalize_meal_slot(getattr(meal, "meal_slot", None), meal_index=meal_index, meals_count=meals_count),
+        normalize_meal_role(
+            getattr(meal, "meal_role", None),
+            meal_index=meal_index,
+            meals_count=meals_count,
+            training_focus=training_focus,
+        ),
+    )
 
 
 def rotate_codes(codes: list[str], rotation_seed: int) -> list[str]:
@@ -662,6 +720,27 @@ def sort_codes_by_slot_affinity(
     return sorted(
         codes,
         key=lambda code: -get_food_slot_affinity_score(food_lookup[code], meal_slot),
+    )
+
+
+def sort_codes_by_meal_fit(
+    codes: list[str],
+    *,
+    role: str,
+    meal_slot: str,
+    meal_role: str,
+    training_focus: bool,
+    food_lookup: dict[str, dict],
+) -> list[str]:
+    return sorted(
+        codes,
+        key=lambda code: -get_food_role_fit_score(
+            food_lookup[code],
+            role=role,
+            meal_slot=meal_slot,
+            meal_role=meal_role,
+            training_focus=training_focus,
+        ),
     )
 
 
@@ -864,7 +943,12 @@ def get_role_candidate_codes(
     training_focus: bool,
     food_lookup: dict[str, dict] | None = None,
 ) -> dict[str, list[str]]:
-    meal_slot = get_meal_slot(meal_index, meals_count)
+    meal_slot, meal_role = resolve_meal_context(
+        meal,
+        meal_index=meal_index,
+        meals_count=meals_count,
+        training_focus=training_focus,
+    )
     rotation_seed = meal_index + meals_count
 
     protein_codes = []
@@ -930,19 +1014,28 @@ def get_role_candidate_codes(
     ]
 
     if food_lookup:
-        protein_codes = sort_codes_by_slot_affinity(
+        protein_codes = sort_codes_by_meal_fit(
             rotate_codes(protein_codes, rotation_seed),
+            role="protein",
             meal_slot=meal_slot,
+            meal_role=meal_role,
+            training_focus=training_focus,
             food_lookup=food_lookup,
         )
-        carb_codes = sort_codes_by_slot_affinity(
+        carb_codes = sort_codes_by_meal_fit(
             rotate_codes(carb_codes, rotation_seed + 1),
+            role="carb",
             meal_slot=meal_slot,
+            meal_role=meal_role,
+            training_focus=training_focus,
             food_lookup=food_lookup,
         )
-        fat_codes = sort_codes_by_slot_affinity(
+        fat_codes = sort_codes_by_meal_fit(
             rotate_codes(fat_codes, rotation_seed + 2),
+            role="fat",
             meal_slot=meal_slot,
+            meal_role=meal_role,
+            training_focus=training_focus,
             food_lookup=food_lookup,
         )
     else:
@@ -951,9 +1044,9 @@ def get_role_candidate_codes(
         fat_codes = rotate_codes(fat_codes, rotation_seed + 2)
 
     return {
-        "protein": protein_codes,
-        "carb": carb_codes,
-        "fat": fat_codes,
+        "protein": protein_codes[:MAX_ROLE_CANDIDATES_PER_MEAL["protein"]],
+        "carb": carb_codes[:MAX_ROLE_CANDIDATES_PER_MEAL["carb"]],
+        "fat": fat_codes[:MAX_ROLE_CANDIDATES_PER_MEAL["fat"]],
     }
 
 
@@ -963,42 +1056,61 @@ def get_support_option_specs(
     meal_index: int,
     meals_count: int,
     training_focus: bool,
+    food_lookup: dict[str, dict] | None = None,
 ) -> list[list[dict]]:
-    meal_slot = get_meal_slot(meal_index, meals_count)
+    meal_slot, meal_role = resolve_meal_context(
+        meal,
+        meal_index=meal_index,
+        meals_count=meals_count,
+        training_focus=training_focus,
+    )
     support_options: list[list[dict]] = [[]]
+    seen_keys: set[tuple[tuple[str, float], ...]] = {tuple()}
+
+    def add_support_option(role: str, food_code: str, quantity: float) -> None:
+        option = [{
+            "role": role,
+            "food_code": food_code,
+            "quantity": float(quantity),
+        }]
+        option_key = tuple(sorted((item["food_code"], float(item["quantity"])) for item in option))
+        if option_key in seen_keys:
+            return
+
+        support_options.append(option)
+        seen_keys.add(option_key)
+
+    def iter_support_foods(role: str, fallback_codes: list[str]) -> list[dict]:
+        if food_lookup:
+            ranked_foods = get_support_candidate_foods(
+                food_lookup,
+                support_role=role,
+                meal_slot=meal_slot,
+                meal_role=meal_role,
+                training_focus=training_focus,
+            )
+            if ranked_foods:
+                return ranked_foods
+
+        if not food_lookup:
+            return [{"code": code} for code in fallback_codes]
+
+        return [food_lookup[code] for code in fallback_codes if code in food_lookup]
 
     if meal_slot != "early" and meal.target_calories >= 320 and meal.target_carb_grams >= 15:
-        support_options.append(
-            [
-                {
-                    "role": "vegetable",
-                    "food_code": "mixed_vegetables",
-                    "quantity": 80.0 if meal.target_calories < 520 else 120.0,
-                }
-            ]
-        )
+        vegetable_quantity = 80.0 if meal.target_calories < 520 else 120.0
+        for vegetable_food in iter_support_foods("vegetable", ["mixed_vegetables"]):
+            add_support_option("vegetable", vegetable_food["code"], vegetable_quantity)
 
-    if (meal_slot == "early" or training_focus) and meal.target_carb_grams >= 40:
-        support_options.append(
-            [
-                {
-                    "role": "fruit",
-                    "food_code": "banana",
-                    "quantity": 0.5 if meal.target_carb_grams < 80 else 1.0,
-                }
-            ]
-        )
+    if (meal_slot == "early" or meal_role in LOW_FAT_MEAL_ROLES) and meal.target_carb_grams >= 35:
+        fruit_quantity = 0.5 if meal.target_carb_grams < 80 else 1.0
+        for fruit_food in iter_support_foods("fruit", ["banana"]):
+            add_support_option("fruit", fruit_food["code"], fruit_quantity)
 
-    if meal_slot == "early" and meal.target_calories <= 260 and meal.target_protein_grams <= 26:
-        support_options.append(
-            [
-                {
-                    "role": "dairy",
-                    "food_code": "greek_yogurt",
-                    "quantity": 1.0,
-                }
-            ]
-        )
+    if meal_slot == "early" and meal.target_calories <= 320 and meal.target_protein_grams <= 28:
+        for dairy_food in iter_support_foods("dairy", ["greek_yogurt"]):
+            default_quantity = float(dairy_food.get("default_quantity") or 1.0)
+            add_support_option("dairy", dairy_food["code"], default_quantity)
 
     return support_options
 
@@ -1070,6 +1182,313 @@ def calculate_support_totals(
     return totals
 
 
+def calculate_meal_actuals_from_foods(foods: list[dict]) -> dict[str, float]:
+    actual_calories = round_diet_value(sum(float(food["calories"]) for food in foods))
+    actual_protein_grams = round_diet_value(sum(float(food["protein_grams"]) for food in foods))
+    actual_fat_grams = round_diet_value(sum(float(food["fat_grams"]) for food in foods))
+    actual_carb_grams = round_diet_value(sum(float(food["carb_grams"]) for food in foods))
+    return {
+        "actual_calories": actual_calories,
+        "actual_protein_grams": actual_protein_grams,
+        "actual_fat_grams": actual_fat_grams,
+        "actual_carb_grams": actual_carb_grams,
+    }
+
+
+def get_food_fat_density(food: dict) -> float:
+    return get_food_macro_mass_profile(food)["fat_grams"]
+
+
+def get_food_macro_mass_profile(food: dict) -> dict[str, float]:
+    grams_base = max(float(food.get("grams_per_reference") or food["reference_amount"]), 1.0)
+    return {
+        macro_key: float(food[macro_key]) / grams_base
+        for macro_key in CORE_MACRO_KEYS
+    }
+
+
+def is_lean_protein_candidate(food: dict) -> bool:
+    food_code = str(food.get("code") or "").strip().lower()
+    if food_code in LEAN_PROTEIN_CODES:
+        return True
+
+    return get_food_fat_density(food) <= 0.035
+
+
+def is_fast_digesting_carb(food: dict) -> bool:
+    food_code = str(food.get("code") or "").strip().lower()
+    if food_code in FAST_DIGESTING_CARB_CODES:
+        return True
+
+    return (
+        is_savory_starch(food)
+        or is_sweet_breakfast_carb(food)
+        or _food_has_any_token(food, BREAKFAST_BREAD_TOKENS)
+        or derive_functional_group(food) == "fruit"
+    )
+
+
+def get_food_role_fit_score(
+    food: dict[str, Any],
+    *,
+    role: str,
+    meal_slot: str,
+    meal_role: str,
+    training_focus: bool,
+) -> float:
+    score = get_food_slot_affinity_score(food, meal_slot)
+    macro_density = get_food_macro_mass_profile(food)
+    fat_density = macro_density["fat_grams"]
+    food_code = str(food.get("code") or "").strip().lower()
+
+    if role == "protein":
+        score += macro_density["protein_grams"] * 1.6
+        score -= fat_density * (18.0 if meal_role in LOW_FAT_MEAL_ROLES else 10.0)
+        if is_lean_protein_candidate(food):
+            score += 0.3
+        if meal_role in LOW_FAT_MEAL_ROLES and is_lean_protein_candidate(food):
+            score += 0.45
+        if meal_role == "breakfast":
+            if is_breakfast_only_protein(food):
+                score += 0.35
+            elif is_savory_protein(food):
+                score += 0.18
+        elif meal_slot != "early" and is_savory_protein(food):
+            score += 0.15
+
+    elif role == "carb":
+        score += macro_density["carb_grams"] * 1.2
+        score -= fat_density * (20.0 if meal_role in LOW_FAT_MEAL_ROLES else 9.0)
+        if meal_slot == "early":
+            if is_sweet_breakfast_carb(food) or _food_has_any_token(food, BREAKFAST_BREAD_TOKENS):
+                score += 0.22
+        elif is_savory_starch(food):
+            score += 0.24
+        if meal_role in LOW_FAT_MEAL_ROLES and is_fast_digesting_carb(food):
+            score += 0.42
+
+    elif role == "fat":
+        score += macro_density["fat_grams"] * 2.1
+        if meal_role in LOW_FAT_MEAL_ROLES:
+            if food_code == "olive_oil" or is_cooking_fat(food):
+                score += 0.48
+            elif food_code == "avocado":
+                score -= 0.12
+            elif food_code == "mixed_nuts" or is_breakfast_fat(food):
+                score -= 0.45
+        elif meal_slot == "early":
+            if food_code == "avocado":
+                score += 0.24
+            if food_code in EARLY_SWEET_FAT_CODES or is_breakfast_fat(food):
+                score += 0.18
+        elif food_code in SAVORY_FAT_CODES or is_cooking_fat(food):
+            score += 0.2
+
+    if training_focus and meal_role in LOW_FAT_MEAL_ROLES and fat_density <= 0.02 and role != "fat":
+        score += 0.12
+
+    return score
+
+
+def is_support_food_allowed(
+    food: dict[str, Any],
+    *,
+    support_role: str,
+    meal_slot: str,
+    meal_role: str,
+) -> bool:
+    functional_group = derive_functional_group(food)
+    if functional_group != support_role:
+        return False
+
+    allowed_slots = get_allowed_meal_slots_for_food(food)
+    if meal_slot in allowed_slots:
+        return True
+    if support_role == "vegetable" and meal_slot == "late" and "main" in allowed_slots:
+        return True
+    if support_role in {"fruit", "dairy"} and meal_role in {"breakfast", "pre_workout", "post_workout", "training_focus"}:
+        return bool(allowed_slots & {"early", "snack"})
+
+    return False
+
+
+def get_support_food_fit_score(
+    food: dict[str, Any],
+    *,
+    support_role: str,
+    meal_slot: str,
+    meal_role: str,
+    training_focus: bool,
+) -> float:
+    fallback_slot = meal_slot
+    if support_role in {"fruit", "dairy"} and meal_slot not in get_allowed_meal_slots_for_food(food):
+        fallback_slot = "early"
+
+    score = get_food_slot_affinity_score(food, fallback_slot)
+    macro_density = get_food_macro_mass_profile(food)
+    fat_density = macro_density["fat_grams"]
+    protein_density = macro_density["protein_grams"]
+
+    if support_role == "vegetable":
+        score += 0.45 if meal_slot != "early" else -0.2
+        score -= fat_density * 10.0
+    elif support_role == "fruit":
+        if meal_slot == "early" or meal_role in LOW_FAT_MEAL_ROLES:
+            score += 0.42
+        score += macro_density["carb_grams"] * 0.45
+        score -= fat_density * 8.0
+    elif support_role == "dairy":
+        score += protein_density * 1.1
+        if meal_slot == "early":
+            score += 0.35
+        score -= fat_density * (14.0 if meal_role in LOW_FAT_MEAL_ROLES else 9.0)
+
+    if training_focus and meal_role in LOW_FAT_MEAL_ROLES and fat_density <= 0.02:
+        score += 0.08
+
+    return score
+
+
+def get_support_candidate_foods(
+    food_lookup: dict[str, dict[str, Any]],
+    *,
+    support_role: str,
+    meal_slot: str,
+    meal_role: str,
+    training_focus: bool,
+) -> list[dict[str, Any]]:
+    ranked_candidates = sorted(
+        (
+            food
+            for food in food_lookup.values()
+            if is_support_food_allowed(
+                food,
+                support_role=support_role,
+                meal_slot=meal_slot,
+                meal_role=meal_role,
+            )
+        ),
+        key=lambda food: -get_support_food_fit_score(
+            food,
+            support_role=support_role,
+            meal_slot=meal_slot,
+            meal_role=meal_role,
+            training_focus=training_focus,
+        ),
+    )
+    return _dedupe_foods_by_code(ranked_candidates)[:MAX_SUPPORT_CANDIDATES_PER_ROLE]
+
+
+def get_role_serving_floor(food: dict[str, Any], *, role: str, meal_slot: str, meal_role: str) -> float:
+    del meal_role
+    food_code = str(food.get("code") or "").strip().lower()
+    base_floor = get_soft_role_minimum(food, role)
+
+    if role == "carb":
+        if food["reference_unit"] == "g":
+            if _food_has_any_token(food, BREAKFAST_BREAD_TOKENS):
+                return max(base_floor, 25.0)
+            if is_savory_starch(food):
+                return max(base_floor, 35.0)
+            if is_sweet_breakfast_carb(food):
+                return max(base_floor, 20.0)
+        if food["reference_unit"] == "unidad" and derive_functional_group(food) == "fruit":
+            return max(base_floor, 0.5)
+
+    if role == "fat":
+        if food_code == "olive_oil" or is_cooking_fat(food):
+            return max(base_floor, 3.0)
+        if food_code == "avocado":
+            return max(base_floor, 18.0 if meal_slot == "early" else 25.0)
+        if food_code == "mixed_nuts" or is_breakfast_fat(food):
+            return max(base_floor, 8.0)
+
+    return base_floor
+
+
+def build_hidden_fat_penalty(food: dict[str, Any], quantity: float, *, role: str, meal_role: str) -> float:
+    if role == "fat":
+        if meal_role not in LOW_FAT_MEAL_ROLES:
+            return 0.0
+        food_code = str(food.get("code") or "").strip().lower()
+        if food_code == "olive_oil" or is_cooking_fat(food):
+            return 0.0
+        return build_precise_food_values(food, quantity)["fat_grams"] * 0.03
+
+    actual_fat_grams = build_precise_food_values(food, quantity)["fat_grams"]
+    if actual_fat_grams <= 0:
+        return 0.0
+
+    multiplier = 0.12 if role == "protein" else 0.1
+    if meal_role in LOW_FAT_MEAL_ROLES:
+        multiplier += 0.07 if role == "protein" else 0.1
+    elif meal_role == "breakfast":
+        multiplier += 0.02
+
+    return actual_fat_grams * multiplier
+
+
+def build_culinary_pairing_adjustment(
+    *,
+    role_foods: dict[str, dict[str, Any]],
+    support_foods: list[dict[str, Any]],
+    meal_slot: str,
+    meal_role: str,
+) -> float:
+    protein_food = role_foods["protein"]
+    carb_food = role_foods["carb"]
+    fat_food = role_foods["fat"]
+    protein_is_savory = is_savory_protein(protein_food)
+    protein_is_dairy = is_breakfast_only_protein(protein_food)
+    carb_is_sweet = is_sweet_breakfast_carb(carb_food) or derive_functional_group(carb_food) == "fruit"
+    carb_is_bread = _food_has_any_token(carb_food, BREAKFAST_BREAD_TOKENS)
+    carb_is_savory = is_savory_starch(carb_food) or carb_is_bread
+    fat_code = str(fat_food.get("code") or "").strip().lower()
+    fat_is_sweet = fat_code in EARLY_SWEET_FAT_CODES or is_breakfast_fat(fat_food)
+    fat_is_savory = fat_code in SAVORY_FAT_CODES or is_cooking_fat(fat_food)
+    support_roles = {str(food["role"]) for food in support_foods}
+    score = 0.0
+
+    if meal_slot == "early":
+        if protein_is_dairy and carb_is_sweet:
+            score -= 0.65
+        if protein_is_savory and carb_is_bread:
+            score -= 0.55
+        if protein_is_savory and carb_is_sweet and meal_role not in LOW_FAT_MEAL_ROLES:
+            score += 0.55
+        if protein_is_dairy and carb_is_bread:
+            score += 0.35
+        if fat_is_sweet and (protein_is_dairy or carb_is_sweet):
+            score -= 0.2
+        if fat_code == "avocado" and protein_is_savory and carb_is_bread:
+            score -= 0.18
+        if fat_is_sweet and protein_is_savory:
+            score += 0.25
+    else:
+        if carb_is_sweet:
+            score += 0.8
+        if protein_is_dairy:
+            score += 0.9
+        if protein_is_savory and carb_is_savory:
+            score -= 0.45
+        if fat_is_savory and protein_is_savory:
+            score -= 0.12
+        if fat_is_sweet:
+            score += 0.45
+
+    if "vegetable" in support_roles and meal_slot != "early":
+        score -= 0.25
+    if "fruit" in support_roles:
+        if meal_slot == "early" or meal_role in LOW_FAT_MEAL_ROLES:
+            score -= 0.18
+        else:
+            score += 0.12
+    if "dairy" in support_roles and meal_slot == "early":
+        score -= 0.12
+
+    return score
+
+
 def solve_linear_system(matrix: list[list[float]], values: list[float]) -> list[float] | None:
     size = len(values)
     augmented = [row[:] + [values[index]] for index, row in enumerate(matrix)]
@@ -1118,6 +1537,7 @@ def build_solution_score(
     candidate_indexes: dict[str, int],
     training_focus: bool,
     meal_slot: str,
+    meal_role: str,
     preference_profile: dict | None = None,
     daily_food_usage: dict | None = None,
     weekly_food_usage: dict | None = None,
@@ -1131,6 +1551,12 @@ def build_solution_score(
 
         score += candidate_indexes[role] * CANDIDATE_INDEX_WEIGHT
         score += abs(quantity - preferred_quantity) / max(preferred_quantity, 1.0) * 0.3
+        score += build_hidden_fat_penalty(
+            food,
+            quantity,
+            role=role,
+            meal_role=meal_role,
+        )
         score -= apply_preference_priority(
             food,
             role=role,
@@ -1150,18 +1576,35 @@ def build_solution_score(
 
         if quantity < soft_minimum:
             score += ((soft_minimum - quantity) / max(soft_minimum, 1.0)) * 2.2
+        serving_floor = get_role_serving_floor(
+            food,
+            role=role,
+            meal_slot=meal_slot,
+            meal_role=meal_role,
+        )
+        if quantity < serving_floor:
+            score += ((serving_floor - quantity) / max(serving_floor, 1.0)) * 2.8
 
         if quantity > float(food["max_quantity"]) * 0.9:
             score += ((quantity - (float(food["max_quantity"]) * 0.9)) / max(float(food["max_quantity"]), 1.0)) * 6.0
 
         if role == "fat" and food["code"] == "olive_oil":
             score -= 0.15
+        if role == "fat" and meal_role in LOW_FAT_MEAL_ROLES:
+            if food["code"] == "olive_oil":
+                score -= 0.28
+            elif food["code"] == "mixed_nuts":
+                score += 0.42
+            elif food["code"] == "avocado":
+                score += 0.14
 
         if role == "carb" and training_focus and food["code"] in {"rice", "pasta", "oats"}:
             score -= 0.2
 
         if role == "protein" and meal_slot == "early" and food["code"] in {"egg_whites", "greek_yogurt"}:
             score -= 0.1
+        if role == "protein" and meal_role in LOW_FAT_MEAL_ROLES and is_lean_protein_candidate(food):
+            score -= 0.18
 
     score += apply_main_pair_repeat_penalty(
         role_foods,
@@ -1189,6 +1632,13 @@ def build_solution_score(
                 daily_food_usage=daily_food_usage,
             )
 
+    score += build_culinary_pairing_adjustment(
+        role_foods=role_foods,
+        support_foods=support_foods,
+        meal_slot=meal_slot,
+        meal_role=meal_role,
+    )
+
     return score
 
 
@@ -1205,6 +1655,11 @@ def build_exact_meal_solution(
     daily_food_usage: dict | None = None,
     weekly_food_usage: dict | None = None,
 ) -> dict | None:
+    meal_role = str(getattr(meal, "meal_role", "") or "").strip().lower()
+    if meal_role not in VALID_MEAL_ROLES:
+        meal_role = "training_focus" if training_focus else "meal"
+    elif training_focus and meal_role == "meal":
+        meal_role = "training_focus"
     all_codes = [
         role_foods["protein"]["code"],
         role_foods["carb"]["code"],
@@ -1252,6 +1707,18 @@ def build_exact_meal_solution(
         visibility_threshold = get_food_visibility_threshold(role_foods[role])
         if role == "protein" and quantity < visibility_threshold:
             return None
+        serving_floor = get_role_serving_floor(
+            role_foods[role],
+            role=role,
+            meal_slot=meal_slot,
+            meal_role=meal_role,
+        )
+        if serving_floor > 0:
+            floor_ratio = 0.45
+            if role == "fat" and not is_cooking_fat(role_foods[role]):
+                floor_ratio = 0.6
+            if quantity + EXACT_SOLVER_TOLERANCE < serving_floor * floor_ratio:
+                return None
 
     foods: list[dict] = []
     for role, food in role_foods.items():
@@ -1277,20 +1744,6 @@ def build_exact_meal_solution(
 
     foods.sort(key=lambda food: (ROLE_DISPLAY_ORDER.get(food["role"], 99), food["name"]))
 
-    exact_actuals = {
-        "actual_calories": round_diet_value(calculate_macro_calories(
-            meal.target_protein_grams,
-            meal.target_fat_grams,
-            meal.target_carb_grams,
-        )),
-        "actual_protein_grams": round_diet_value(meal.target_protein_grams),
-        "actual_fat_grams": round_diet_value(meal.target_fat_grams),
-        "actual_carb_grams": round_diet_value(meal.target_carb_grams),
-        "calorie_difference": 0.0,
-        "protein_difference": 0.0,
-        "fat_difference": 0.0,
-        "carb_difference": 0.0,
-    }
     resolved_support_foods = [
         {
             **food_lookup[support_food["food_code"]],
@@ -1298,6 +1751,19 @@ def build_exact_meal_solution(
         }
         for support_food in support_food_specs
     ]
+    exact_actuals = calculate_meal_actuals_from_foods(foods)
+    exact_actuals.update(
+        calculate_difference_summary(
+            target_calories=meal.target_calories,
+            target_protein_grams=meal.target_protein_grams,
+            target_fat_grams=meal.target_fat_grams,
+            target_carb_grams=meal.target_carb_grams,
+            actual_calories=exact_actuals["actual_calories"],
+            actual_protein_grams=exact_actuals["actual_protein_grams"],
+            actual_fat_grams=exact_actuals["actual_fat_grams"],
+            actual_carb_grams=exact_actuals["actual_carb_grams"],
+        )
+    )
 
     return {
         "foods": [{key: value for key, value in food.items() if key != "role"} for food in foods],
@@ -1317,6 +1783,7 @@ def build_exact_meal_solution(
             candidate_indexes=candidate_indexes,
             training_focus=training_focus,
             meal_slot=meal_slot,
+            meal_role=meal_role,
             preference_profile=preference_profile,
             daily_food_usage=daily_food_usage,
             weekly_food_usage=weekly_food_usage,
@@ -1351,6 +1818,7 @@ def find_exact_solution_for_meal(
         meal_index=meal_index,
         meals_count=meals_count,
         training_focus=training_focus,
+        food_lookup=food_lookup,
     )
     if preference_profile and preference_profile.get("has_preferences"):
         candidate_codes, support_options = apply_user_food_preferences_to_meal_candidates(
@@ -1375,7 +1843,12 @@ def find_exact_solution_for_meal(
         forced_support_foods=forced_support_foods,
         excluded_food_codes=excluded_food_codes,
     )
-    meal_slot = get_meal_slot(meal_index, meals_count)
+    meal_slot, _ = resolve_meal_context(
+        meal,
+        meal_index=meal_index,
+        meals_count=meals_count,
+        training_focus=training_focus,
+    )
 
     best_solution: dict | None = None
 
@@ -1439,6 +1912,23 @@ def find_exact_solution_for_meal(
         ]
         for role, codes in fallback_role_codes.items()
     }
+    _, meal_role = resolve_meal_context(
+        meal,
+        meal_index=meal_index,
+        meals_count=meals_count,
+        training_focus=training_focus,
+    )
+    fallback_role_codes = {
+        role: sort_codes_by_meal_fit(
+            codes,
+            role=role,
+            meal_slot=meal_slot,
+            meal_role=meal_role,
+            training_focus=training_focus,
+            food_lookup=food_lookup,
+        )[:MAX_ROLE_CANDIDATES_PER_MEAL[role]]
+        for role, codes in fallback_role_codes.items()
+    }
     fallback_role_codes = apply_daily_usage_candidate_limits(
         fallback_role_codes,
         daily_food_usage=daily_food_usage,
@@ -1493,7 +1983,12 @@ def generate_food_based_meal(
     meal_plan: dict,
     food_lookup: dict[str, dict],
 ) -> dict:
-    meal_slot = get_meal_slot(meal_index, meals_count)
+    meal_slot, meal_role = resolve_meal_context(
+        meal,
+        meal_index=meal_index,
+        meals_count=meals_count,
+        training_focus=training_focus,
+    )
     selected_role_codes = meal_plan.get("selected_role_codes", {})
     selected_role_foods = {
         role: food_lookup[food_code]
@@ -1513,6 +2008,9 @@ def generate_food_based_meal(
 
     return {
         "meal_number": meal.meal_number,
+        "meal_slot": meal_slot,
+        "meal_role": meal_role,
+        "meal_label": meal.meal_label,
         "distribution_percentage": round_diet_value(meal.distribution_percentage or 0),
         "target_calories": round_diet_value(meal.target_calories),
         "target_protein_grams": round_diet_value(meal.target_protein_grams),

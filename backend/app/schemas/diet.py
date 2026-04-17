@@ -4,6 +4,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from app.utils.meal_roles import MealRole, MealSlot, format_meal_role_label, get_meal_slot, resolve_meal_role
 
 TrainingTimeOfDay = Literal["manana", "mediodia", "tarde", "noche"]
 PERCENTAGE_PRECISION = Decimal("0.1")
@@ -289,6 +290,9 @@ class DietFood(BaseModel):
 
 class DietMeal(BaseModel):
     meal_number: int = Field(ge=1)
+    meal_slot: MealSlot = "main"
+    meal_role: MealRole = "meal"
+    meal_label: str = "Comida"
     distribution_percentage: float | None = Field(default=None, gt=0)
     target_calories: float = Field(gt=0)
     target_protein_grams: float = Field(ge=0)
@@ -376,6 +380,37 @@ class DietListResponse(BaseModel):
     diets: list[DietListItem]
 
 
+def _derive_meal_semantics(
+    *,
+    meal_number: int,
+    meals_count: int,
+    training_time_of_day: str | None,
+    training_optimization_applied: bool,
+    explicit_slot: str | None = None,
+    explicit_role: str | None = None,
+    explicit_label: str | None = None,
+) -> tuple[MealSlot, MealRole, str]:
+    meal_index = max(meal_number - 1, 0)
+    normalized_slot = explicit_slot if explicit_slot in {"early", "main", "late"} else None
+    normalized_role = explicit_role if explicit_role in {
+        "meal",
+        "breakfast",
+        "pre_workout",
+        "post_workout",
+        "dinner",
+        "training_focus",
+    } else None
+    meal_slot = normalized_slot or get_meal_slot(meal_index, meals_count)
+    meal_role = normalized_role or resolve_meal_role(
+        meal_index,
+        meals_count,
+        training_time_of_day=training_time_of_day,
+        training_optimization_applied=training_optimization_applied,
+    )
+    meal_label = explicit_label or format_meal_role_label(meal_role)
+    return meal_slot, meal_role, meal_label
+
+
 def serialize_diet_food(document: dict[str, Any]) -> DietFood:
     return DietFood(
         food_code=document.get("food_code") or document.get("code"),
@@ -396,15 +431,31 @@ def serialize_diet_food(document: dict[str, Any]) -> DietFood:
 
 def serialize_diet_meal(
     document: dict[str, Any],
+    *,
+    meals_count: int,
+    training_time_of_day: str | None,
+    training_optimization_applied: bool,
     distribution_percentage: float | None = None,
 ) -> DietMeal:
     meal_distribution_percentage = document.get("distribution_percentage", distribution_percentage)
     foods = [serialize_diet_food(food) for food in document.get("foods", [])]
     actuals = _derive_meal_actuals(document)
     differences = _derive_meal_differences(document, actuals)
+    meal_slot, meal_role, meal_label = _derive_meal_semantics(
+        meal_number=document["meal_number"],
+        meals_count=meals_count,
+        training_time_of_day=training_time_of_day,
+        training_optimization_applied=training_optimization_applied,
+        explicit_slot=document.get("meal_slot"),
+        explicit_role=document.get("meal_role"),
+        explicit_label=document.get("meal_label"),
+    )
 
     return DietMeal(
         meal_number=document["meal_number"],
+        meal_slot=meal_slot,
+        meal_role=meal_role,
+        meal_label=meal_label,
         distribution_percentage=meal_distribution_percentage,
         target_calories=_round_decimal(document["target_calories"]),
         target_protein_grams=_round_decimal(document["target_protein_grams"]),
@@ -486,7 +537,10 @@ def serialize_daily_diet(document: dict[str, Any]) -> DailyDiet:
     meals = [
         serialize_diet_meal(
             meal,
-            distribution_percentages[index] if index < len(distribution_percentages) else None,
+            meals_count=document["meals_count"],
+            training_time_of_day=document.get("training_time_of_day"),
+            training_optimization_applied=document.get("training_optimization_applied", False),
+            distribution_percentage=distribution_percentages[index] if index < len(distribution_percentages) else None,
         )
         for index, meal in enumerate(document["meals"])
     ]
@@ -541,7 +595,15 @@ def serialize_diet_list_item(document: dict[str, Any]) -> DietListItem:
     food_data_source = _derive_food_data_source(document)
     food_data_sources = _derive_food_data_sources(document)
     resolution_counters = _derive_resolution_counters(document)
-    meals = [serialize_diet_meal(meal) for meal in document.get("meals", [])]
+    meals = [
+        serialize_diet_meal(
+            meal,
+            meals_count=document["meals_count"],
+            training_time_of_day=document.get("training_time_of_day"),
+            training_optimization_applied=document.get("training_optimization_applied", False),
+        )
+        for meal in document.get("meals", [])
+    ]
     actuals = _derive_diet_actuals(document, meals)
     differences = _derive_diet_differences(document, actuals)
 

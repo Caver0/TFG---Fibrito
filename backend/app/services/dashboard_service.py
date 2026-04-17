@@ -295,7 +295,8 @@ def get_active_diet_overview(database, user_id: str) -> ActiveDietOverview | Non
     calories_per_meal = [
         ActiveDietMealOverview(
             meal_number=meal.meal_number,
-            label=f"Comida {meal.meal_number}",
+            meal_role=meal.meal_role,
+            label=meal.meal_label,
             target_calories=meal.target_calories,
             actual_calories=meal.actual_calories,
             target_protein_grams=meal.target_protein_grams,

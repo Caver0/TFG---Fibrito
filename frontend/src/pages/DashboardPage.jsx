@@ -39,6 +39,12 @@ function getLatestDelta(entries) {
   return Number(lastEntry.weight) - Number(previousEntry.weight)
 }
 
+function buildTimestamp(value) {
+  const parsedDate = new Date(value)
+  const timestamp = parsedDate.getTime()
+  return Number.isNaN(timestamp) ? null : timestamp
+}
+
 function getRelativeDayLabel(value) {
   if (!value) {
     return 'Esperando eventos de ajuste'
@@ -87,58 +93,72 @@ function buildWeightChartPayload(weightProgress) {
   const adjustmentEvents = Array.isArray(weightProgress?.adjustment_events) ? weightProgress.adjustment_events : []
   const regressionTrend = Array.isArray(weightProgress?.regression_trend) ? weightProgress.regression_trend : []
 
-  // Build map of historical points keyed by date string
   const pointsByDate = new Map()
 
-  const historicalPoints = entries.length > 0
-    ? entries.map((point) => ({
-        chartDate: point.date,
-        axisLabel: formatDateLabel(point.date),
-        weight: Number(point.weight),
-      }))
-    : weeklyAverages.map((point) => ({
-        chartDate: point.end_date,
-        axisLabel: point.week_label,
-        weight: Number(point.average_weight),
-      }))
+  const historicalPoints = (
+    entries.length > 0
+      ? entries.map((point) => ({
+          chartDate: point.date,
+          timestamp: buildTimestamp(point.date),
+          weight: Number(point.weight),
+        }))
+      : weeklyAverages.map((point) => ({
+          chartDate: point.end_date,
+          timestamp: buildTimestamp(point.end_date),
+          weight: Number(point.average_weight),
+        }))
+  ).filter((point) => point.timestamp !== null)
 
-  for (const p of historicalPoints) {
-    pointsByDate.set(p.chartDate, p)
+  for (const point of historicalPoints) {
+    pointsByDate.set(point.chartDate, point)
   }
 
-  // Merge regression fitted values into historical points
-  for (const r of regressionTrend) {
-    if (!r.is_projection) {
-      const existing = pointsByDate.get(r.date)
-      if (existing) {
-        existing.regressionWeight = Number(r.weight)
-      }
+  for (const point of regressionTrend) {
+    if (point.is_projection) {
+      continue
+    }
+
+    const existing = pointsByDate.get(point.date)
+    if (existing) {
+      existing.regressionWeight = Number(point.weight)
     }
   }
 
-  // Add future projection points (no actual weight)
+  const lastHistoricalRegression = [...regressionTrend].reverse().find((point) => !point.is_projection)
+  if (lastHistoricalRegression) {
+    const existing = pointsByDate.get(lastHistoricalRegression.date)
+    if (existing) {
+      existing.projectedWeight = Number(lastHistoricalRegression.weight)
+    }
+  }
+
   const projectionPoints = regressionTrend
-    .filter((r) => r.is_projection)
-    .map((r) => ({
-      chartDate: r.date,
-      axisLabel: formatDateLabel(r.date),
-      projectedWeight: Number(r.weight),
+    .filter((point) => point.is_projection)
+    .map((point) => ({
+      chartDate: point.date,
+      timestamp: buildTimestamp(point.date),
+      projectedWeight: Number(point.weight),
     }))
+    .filter((point) => point.timestamp !== null)
 
   const sourcePoints = [...historicalPoints, ...projectionPoints]
+    .sort((left, right) => left.timestamp - right.timestamp)
 
   if (sourcePoints.length === 0) {
     return { sourcePoints: [] }
   }
 
-  // Anclar cada evento de ajuste al punto de peso más cercano por fecha
   for (const event of adjustmentEvents) {
-    const eventTime = new Date(event.date).getTime()
+    const eventTime = buildTimestamp(event.date)
+    if (eventTime === null) {
+      continue
+    }
+
     let closest = historicalPoints[0] ?? sourcePoints[0]
-    let minDiff = Math.abs(new Date(closest.chartDate).getTime() - eventTime)
+    let minDiff = Math.abs(closest.timestamp - eventTime)
 
     for (const point of historicalPoints) {
-      const diff = Math.abs(new Date(point.chartDate).getTime() - eventTime)
+      const diff = Math.abs(point.timestamp - eventTime)
       if (diff < minDiff) {
         minDiff = diff
         closest = point
@@ -152,7 +172,7 @@ function buildWeightChartPayload(weightProgress) {
   return { sourcePoints }
 }
 
-function DashboardTooltip({ active, payload, label }) {
+function DashboardTooltip({ active, payload }) {
   if (!active || !payload?.length) {
     return null
   }
@@ -161,10 +181,11 @@ function DashboardTooltip({ active, payload, label }) {
   const regressionPoint = payload.find((entry) => entry.dataKey === 'regressionWeight')
   const projectionPoint = payload.find((entry) => entry.dataKey === 'projectedWeight')
   const calorieChange = weightPoint?.payload?.calorieChange
+  const pointDate = payload[0]?.payload?.chartDate
 
   return (
     <div className="chart-tooltip">
-      <strong>{label}</strong>
+      <strong>{formatDateLabel(pointDate, { month: 'short', day: '2-digit', year: 'numeric' })}</strong>
       {weightPoint ? <p>Peso real: {formatMass(weightPoint.value)}</p> : null}
       {regressionPoint ? <p>Tendencia: {formatMass(regressionPoint.value)}</p> : null}
       {projectionPoint ? <p>Proyección: {formatMass(projectionPoint.value)}</p> : null}
@@ -349,7 +370,11 @@ function DashboardPage() {
                       <ComposedChart data={chartPayload.sourcePoints}>
                         <CartesianGrid stroke="rgba(118, 117, 118, 0.18)" strokeDasharray="4 6" vertical={false} />
                         <XAxis
-                          dataKey="axisLabel"
+                          dataKey="timestamp"
+                          type="number"
+                          scale="time"
+                          domain={['dataMin', 'dataMax']}
+                          tickFormatter={(value) => formatDateLabel(value)}
                           axisLine={false}
                           tickLine={false}
                           tick={{ fill: '#adacab', fontSize: 10, fontWeight: 700 }}

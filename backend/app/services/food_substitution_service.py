@@ -16,8 +16,8 @@ from app.schemas.user import UserPublic
 from app.services.diet_service import (
     build_exact_meal_solution,
     find_exact_solution_for_meal,
-    get_meal_slot,
     get_user_diet_by_id,
+    resolve_meal_context,
 )
 from app.services.food_catalog_service import (
     build_catalog_food_from_diet_food,
@@ -354,7 +354,12 @@ def rebuild_meal_after_food_replacement(
     preference_profile: dict[str, Any],
     daily_food_usage: dict[str, dict[str, Any]],
 ) -> tuple[dict[str, Any], str]:
-    meal_slot = get_meal_slot(meal_index, meals_count)
+    meal_slot, _ = resolve_meal_context(
+        meal,
+        meal_index=meal_index,
+        meals_count=meals_count,
+        training_focus=training_focus,
+    )
     current_food_code = str(current_food.food_code or "")
     candidate_food_lookup = {
         **food_lookup,

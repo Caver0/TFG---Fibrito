@@ -1,29 +1,29 @@
-export const STITCH_DIET_VISUALS = [
-  {
-    phase: 'Fase 01',
+export const STITCH_DIET_VISUALS = {
+  breakfast: {
     label: 'Desayuno',
-    imageUrl:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuBV97McYwDNYWDyGsUuvxBrjygsVUXBjVlgpqpMC5WoT-hRZ2qDOxcAPiOB7R7WWyhjXJMs0wFQRzvWgMj7X4zzR8OA1eFh6xo5UrD5DnZ30oQzIubpssI_eyvWh2fDH3_B9QToP7-Ba-G9sNi5uWSrvbbmJsSV1vcN1eBe2eiGKOYdX6iwNmXQ50QtGF5QU5W6WlnOpslILCnUYtNvH76Hmjo3aUJz8DKnRf2ahaaacr1wysIdnl9sZ-B7MFcrloDG0X9-LxYaLno',
+    heroClassName: 'protocol-meal-hero--breakfast',
   },
-  {
-    phase: 'Fase 02',
+  pre_workout: {
     label: 'Pre-entrenamiento',
-    imageUrl:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuDAEXQw0p7q1MfKqwHYtz1FLgx7Gi4u4JaGnWaMnLFGRkgW1B5du_SQogH_BLOTMpR4prkuBLkJeCRyr8Lln6EYVhevNXUnSIcZSCcbyuG7CKvwH6DfElVYO5DaGX7rZrNaQ0yKecigPZohpbaxyaxxhoBsfzNB7OcqloM8OHgT6FsAORZEU6mI2_tdKwUGM9LuUfURSH2h7kbFXBAMoR_hkuIjh3dEMdc2W74bPKONbIhEpV8Hy_0-SKfa-uMUAxhZIy9g0lkhzjk',
+    heroClassName: 'protocol-meal-hero--pre-workout',
   },
-  {
-    phase: 'Fase 03',
+  post_workout: {
     label: 'Post-entrenamiento',
-    imageUrl:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuCpKMJ-q8WacUhb0kJjrw-mqTcF3UZ1_Gaibb0mk_bO1kHcQXgvJTBGY0igeB2xtVRi5ChQwo0DKNStBcMKFAlbOXHGE47XVP-GbbV_9bmKzFOTC3Z7roftjEA1chb9zrdRo4YXrlm5DSfTNXu51faxU07aSBHenelviKBMIEi07Qf66_SnZyRWCLczGPSnOHJ-9y9FdOZxdF7EYGNx1sVVIp0Ksj8G2nmqN2wKt_uFGexYPxFmiLPUSi7bjf4RL2CQgSJHPwkCB5g',
+    heroClassName: 'protocol-meal-hero--post-workout',
   },
-  {
-    phase: 'Fase 04',
+  dinner: {
     label: 'Cena',
-    imageUrl:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuD68Cvr60cNDb_kQrLJA01Ztsyy-puYpHZ-oeirVIrULHVUpXLxCKv5nuJpkj6R3wn_o6lIT3bQy-479vbs_EbsjFpFYACCRSAtV64h1P7S8DHNeErMuxyytYpnYz-TGjRO-jO8x4wWa95yqjqUxvry-XzwFD7-QGo3h4rp16EyCdp_OVg5njNQBze5fbD1YoFot4tQV0F2-BbjvJFEUa18KNnOEvP5uxkv_9T6EAyL3DBxs0KwtE1pf3vcXECW4QhTLIBHJRv9_eE',
+    heroClassName: 'protocol-meal-hero--dinner',
   },
-]
+  training_focus: {
+    label: 'Comida de entreno',
+    heroClassName: 'protocol-meal-hero--training-focus',
+  },
+  meal: {
+    label: 'Comida',
+    heroClassName: 'protocol-meal-hero--meal',
+  },
+}
 
 export const STITCH_PROFILE_TARGET_BACKGROUND =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuCGw2brtsYaK1cZJ19rRoGmAxDqXPCbCAkHlUyN4frBetqb2gwaW65Y0ATxjctW4YjFQn3okOA1URUiCKcOt9gcb_v_zDgSMegWYsZ4KdbaWm0oTo16rLsIfUxvNu1fTauzFAr01nRoFVZaWNZpe43bsFylNp8zpKqb28AqBLnCTAiFR_efZb_LdaGRFAuSD43cdhUdDP5Oye530msf1P4Zsog_jNcIaFtTeVmdzlFuaIYcaQf77nbBwfD0xnF7U20fd88dLqnbNZ0'
@@ -238,12 +238,16 @@ export function formatDataSource(source) {
   return 'Interno'
 }
 
-export function getMealVisual(mealNumber) {
-  const visual = STITCH_DIET_VISUALS[(Number(mealNumber) - 1) % STITCH_DIET_VISUALS.length]
-  return visual ?? {
-    phase: `Fase ${String(mealNumber).padStart(2, '0')}`,
-    label: `Comida ${mealNumber}`,
-    imageUrl: '',
+export function formatMealRoleLabel(role) {
+  return STITCH_DIET_VISUALS[role]?.label ?? 'Comida'
+}
+
+export function getMealVisual(mealNumber, mealRole, mealLabel) {
+  const visual = STITCH_DIET_VISUALS[mealRole] ?? STITCH_DIET_VISUALS.meal
+  return {
+    phase: `COMIDA ${mealNumber}`,
+    label: mealLabel || visual.label || `Comida ${mealNumber}`,
+    heroClassName: visual.heroClassName || STITCH_DIET_VISUALS.meal.heroClassName,
   }
 }
 

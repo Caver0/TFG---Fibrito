@@ -18,6 +18,7 @@ from app.services.diet_service import (
     get_role_candidate_codes,
     get_support_option_specs,
     get_user_diet_by_id,
+    resolve_meal_context,
     track_food_usage_across_day,
     update_diet,
 )
@@ -103,6 +104,7 @@ def _build_support_scenarios(
         meal_index=meal_index,
         meals_count=meals_count,
         training_focus=training_focus,
+        food_lookup=food_lookup,
     )
     meal_foods_by_code = {
         str(food.food_code): food
@@ -190,6 +192,12 @@ def _build_heuristic_meal_plan(
     training_focus: bool,
     food_lookup: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
+    meal_slot, _ = resolve_meal_context(
+        meal,
+        meal_index=meal_index,
+        meals_count=meals_count,
+        training_focus=training_focus,
+    )
     candidate_role_codes = get_role_candidate_codes(
         meal=meal,
         meal_index=meal_index,
@@ -274,7 +282,7 @@ def _build_heuristic_meal_plan(
         candidate_indexes={"protein": 0, "carb": 0, "fat": 0},
         food_lookup=food_lookup,
         training_focus=training_focus,
-        meal_slot="main",
+        meal_slot=meal_slot,
     )
     if meal_solution:
         return meal_solution
@@ -296,6 +304,12 @@ def infer_existing_meal_plan(
     training_focus: bool,
     food_lookup: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
+    meal_slot, _ = resolve_meal_context(
+        meal,
+        meal_index=meal_index,
+        meals_count=meals_count,
+        training_focus=training_focus,
+    )
     candidate_role_codes = get_role_candidate_codes(
         meal=meal,
         meal_index=meal_index,
@@ -366,7 +380,7 @@ def infer_existing_meal_plan(
                 candidate_indexes={"protein": 0, "carb": 0, "fat": 0},
                 food_lookup=food_lookup,
                 training_focus=training_focus,
-                meal_slot="main",
+                meal_slot=meal_slot,
             )
             if not candidate_solution:
                 continue

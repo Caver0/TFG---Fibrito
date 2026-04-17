@@ -6,22 +6,47 @@ from fastapi import HTTPException, status
 from app.schemas.diet import DietMeal, TrainingTimeOfDay
 from app.schemas.user import UserPublic
 from app.services.nutrition_service import build_nutrition_summary
+from app.utils.meal_roles import (
+    format_meal_role_label,
+    get_meal_slot,
+    get_training_focus_indexes as _get_training_focus_indexes,
+    resolve_meal_role,
+)
 
 DIET_PRECISION = Decimal("0.1")
 PERCENTAGE_TOTAL = Decimal("100.0")
 PERCENTAGE_TOLERANCE = Decimal("0.5")
 MIN_PERCENTAGE_AFTER_OPTIMIZATION = Decimal("1.0")
+CARB_CAPACITY_EPSILON = Decimal("0.05")
 DEFAULT_DISTRIBUTION_TEMPLATES = {
     3: [30.0, 40.0, 30.0],
     4: [25.0, 15.0, 35.0, 25.0],
     5: [20.0, 10.0, 30.0, 15.0, 25.0],
     6: [20.0, 10.0, 25.0, 10.0, 15.0, 20.0],
 }
-TRAINING_TIME_POSITIONS = {
-    "manana": 0.18,
-    "mediodia": 0.45,
-    "tarde": 0.7,
-    "noche": 0.9,
+PROTEIN_ROLE_WEIGHT_MULTIPLIERS = {
+    "breakfast": 1.04,
+    "pre_workout": 1.08,
+    "post_workout": 1.1,
+    "dinner": 0.96,
+    "training_focus": 1.05,
+    "meal": 1.0,
+}
+FAT_ROLE_WEIGHT_MULTIPLIERS = {
+    "breakfast": 0.72,
+    "pre_workout": 0.34,
+    "post_workout": 0.28,
+    "dinner": 1.65,
+    "training_focus": 0.48,
+    "meal": 1.0,
+}
+CARB_ROLE_PRIORITY_MULTIPLIERS = {
+    "breakfast": 1.05,
+    "pre_workout": 1.32,
+    "post_workout": 1.38,
+    "dinner": 0.82,
+    "training_focus": 1.18,
+    "meal": 1.0,
 }
 
 
@@ -108,19 +133,7 @@ def get_training_focus_indexes(
     meals_count: int,
     training_time_of_day: TrainingTimeOfDay,
 ) -> tuple[int, int | None]:
-    target_position = TRAINING_TIME_POSITIONS[training_time_of_day]
-    meal_positions = [
-        (index + 1) / (meals_count + 1)
-        for index in range(meals_count)
-    ]
-    ordered_indexes = sorted(
-        range(meals_count),
-        key=lambda index: (abs(meal_positions[index] - target_position), index),
-    )
-
-    primary_index = ordered_indexes[0]
-    secondary_index = ordered_indexes[1] if len(ordered_indexes) > 1 else None
-    return primary_index, secondary_index
+    return _get_training_focus_indexes(meals_count, training_time_of_day)
 
 
 def optimize_distribution_for_training(
@@ -222,6 +235,84 @@ def adjust_focus_weights(
     return normalize_weights(adjusted_weights)
 
 
+def apply_role_weight_multipliers(
+    weights: list[float],
+    meal_roles: list[str],
+    multipliers: dict[str, float],
+) -> list[float]:
+    return normalize_weights(
+        [
+            weight * multipliers.get(meal_role, 1.0)
+            for weight, meal_role in zip(weights, meal_roles, strict=True)
+        ]
+    )
+
+
+def distribute_total_by_weighted_caps(
+    total: float,
+    *,
+    weights: list[float],
+    caps: list[float],
+) -> list[float]:
+    allocated = [
+        min(Decimal(str(value)), max(Decimal(str(cap)), Decimal("0.0")))
+        for value, cap in zip(distribute_total_by_weights(total, weights), caps, strict=True)
+    ]
+    caps_left = [
+        max(Decimal(str(cap)), Decimal("0.0")) - allocated_value
+        for cap, allocated_value in zip(caps, allocated, strict=True)
+    ]
+    remainder = Decimal(str(total)) - sum(allocated)
+
+    while remainder > CARB_CAPACITY_EPSILON:
+        eligible_indexes = [
+            index
+            for index, cap_left in enumerate(caps_left)
+            if cap_left > Decimal("0.0")
+        ]
+        if not eligible_indexes:
+            break
+
+        extra_distribution = distribute_total_by_weights(
+            float(remainder),
+            [weights[index] for index in eligible_indexes],
+        )
+        distributed_any = False
+        for index, extra_value in zip(eligible_indexes, extra_distribution, strict=True):
+            portion = min(Decimal(str(extra_value)), caps_left[index])
+            if portion <= 0:
+                continue
+
+            allocated[index] += portion
+            caps_left[index] -= portion
+            remainder -= portion
+            distributed_any = True
+
+        if not distributed_any:
+            break
+
+    if remainder > Decimal("0.0"):
+        eligible_indexes = [
+            index
+            for index, cap_left in enumerate(caps_left)
+            if cap_left > Decimal("0.0")
+        ]
+        if eligible_indexes:
+            best_index = max(
+                eligible_indexes,
+                key=lambda index: (weights[index], caps_left[index], -index),
+            )
+            portion = min(remainder, caps_left[best_index])
+            allocated[best_index] += portion
+            remainder -= portion
+
+    if remainder > Decimal("0.0"):
+        best_index = max(range(len(weights)), key=lambda index: (weights[index], -index))
+        allocated[best_index] += remainder
+
+    return [round_distribution_value(value) for value in allocated]
+
+
 def distribute_macros_across_meals(
     *,
     base_meals: list[dict],
@@ -231,13 +322,37 @@ def distribute_macros_across_meals(
     distribution_percentages: list[float],
     training_optimization_applied: bool,
     focus_indexes: tuple[int, int | None],
+    training_time_of_day: TrainingTimeOfDay | None,
 ) -> list[DietMeal]:
     meals_count = len(base_meals)
     calorie_weights = normalize_weights(distribution_percentages)
     uniform_weights = [1 / meals_count] * meals_count
+    meal_contexts = [
+        (
+            get_meal_slot(meal_index, meals_count),
+            resolve_meal_role(
+                meal_index,
+                meals_count,
+                training_time_of_day=training_time_of_day,
+                training_optimization_applied=training_optimization_applied,
+            ),
+        )
+        for meal_index in range(meals_count)
+    ]
+    meal_roles = [meal_role for _, meal_role in meal_contexts]
 
-    protein_weights = blend_weight_sets(uniform_weights, calorie_weights, calorie_ratio=0.18)
-    fat_weights = blend_weight_sets(uniform_weights, calorie_weights, calorie_ratio=0.35)
+    protein_weights = blend_weight_sets(uniform_weights, calorie_weights, calorie_ratio=0.16)
+    protein_weights = apply_role_weight_multipliers(
+        protein_weights,
+        meal_roles,
+        PROTEIN_ROLE_WEIGHT_MULTIPLIERS,
+    )
+    fat_weights = blend_weight_sets(uniform_weights, calorie_weights, calorie_ratio=0.18)
+    fat_weights = apply_role_weight_multipliers(
+        fat_weights,
+        meal_roles,
+        FAT_ROLE_WEIGHT_MULTIPLIERS,
+    )
 
     primary_index, secondary_index = focus_indexes
     if training_optimization_applied and primary_index >= 0:
@@ -245,29 +360,38 @@ def distribute_macros_across_meals(
             fat_weights,
             primary_index,
             secondary_index,
-            primary_multiplier=0.7,
-            secondary_multiplier=0.88,
+            primary_multiplier=0.9,
+            secondary_multiplier=0.95,
         )
 
     protein_distribution = distribute_total_by_weights(protein_grams, protein_weights)
     fat_distribution = distribute_total_by_weights(fat_grams, fat_weights)
-    remaining_carb_grams = Decimal(str(carb_grams))
+    carb_caps = []
+    for meal, protein_target, fat_target in zip(base_meals, protein_distribution, fat_distribution, strict=True):
+        remaining_calories = (
+            Decimal(str(meal["target_calories"]))
+            - (Decimal(str(protein_target)) * Decimal("4"))
+            - (Decimal(str(fat_target)) * Decimal("9"))
+        )
+        carb_caps.append(max((remaining_calories / Decimal("4")).quantize(DIET_PRECISION, rounding=ROUND_HALF_UP), Decimal("0.0")))
+    carb_weights = normalize_weights(
+        [
+            max(float(carb_cap), 0.1) * CARB_ROLE_PRIORITY_MULTIPLIERS.get(meal_role, 1.0)
+            for carb_cap, meal_role in zip(carb_caps, meal_roles, strict=True)
+        ]
+    )
+    carb_distribution = distribute_total_by_weighted_caps(
+        carb_grams,
+        weights=carb_weights,
+        caps=[float(carb_cap) for carb_cap in carb_caps],
+    )
     meals: list[DietMeal] = []
 
     for meal_index, meal in enumerate(base_meals):
+        meal_slot, meal_role = meal_contexts[meal_index]
         protein_target = Decimal(str(protein_distribution[meal_index]))
         fat_target = Decimal(str(fat_distribution[meal_index]))
-        remaining_slots = meals_count - meal_index
-        if remaining_slots == 1:
-            carb_target = max(remaining_carb_grams, Decimal("0.0"))
-        else:
-            carb_target = (
-                (Decimal(str(meal["target_calories"])) - (protein_target * Decimal("4")) - (fat_target * Decimal("9")))
-                / Decimal("4")
-            ).quantize(DIET_PRECISION, rounding=ROUND_HALF_UP)
-            carb_target = max(carb_target, Decimal("0.0"))
-
-        remaining_carb_grams -= carb_target
+        carb_target = Decimal(str(carb_distribution[meal_index]))
         rounded_protein_target = round_distribution_value(float(protein_target))
         rounded_fat_target = round_distribution_value(float(fat_target))
         rounded_carb_target = round_distribution_value(float(carb_target))
@@ -281,6 +405,9 @@ def distribute_macros_across_meals(
         meals.append(
             DietMeal(
                 meal_number=meal["meal_number"],
+                meal_slot=meal_slot,
+                meal_role=meal_role,
+                meal_label=format_meal_role_label(meal_role),
                 distribution_percentage=meal["distribution_percentage"],
                 target_calories=rounded_target_calories,
                 target_protein_grams=rounded_protein_target,
@@ -333,6 +460,7 @@ def generate_meal_distribution_targets(
         distribution_percentages=distribution_percentages,
         training_optimization_applied=training_optimization_applied,
         focus_indexes=focus_indexes,
+        training_time_of_day=training_time_of_day,
     )
     target_calories = round_distribution_value(sum(meal.target_calories for meal in meals))
     target_protein_grams = round_distribution_value(sum(meal.target_protein_grams for meal in meals))

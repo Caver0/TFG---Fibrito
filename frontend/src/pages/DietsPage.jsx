@@ -43,6 +43,22 @@ function formatMealStatus(status) {
   return 'Pendiente'
 }
 
+function formatFoodPortion(food) {
+  if (food.grams) {
+    return `${formatCompactNumber(food.grams, { maximumFractionDigits: 0 })} g`
+  }
+
+  if (food.quantity && food.unit) {
+    const quantity = Number(food.quantity)
+    return `${formatCompactNumber(quantity, {
+      maximumFractionDigits: quantity < 1 ? 2 : 1,
+      minimumFractionDigits: Number.isInteger(quantity) ? 0 : 1,
+    })} ${food.unit}`
+  }
+
+  return 'Cantidad no indicada'
+}
+
 function DietsPage() {
   const { token } = useAuth()
 
@@ -563,15 +579,14 @@ function DietsPage() {
 
           <div className="meal-protocol-grid">
             {currentDiet.meals.map((meal) => {
-              const visual = getMealVisual(meal.meal_number)
+              const visual = getMealVisual(meal.meal_number, meal.meal_role, meal.meal_label)
               const adherenceRecord = adherenceRecordsByMeal[meal.meal_number]
               const mealStatus = adherenceRecord?.status ?? 'pending'
               const isBusyMeal = activeMealNumber === meal.meal_number || activeAdherenceMealNumber === meal.meal_number
 
               return (
                 <article key={meal.meal_number} className="protocol-meal-card">
-                  <div className="protocol-meal-hero">
-                    {visual.imageUrl ? <img className="protocol-meal-image" src={visual.imageUrl} alt={visual.label} /> : null}
+                  <div className={`protocol-meal-hero ${visual.heroClassName}`.trim()}>
                     <div className="protocol-meal-overlay" />
                     <div className="protocol-meal-copy">
                       <span>{visual.phase}</span>
@@ -592,12 +607,22 @@ function DietsPage() {
                           key={`${meal.meal_number}-${food.food_code ?? food.name}`}
                           className={`protocol-food-row ${activeFoodCode === (food.food_code ?? food.name) ? 'protocol-food-row-active' : ''}`.trim()}
                         >
-                          <div>
+                          <div className="protocol-food-copy">
                             <strong>{food.name}</strong>
                             <small>{formatDataSource(food.source)} // {food.category}</small>
                           </div>
+                          <div className="protocol-food-inline-metrics">
+                            <div className="protocol-food-breakdown">
+                              <span>{formatFoodPortion(food)}</span>
+                              <span>{formatCalories(food.calories)}</span>
+                            </div>
+                            <div className="protocol-food-macros">
+                              <span>P {formatMacro(food.protein_grams)}</span>
+                              <span>C {formatMacro(food.carb_grams)}</span>
+                              <span>G {formatMacro(food.fat_grams)}</span>
+                            </div>
+                          </div>
                           <div className="protocol-food-meta">
-                            <span>{food.grams ? `${formatCompactNumber(food.grams, { maximumFractionDigits: 0 })}g` : `${formatCompactNumber(food.quantity, { maximumFractionDigits: 0 })} ${food.unit}`}</span>
                             <button type="button" onClick={() => openReplacementLab(meal.meal_number, food)}>
                               Cambiar
                             </button>

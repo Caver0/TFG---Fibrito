@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from app.schemas.adherence import AdherenceLevel
 from app.schemas.progress import WeeklyAnalysisResponse
 from app.schemas.user import GoalType
+from app.utils.meal_roles import MealRole
 
 
 class DashboardMacroSummary(BaseModel):
@@ -107,6 +108,7 @@ class AdherenceOverview(BaseModel):
 
 class ActiveDietMealOverview(BaseModel):
     meal_number: int
+    meal_role: MealRole = "meal"
     label: str
     target_calories: float
     actual_calories: float

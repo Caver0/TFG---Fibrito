@@ -323,7 +323,10 @@ function DietCard({
                   <article key={`distribution-${meal.meal_number}`} className="diet-distribution-card">
                     <div className="diet-distribution-card-header">
                       <strong>Comida {meal.meal_number}</strong>
-                      <span>{formatNumber(meal.distribution_percentage ?? 0)}%</span>
+                      <span>
+                        {meal.meal_label || 'Comida'}
+                        {meal.distribution_percentage ? ` · ${formatNumber(meal.distribution_percentage)}%` : ''}
+                      </span>
                     </div>
                     <p>{formatNumber(meal.actual_calories)} / {formatNumber(meal.target_calories)} kcal</p>
                     <MealCard meal={meal} showCompactMacroBar />

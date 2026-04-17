@@ -140,7 +140,10 @@ function MealCard({
       <div className="meal-card-header meal-card-header-actions">
         <div>
           <strong>Comida {meal.meal_number}</strong>
-          <span>{meal.distribution_percentage ?? 'Sin dato'}%</span>
+          <span>
+            {meal.meal_label || 'Comida'}
+            {meal.distribution_percentage ? ` · ${formatNumber(meal.distribution_percentage)}%` : ''}
+          </span>
         </div>
 
         <button
