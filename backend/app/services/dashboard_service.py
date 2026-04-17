@@ -164,10 +164,23 @@ def get_expected_weight_trend(
     if not weight_progress_series:
         return [], None
 
-    baseline_point = weight_progress_series[0]
+    # Use the first complete week's average as baseline (more robust than a single raw entry).
+    # A single outlier fasting weight would otherwise shift the whole reference line.
+    first_complete_week = next(
+        (avg for avg in weekly_weight_averages if avg.is_complete and avg.entry_count >= 3),
+        None,
+    )
+    if first_complete_week is not None:
+        baseline_date = first_complete_week.start_date
+        baseline_weight_val: float = first_complete_week.average_weight
+    else:
+        first_point = weight_progress_series[0]
+        baseline_date = first_point.date
+        baseline_weight_val = first_point.weight
+
     expected_weekly_change, trend_label = _get_expected_weekly_change(
         user.goal,
-        baseline_point.weight,
+        baseline_weight_val,
     )
     if expected_weekly_change is None:
         return [], None
@@ -176,12 +189,12 @@ def get_expected_weight_trend(
     if len(trend_dates) < 2:
         return [], trend_label
 
-    baseline_weight = Decimal(str(baseline_point.weight))
+    baseline_weight = Decimal(str(baseline_weight_val))
     expected_daily_change = expected_weekly_change / WEEK_LENGTH_DAYS
     trend_points: list[ExpectedWeightTrendPoint] = []
 
     for trend_date in trend_dates:
-        elapsed_days = Decimal(str((trend_date - baseline_point.date).days))
+        elapsed_days = Decimal(str((trend_date - baseline_date).days))
         expected_weight = baseline_weight + (expected_daily_change * elapsed_days)
         trend_points.append(
             ExpectedWeightTrendPoint(

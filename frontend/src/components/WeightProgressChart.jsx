@@ -113,6 +113,10 @@ function WeightProgressChart({ weightProgress }) {
                   tick={{ fill: '#8fa0bd', fontSize: 12 }}
                 />
                 <YAxis
+                  domain={[
+                    (dataMin) => Math.floor((dataMin - 0.4) * 10) / 10,
+                    (dataMax) => Math.ceil((dataMax + 0.4) * 10) / 10,
+                  ]}
                   tickFormatter={(value) => `${Number(value).toFixed(1)} kg`}
                   tick={{ fill: '#8fa0bd', fontSize: 12 }}
                   width={82}

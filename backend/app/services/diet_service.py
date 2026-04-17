@@ -17,6 +17,7 @@ from app.services.food_preferences_service import (
     build_user_food_preferences_profile,
     count_food_preference_matches,
     count_preferred_food_matches_in_meals,
+    prioritize_preferred_foods,
 )
 from app.services.meal_distribution_service import generate_meal_distribution_targets, round_distribution_value
 from app.utils.normalization import normalize_food_name
@@ -84,13 +85,15 @@ MACRO_CALORIE_FACTORS = {
     "carb_grams": 4.0,
 }
 CANDIDATE_INDEX_WEIGHT = 0.08
+# Bonus must exceed CANDIDATE_INDEX_WEIGHT * typical_list_depth so that a preferred food
+# always wins against a non-preferred one regardless of its position in the candidate list.
 PREFERRED_FOOD_BONUS_BY_ROLE = {
-    "protein": 0.42,
-    "carb": 0.34,
-    "fat": 0.12,
-    "fruit": 0.18,
-    "vegetable": 0.14,
-    "dairy": 0.22,
+    "protein": 1.20,
+    "carb": 0.95,
+    "fat": 0.45,
+    "fruit": 0.55,
+    "vegetable": 0.45,
+    "dairy": 0.70,
 }
 REPEAT_PENALTY_BY_ROLE = {
     "protein": 0.85,
@@ -238,14 +241,19 @@ def _build_preference_filtered_role_codes(
     food_lookup: dict[str, dict],
     preference_profile: dict,
 ) -> list[str]:
+    candidate_codes_set = set(candidate_codes)
     compatible_candidate_foods = [food_lookup[code] for code in candidate_codes if code in food_lookup]
     compatible_candidate_foods.extend(
         food_lookup[code]
         for code in ROLE_FALLBACK_CODE_POOLS[role]
-        if code in food_lookup and code not in candidate_codes
+        if code in food_lookup and code not in candidate_codes_set
     )
     filtered_result = apply_user_food_preferences(compatible_candidate_foods, preference_profile)
-    compatible_foods = _dedupe_foods_by_code(filtered_result["foods"])
+    # Preferred foods go to the front so the scoring naturally selects them first.
+    compatible_foods = prioritize_preferred_foods(
+        _dedupe_foods_by_code(filtered_result["foods"]),
+        preference_profile,
+    )
 
     if compatible_foods:
         return [food["code"] for food in compatible_foods]
@@ -299,7 +307,8 @@ def _build_preference_filtered_support_options(
     if not prioritized_options:
         return [[]]
 
-    prioritized_options.sort(key=lambda item: (-item[0], len(item[1])))
+    # Options with preferred food matches first, then prefer options with more foods.
+    prioritized_options.sort(key=lambda item: (-item[0], -len(item[1])))
     normalized_options = [support_option for _, support_option in prioritized_options]
     if [] not in normalized_options:
         normalized_options.append([])
