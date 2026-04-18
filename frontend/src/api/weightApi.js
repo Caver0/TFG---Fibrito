@@ -15,6 +15,14 @@ export function getWeightHistory(token) {
   })
 }
 
+export function updateWeightEntry(token, entryId, payload) {
+  return apiRequest(`/weight/${entryId}`, {
+    method: 'PUT',
+    token,
+    body: payload,
+  })
+}
+
 export function deleteWeightEntry(token, entryId) {
   return apiRequest(`/weight/${entryId}`, {
     method: 'DELETE',

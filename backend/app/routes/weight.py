@@ -11,6 +11,7 @@ from app.services.progress_service import (
     create_weight_entry,
     delete_weight_entry,
     list_weight_entries,
+    update_weight_entry,
 )
 
 router = APIRouter(prefix="/weight", tags=["weight"])
@@ -41,6 +42,16 @@ def read_current_user_progress_summary(
     database = get_database()
     entries = list_weight_entries(database, current_user.id)
     return build_progress_summary(entries)
+
+
+@router.put("/{entry_id}", response_model=WeightEntry)
+def update_current_user_weight_entry(
+    entry_id: str,
+    payload: WeightEntryCreate,
+    current_user: UserPublic = Depends(get_current_user),
+) -> WeightEntry:
+    database = get_database()
+    return update_weight_entry(database, current_user.id, entry_id, payload)
 
 
 @router.delete("/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)

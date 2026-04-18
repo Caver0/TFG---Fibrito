@@ -114,6 +114,7 @@ function ProgressPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [isApplyingAdjustment, setIsApplyingAdjustment] = useState(false)
   const [deletingEntryId, setDeletingEntryId] = useState('')
+  const [editingEntryId, setEditingEntryId] = useState('')
 
   async function loadWeightHistory(activeToken = token) {
     if (!activeToken) return []
@@ -263,14 +264,23 @@ function ProgressPage() {
     setSaveError('')
     setSaveMessage('')
     try {
-      await weightApi.createWeightEntry(token, {
+      const payload = {
         weight: Number(weightForm.weight),
         date: weightForm.date,
-      })
+      }
+      if (editingEntryId) {
+        await weightApi.updateWeightEntry(token, editingEntryId, payload)
+      } else {
+        await weightApi.createWeightEntry(token, payload)
+      }
       await reloadAll(token)
       window.dispatchEvent(new CustomEvent('dashboard:refresh'))
-      setSaveMessage('Registro de peso guardado correctamente.')
-      setWeightForm((current) => ({ ...current, weight: '' }))
+      setSaveMessage(editingEntryId ? 'Peso de hoy actualizado correctamente.' : 'Registro de peso guardado correctamente.')
+      setEditingEntryId('')
+      setWeightForm({
+        weight: '',
+        date: getTodayDateInputValue(),
+      })
     } catch (error) {
       setSaveError(error.message)
     } finally {
@@ -283,6 +293,13 @@ function ProgressPage() {
     setDeletingEntryId(entryId)
     try {
       await weightApi.deleteWeightEntry(token, entryId)
+      if (editingEntryId === entryId) {
+        setEditingEntryId('')
+        setWeightForm({
+          weight: '',
+          date: getTodayDateInputValue(),
+        })
+      }
       await reloadAll(token)
       window.dispatchEvent(new CustomEvent('dashboard:refresh'))
     } catch (error) {
@@ -319,6 +336,27 @@ function ProgressPage() {
   const confidenceScore = toConfidenceScore(weeklyAdherenceSummary?.weekly_adherence_factor ?? 0)
   const dailyBreakdown = dashboardSnapshot?.adherence?.daily_breakdown ?? []
   const recentEntries = [...entries].slice(-3).reverse()
+  const todayEntry = entries.find((entry) => entry.date === getTodayDateInputValue())
+
+  function handleEditTodayEntry() {
+    if (!todayEntry) return
+    setEditingEntryId(todayEntry.id)
+    setSaveError('')
+    setSaveMessage('')
+    setWeightForm({
+      weight: String(todayEntry.weight),
+      date: todayEntry.date,
+    })
+  }
+
+  function handleCancelEdit() {
+    setEditingEntryId('')
+    setSaveError('')
+    setWeightForm({
+      weight: '',
+      date: getTodayDateInputValue(),
+    })
+  }
 
   return (
     <div className="progress-page">
@@ -405,13 +443,15 @@ function ProgressPage() {
       <SectionPanel className="progress-footer-bar">
         <form className="progress-log-form" onSubmit={handleSave}>
           <label><span>Peso (kg)</span><input type="number" step="0.1" min="0" value={weightForm.weight} onChange={(event) => setWeightForm((current) => ({ ...current, weight: event.target.value }))} required /></label>
-          <label><span>Fecha</span><input type="date" value={weightForm.date} onChange={(event) => setWeightForm((current) => ({ ...current, date: event.target.value }))} required /></label>
-          <button type="submit" className="protocol-secondary-button" disabled={isSaving}>{isSaving ? 'Guardando...' : 'Registrar Peso'}</button>
+          <label><span>Fecha</span><input type="date" value={weightForm.date} onChange={(event) => setWeightForm((current) => ({ ...current, date: event.target.value }))} disabled={Boolean(editingEntryId)} required /></label>
+          <button type="submit" className="protocol-secondary-button" disabled={isSaving}>{isSaving ? 'Guardando...' : editingEntryId ? 'Actualizar Peso de Hoy' : 'Registrar Peso'}</button>
         </form>
 
         <div className="progress-footer-copy">
           <strong>{summary?.latest_weight ? `Último peso ${formatMass(summary.latest_weight)}` : 'Aún no hay último peso'}</strong>
           <span>{summary?.number_of_entries ? `${summary.number_of_entries} registros observados` : 'Comienza a registrar tu peso para activar el análisis.'}</span>
+          {todayEntry && !editingEntryId ? <button type="button" className="protocol-chip-button" onClick={handleEditTodayEntry}>Modificar Peso de Hoy</button> : null}
+          {editingEntryId ? <button type="button" className="protocol-chip-button" onClick={handleCancelEdit}>Cancelar Edicion</button> : null}
         </div>
 
         <button type="button" className="panel-cta-button" disabled={isApplyingAdjustment} onClick={handleApplyAdjustment}>

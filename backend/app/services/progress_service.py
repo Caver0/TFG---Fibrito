@@ -5,22 +5,142 @@ from datetime import UTC, date, datetime
 
 from bson import ObjectId
 from fastapi import HTTPException, status
+from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
 
 from app.schemas.progress import ProgressSummary, WeeklyAverage
 from app.schemas.weight import WeightEntry, WeightEntryCreate, serialize_weight_entry
 
 
+WEIGHT_ENTRY_NOT_FOUND_DETAIL = "No se encontro el registro de peso"
+WEIGHT_ENTRY_DUPLICATE_DATE_DETAIL = "Ya existe un registro de peso para esa fecha"
+WEIGHT_ENTRY_DELETE_FORBIDDEN_DETAIL = "No tienes permiso para eliminar este registro de peso"
+WEIGHT_ENTRY_UPDATE_FORBIDDEN_DETAIL = "No tienes permiso para editar este registro de peso"
+
+
+def _get_weight_entry_or_raise(database, user_object_id: ObjectId, entry_id: str, forbidden_detail: str) -> dict:
+    if not ObjectId.is_valid(entry_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=WEIGHT_ENTRY_NOT_FOUND_DETAIL,
+        )
+
+    existing_entry = database.weight_logs.find_one({"_id": ObjectId(entry_id)})
+    if not existing_entry:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=WEIGHT_ENTRY_NOT_FOUND_DETAIL,
+        )
+
+    if existing_entry["user_id"] != user_object_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=forbidden_detail,
+        )
+
+    return existing_entry
+
+
+def _ensure_unique_weight_entry_date(
+    database,
+    user_object_id: ObjectId,
+    entry_date: date,
+    excluded_entry_id: ObjectId | None = None,
+) -> None:
+    query = {
+        "user_id": user_object_id,
+        "date": entry_date.isoformat(),
+    }
+    if excluded_entry_id is not None:
+        query["_id"] = {"$ne": excluded_entry_id}
+
+    if database.weight_logs.find_one(query):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=WEIGHT_ENTRY_DUPLICATE_DATE_DETAIL,
+        )
+
+
+def _sync_user_current_weight(database, user_object_id: ObjectId) -> None:
+    latest_entry = database.weight_logs.find_one(
+        {"user_id": user_object_id},
+        sort=[("date", -1), ("created_at", -1)],
+    )
+
+    if latest_entry is None:
+        # Si ya no quedan pesos, se conserva el valor actual del perfil.
+        return
+
+    database.users.update_one(
+        {"_id": user_object_id},
+        {"$set": {"current_weight": latest_entry["weight"]}},
+    )
+
+
 def create_weight_entry(database, user_id: str, payload: WeightEntryCreate) -> WeightEntry:
+    user_object_id = ObjectId(user_id)
     entry_date = payload.date or datetime.now(UTC).date()
+    _ensure_unique_weight_entry_date(database, user_object_id, entry_date)
+
     weight_document = {
-        "user_id": ObjectId(user_id),
+        "user_id": user_object_id,
         "weight": payload.weight,
         "date": entry_date.isoformat(),
         "created_at": datetime.now(UTC),
     }
-    inserted = database.weight_logs.insert_one(weight_document)
+
+    try:
+        inserted = database.weight_logs.insert_one(weight_document)
+    except DuplicateKeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=WEIGHT_ENTRY_DUPLICATE_DATE_DETAIL,
+        ) from exc
+
+    _sync_user_current_weight(database, user_object_id)
     created_entry = database.weight_logs.find_one({"_id": inserted.inserted_id})
     return serialize_weight_entry(created_entry)
+
+
+def update_weight_entry(database, user_id: str, entry_id: str, payload: WeightEntryCreate) -> WeightEntry:
+    user_object_id = ObjectId(user_id)
+    existing_entry = _get_weight_entry_or_raise(
+        database,
+        user_object_id,
+        entry_id,
+        WEIGHT_ENTRY_UPDATE_FORBIDDEN_DETAIL,
+    )
+    entry_date = payload.date or existing_entry["date"]
+    if isinstance(entry_date, str):
+        entry_date = date.fromisoformat(entry_date)
+
+    _ensure_unique_weight_entry_date(database, user_object_id, entry_date, existing_entry["_id"])
+
+    try:
+        updated_entry = database.weight_logs.find_one_and_update(
+            {"_id": existing_entry["_id"]},
+            {
+                "$set": {
+                    "weight": payload.weight,
+                    "date": entry_date.isoformat(),
+                }
+            },
+            return_document=ReturnDocument.AFTER,
+        )
+    except DuplicateKeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=WEIGHT_ENTRY_DUPLICATE_DATE_DETAIL,
+        ) from exc
+
+    if not updated_entry:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=WEIGHT_ENTRY_NOT_FOUND_DETAIL,
+        )
+
+    _sync_user_current_weight(database, user_object_id)
+    return serialize_weight_entry(updated_entry)
 
 
 def list_weight_entries(database, user_id: str) -> list[WeightEntry]:
@@ -31,27 +151,15 @@ def list_weight_entries(database, user_id: str) -> list[WeightEntry]:
 
 
 def delete_weight_entry(database, user_id: str, entry_id: str) -> None:
-    if not ObjectId.is_valid(entry_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Weight entry not found",
-        )
-
-    entry_object_id = ObjectId(entry_id)
-    existing_entry = database.weight_logs.find_one({"_id": entry_object_id})
-    if not existing_entry:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Weight entry not found",
-        )
-
-    if existing_entry["user_id"] != ObjectId(user_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not allowed to delete this weight entry",
-        )
-
-    database.weight_logs.delete_one({"_id": entry_object_id})
+    user_object_id = ObjectId(user_id)
+    existing_entry = _get_weight_entry_or_raise(
+        database,
+        user_object_id,
+        entry_id,
+        WEIGHT_ENTRY_DELETE_FORBIDDEN_DETAIL,
+    )
+    database.weight_logs.delete_one({"_id": existing_entry["_id"]})
+    _sync_user_current_weight(database, user_object_id)
 
 
 def build_progress_summary(entries: list[WeightEntry]) -> ProgressSummary:

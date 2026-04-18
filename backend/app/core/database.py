@@ -1,5 +1,6 @@
 """Centralizamos un cliente de MongoDB reutilizable."""
 from pymongo import ASCENDING, MongoClient
+from pymongo.errors import DuplicateKeyError, OperationFailure
 
 from app.core.config import get_settings
 
@@ -14,6 +15,15 @@ def connect_to_mongo() -> MongoClient:
         _client = MongoClient(settings.mongodb_url)
         database = _client[settings.mongo_db_name]
         database.users.create_index([("email", ASCENDING)], unique=True)
+        # Legacy duplicated days should not block startup; the service layer also validates this rule.
+        try:
+            database.weight_logs.create_index(
+                [("user_id", ASCENDING), ("date", ASCENDING)],
+                unique=True,
+            )
+        except (DuplicateKeyError, OperationFailure) as exc:
+            if "duplicate key error" not in str(exc).lower():
+                raise
         database.weight_logs.create_index(
             [("user_id", ASCENDING), ("date", ASCENDING), ("created_at", ASCENDING)]
         )
