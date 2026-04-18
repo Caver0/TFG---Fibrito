@@ -1,0 +1,358 @@
+"""Persistencia y ciclo de vida de dietas."""
+
+from datetime import UTC, datetime
+from typing import Any
+
+from bson import ObjectId
+from fastapi import HTTPException, status
+
+from app.schemas.diet import DailyDiet, DietListItem, serialize_daily_diet, serialize_diet_list_item
+
+from app.services.diet.common import normalize_diet_food_source, round_diet_value, round_food_value
+from app.services.diet.constants import CATALOG_SOURCE_STRATEGY_DEFAULT, DEFAULT_FOOD_DATA_SOURCE
+
+
+def _build_persistable_food_payload(food: dict) -> dict[str, Any]:
+    return {
+        "food_code": food.get("food_code"),
+        "source": normalize_diet_food_source(food.get("source", DEFAULT_FOOD_DATA_SOURCE)),
+        "origin_source": normalize_diet_food_source(
+            food.get("origin_source", food.get("source", DEFAULT_FOOD_DATA_SOURCE))
+        ),
+        "spoonacular_id": food.get("spoonacular_id"),
+        "name": food["name"],
+        "category": food["category"],
+        "quantity": round_food_value(float(food["quantity"])),
+        "unit": food["unit"],
+        "grams": round_food_value(float(food["grams"])) if food.get("grams") is not None else None,
+        "calories": round_food_value(float(food["calories"])),
+        "protein_grams": round_food_value(float(food["protein_grams"])),
+        "fat_grams": round_food_value(float(food["fat_grams"])),
+        "carb_grams": round_food_value(float(food["carb_grams"])),
+    }
+
+
+def _build_persistable_meal_payload(meal: dict) -> dict[str, Any]:
+    return {
+        "meal_number": meal["meal_number"],
+        "distribution_percentage": round_diet_value(meal["distribution_percentage"]),
+        "target_calories": round_diet_value(meal["target_calories"]),
+        "target_protein_grams": round_diet_value(meal["target_protein_grams"]),
+        "target_fat_grams": round_diet_value(meal["target_fat_grams"]),
+        "target_carb_grams": round_diet_value(meal["target_carb_grams"]),
+        "actual_calories": round_diet_value(meal["actual_calories"]),
+        "actual_protein_grams": round_diet_value(meal["actual_protein_grams"]),
+        "actual_fat_grams": round_diet_value(meal["actual_fat_grams"]),
+        "actual_carb_grams": round_diet_value(meal["actual_carb_grams"]),
+        "calorie_difference": round_diet_value(meal["calorie_difference"]),
+        "protein_difference": round_diet_value(meal["protein_difference"]),
+        "fat_difference": round_diet_value(meal["fat_difference"]),
+        "carb_difference": round_diet_value(meal["carb_difference"]),
+        "foods": [
+            _build_persistable_food_payload(food)
+            for food in meal.get("foods", [])
+        ],
+    }
+
+
+def _build_persistable_diet_fields(diet_payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "meals_count": diet_payload["meals_count"],
+        "target_calories": round_diet_value(diet_payload["target_calories"]),
+        "protein_grams": round_diet_value(diet_payload["protein_grams"]),
+        "fat_grams": round_diet_value(diet_payload["fat_grams"]),
+        "carb_grams": round_diet_value(diet_payload["carb_grams"]),
+        "actual_calories": round_diet_value(diet_payload["actual_calories"]),
+        "actual_protein_grams": round_diet_value(diet_payload["actual_protein_grams"]),
+        "actual_fat_grams": round_diet_value(diet_payload["actual_fat_grams"]),
+        "actual_carb_grams": round_diet_value(diet_payload["actual_carb_grams"]),
+        "calorie_difference": round_diet_value(diet_payload["calorie_difference"]),
+        "protein_difference": round_diet_value(diet_payload["protein_difference"]),
+        "fat_difference": round_diet_value(diet_payload["fat_difference"]),
+        "carb_difference": round_diet_value(diet_payload["carb_difference"]),
+        "distribution_percentages": [
+            round_diet_value(value) for value in diet_payload["distribution_percentages"]
+        ],
+        "training_time_of_day": diet_payload["training_time_of_day"],
+        "training_optimization_applied": diet_payload["training_optimization_applied"],
+        "food_data_source": diet_payload.get("food_data_source", DEFAULT_FOOD_DATA_SOURCE),
+        "food_data_sources": diet_payload.get(
+            "food_data_sources",
+            [diet_payload.get("food_data_source", DEFAULT_FOOD_DATA_SOURCE)],
+        ),
+        "food_catalog_version": diet_payload.get("food_catalog_version"),
+        "food_preferences_applied": diet_payload.get("food_preferences_applied", False),
+        "applied_dietary_restrictions": diet_payload.get("applied_dietary_restrictions", []),
+        "applied_allergies": diet_payload.get("applied_allergies", []),
+        "preferred_food_matches": diet_payload.get("preferred_food_matches", 0),
+        "diversity_strategy_applied": diet_payload.get("diversity_strategy_applied", False),
+        "food_usage_summary": diet_payload.get("food_usage_summary", {}),
+        "food_filter_warnings": diet_payload.get("food_filter_warnings", []),
+        "catalog_source_strategy": diet_payload.get("catalog_source_strategy", CATALOG_SOURCE_STRATEGY_DEFAULT),
+        "spoonacular_attempted": diet_payload.get("spoonacular_attempted", False),
+        "spoonacular_attempts": diet_payload.get("spoonacular_attempts", 0),
+        "spoonacular_hits": diet_payload.get("spoonacular_hits", 0),
+        "cache_hits": diet_payload.get("cache_hits", 0),
+        "internal_fallbacks": diet_payload.get("internal_fallbacks", 0),
+        "resolved_foods_count": diet_payload.get("resolved_foods_count", 0),
+        "meals": [
+            _build_persistable_meal_payload(meal)
+            for meal in diet_payload["meals"]
+        ],
+    }
+
+
+def _get_user_object_id(user_id: str) -> ObjectId:
+    return ObjectId(user_id)
+
+
+def _get_optional_diet_object_id(diet_id: str | None) -> ObjectId | None:
+    if diet_id is None:
+        return None
+
+    if not ObjectId.is_valid(diet_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Diet not found",
+        )
+
+    return ObjectId(diet_id)
+
+
+def _build_diet_lifecycle_fields(
+    *,
+    created_at: datetime,
+    is_active: bool,
+    valid_from: datetime | None = None,
+    valid_to: datetime | None = None,
+    adjusted_from_diet_id: str | None = None,
+) -> dict[str, Any]:
+    lifecycle_fields: dict[str, Any] = {
+        "is_active": is_active,
+        "valid_from": valid_from or created_at,
+        "valid_to": valid_to,
+        "adjusted_from_diet_id": _get_optional_diet_object_id(adjusted_from_diet_id),
+    }
+    return lifecycle_fields
+
+
+def get_active_user_diet_document(
+    database,
+    user_id: str,
+    *,
+    include_legacy_fallback: bool = True,
+) -> dict[str, Any] | None:
+    user_object_id = _get_user_object_id(user_id)
+    document = database.diets.find_one(
+        {
+            "user_id": user_object_id,
+            "is_active": True,
+        },
+        sort=[("valid_from", -1), ("created_at", -1)],
+    )
+    if document is not None or not include_legacy_fallback:
+        return document
+
+    return database.diets.find_one(
+        {
+            "user_id": user_object_id,
+            "is_active": {"$exists": False},
+        },
+        sort=[("created_at", -1)],
+    )
+
+
+def _deactivate_user_active_diets(
+    database,
+    *,
+    user_id: str,
+    changed_at: datetime,
+    exclude_diet_id: ObjectId | None = None,
+) -> None:
+    user_object_id = _get_user_object_id(user_id)
+    active_query: dict[str, Any] = {
+        "user_id": user_object_id,
+        "is_active": True,
+    }
+    if exclude_diet_id is not None:
+        active_query["_id"] = {"$ne": exclude_diet_id}
+
+    had_explicit_active = database.diets.count_documents(active_query, limit=1) > 0
+    database.diets.update_many(
+        active_query,
+        {
+            "$set": {
+                "is_active": False,
+                "valid_to": changed_at,
+            }
+        },
+    )
+
+    if had_explicit_active:
+        return
+
+    legacy_active_document = get_active_user_diet_document(
+        database,
+        user_id,
+        include_legacy_fallback=True,
+    )
+    if (
+        legacy_active_document is not None
+        and not legacy_active_document.get("is_active", False)
+        and (exclude_diet_id is None or legacy_active_document["_id"] != exclude_diet_id)
+    ):
+        database.diets.update_one(
+            {
+                "_id": legacy_active_document["_id"],
+                "user_id": user_object_id,
+            },
+            {
+                "$set": {
+                    "is_active": False,
+                    "valid_from": legacy_active_document.get("valid_from", legacy_active_document["created_at"]),
+                    "valid_to": changed_at,
+                }
+            },
+        )
+
+
+def save_diet(
+    database,
+    user_id: str,
+    diet_payload: dict,
+    *,
+    adjusted_from_diet_id: str | None = None,
+) -> DailyDiet:
+    created_at = datetime.now(UTC)
+    _deactivate_user_active_diets(
+        database,
+        user_id=user_id,
+        changed_at=created_at,
+    )
+    diet_document = {
+        "user_id": _get_user_object_id(user_id),
+        "created_at": created_at,
+        **_build_diet_lifecycle_fields(
+            created_at=created_at,
+            is_active=True,
+            valid_from=created_at,
+            adjusted_from_diet_id=adjusted_from_diet_id,
+        ),
+        **_build_persistable_diet_fields(diet_payload),
+    }
+    inserted = database.diets.insert_one(diet_document)
+    created_diet = database.diets.find_one({"_id": inserted.inserted_id})
+    return serialize_daily_diet(created_diet)
+
+
+def list_user_diets(database, user_id: str) -> list[DietListItem]:
+    active_document = get_active_user_diet_document(
+        database,
+        user_id,
+        include_legacy_fallback=True,
+    )
+    documents = list(
+        database.diets.find({"user_id": _get_user_object_id(user_id)}).sort([("created_at", -1)])
+    )
+    if active_document is not None:
+        documents = [
+            (
+                _mark_document_as_active_for_legacy_fallback(document)
+                if document["_id"] == active_document["_id"] and "is_active" not in document
+                else document
+            )
+            for document in documents
+        ]
+
+    return [serialize_diet_list_item(document) for document in documents]
+
+
+def get_user_diet_document_by_id(database, user_id: str, diet_id: str) -> dict[str, Any]:
+    if not ObjectId.is_valid(diet_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Diet not found",
+        )
+
+    document = database.diets.find_one(
+        {
+            "_id": ObjectId(diet_id),
+            "user_id": _get_user_object_id(user_id),
+        }
+    )
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Diet not found",
+        )
+
+    return document
+
+
+def update_diet(database, user_id: str, diet_id: str, diet_payload: dict[str, Any]) -> DailyDiet:
+    existing_document = get_user_diet_document_by_id(database, user_id, diet_id)
+    database.diets.update_one(
+        {
+            "_id": existing_document["_id"],
+            "user_id": _get_user_object_id(user_id),
+        },
+        {
+            "$set": {
+                **_build_persistable_diet_fields(diet_payload),
+                **_build_diet_lifecycle_fields(
+                    created_at=existing_document["created_at"],
+                    is_active=bool(existing_document.get("is_active", False)),
+                    valid_from=existing_document.get("valid_from", existing_document["created_at"]),
+                    valid_to=existing_document.get("valid_to"),
+                    adjusted_from_diet_id=(
+                        str(existing_document["adjusted_from_diet_id"])
+                        if existing_document.get("adjusted_from_diet_id") is not None
+                        else None
+                    ),
+                ),
+            },
+        },
+    )
+    updated_document = database.diets.find_one({"_id": existing_document["_id"]})
+    return serialize_daily_diet(updated_document)
+
+
+def _mark_document_as_active_for_legacy_fallback(document: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **document,
+        "is_active": True,
+        "valid_from": document.get("valid_from", document["created_at"]),
+    }
+
+
+def get_user_diet_by_id(database, user_id: str, diet_id: str) -> DailyDiet:
+    document = get_user_diet_document_by_id(database, user_id, diet_id)
+    if "is_active" not in document:
+        active_document = get_active_user_diet_document(
+            database,
+            user_id,
+            include_legacy_fallback=True,
+        )
+        if active_document is not None and active_document["_id"] == document["_id"]:
+            document = _mark_document_as_active_for_legacy_fallback(document)
+
+    return serialize_daily_diet(document)
+
+
+def get_active_user_diet(database, user_id: str) -> DailyDiet | None:
+    document = get_active_user_diet_document(
+        database,
+        user_id,
+        include_legacy_fallback=True,
+    )
+    if not document:
+        return None
+
+    if "is_active" not in document:
+        document = _mark_document_as_active_for_legacy_fallback(document)
+
+    return serialize_daily_diet(document)
+
+
+def get_latest_user_diet(database, user_id: str) -> DailyDiet | None:
+    return get_active_user_diet(database, user_id)
