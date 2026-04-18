@@ -310,6 +310,10 @@ class DietMeal(BaseModel):
 
 
 class DietBase(BaseModel):
+    is_active: bool = False
+    valid_from: datetime | None = None
+    valid_to: datetime | None = None
+    adjusted_from_diet_id: str | None = None
     meals_count: int = Field(ge=3, le=6)
     target_calories: float = Field(gt=0)
     protein_grams: float = Field(ge=0)
@@ -550,6 +554,14 @@ def serialize_daily_diet(document: dict[str, Any]) -> DailyDiet:
     return DailyDiet(
         id=str(document["_id"]),
         created_at=document["created_at"],
+        is_active=bool(document.get("is_active", False)),
+        valid_from=document.get("valid_from", document["created_at"]),
+        valid_to=document.get("valid_to"),
+        adjusted_from_diet_id=(
+            str(document["adjusted_from_diet_id"])
+            if document.get("adjusted_from_diet_id") is not None
+            else None
+        ),
         meals_count=document["meals_count"],
         target_calories=_round_decimal(document["target_calories"]),
         protein_grams=_round_decimal(document["protein_grams"]),
@@ -610,6 +622,14 @@ def serialize_diet_list_item(document: dict[str, Any]) -> DietListItem:
     return DietListItem(
         id=str(document["_id"]),
         created_at=document["created_at"],
+        is_active=bool(document.get("is_active", False)),
+        valid_from=document.get("valid_from", document["created_at"]),
+        valid_to=document.get("valid_to"),
+        adjusted_from_diet_id=(
+            str(document["adjusted_from_diet_id"])
+            if document.get("adjusted_from_diet_id") is not None
+            else None
+        ),
         meals_count=document["meals_count"],
         target_calories=_round_decimal(document["target_calories"]),
         protein_grams=_round_decimal(document["protein_grams"]),

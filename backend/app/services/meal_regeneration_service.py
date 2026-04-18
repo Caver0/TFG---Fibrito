@@ -19,8 +19,8 @@ from app.services.diet_service import (
     get_support_option_specs,
     get_user_diet_by_id,
     resolve_meal_context,
+    save_diet,
     track_food_usage_across_day,
-    update_diet,
 )
 from app.services.food_catalog_service import (
     build_catalog_food_from_diet_food,
@@ -445,13 +445,13 @@ def persist_updated_meal_in_diet(
     preference_profile: dict[str, Any] | None,
     metadata_overrides: dict[str, Any] | None = None,
 ) -> DailyDiet:
-    # Aseguramos que todas las comidas (la nueva y las existentes) sean diccionarios planos
+    # Guardamos una nueva versión activa para conservar el histórico del plan anterior.
     updated_meals = []
     for index, current_meal in enumerate(diet.meals):
         if index == meal_index:
             updated_meals.append(updated_meal)
         else:
-            # Forzamos la conversión a dict para evitar conflictos de tipos
+            # Forzamos la conversión a dict para evitar conflictos de tipos.
             updated_meals.append(current_meal.model_dump())
 
     updated_diet_payload = build_updated_diet_payload(
@@ -460,7 +460,12 @@ def persist_updated_meal_in_diet(
         preference_profile=preference_profile,
         metadata_overrides=metadata_overrides,
     )
-    return update_diet(database, user.id, diet_id, updated_diet_payload)
+    return save_diet(
+        database,
+        user.id,
+        updated_diet_payload,
+        adjusted_from_diet_id=diet_id,
+    )
 
 def regenerate_meal(
     database,

@@ -24,7 +24,7 @@ from app.services.adherence_service import (
     calculate_daily_adherence_summary,
     calculate_weekly_adherence_summary,
 )
-from app.services.diet_service import get_latest_user_diet
+from app.services.diet_service import get_active_user_diet
 from app.services.goal_adjustment_service import (
     analyze_weekly_progress,
     list_adjustment_history,
@@ -288,7 +288,7 @@ def get_adherence_overview(
 
 
 def get_active_diet_overview(database, user_id: str) -> ActiveDietOverview | None:
-    latest_diet = get_latest_user_diet(database, user_id)
+    latest_diet = get_active_user_diet(database, user_id)
     if latest_diet is None:
         return None
 

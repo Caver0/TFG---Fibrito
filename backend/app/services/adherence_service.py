@@ -139,6 +139,10 @@ def _get_day_end_boundary(target_date: date) -> datetime:
     return datetime.combine(target_date + timedelta(days=1), time.min, tzinfo=UTC)
 
 
+def _get_day_start_boundary(target_date: date) -> datetime:
+    return datetime.combine(target_date, time.min, tzinfo=UTC)
+
+
 def _get_diet_object_id(diet_id: str) -> ObjectId:
     if not ObjectId.is_valid(diet_id):
         raise HTTPException(
@@ -290,10 +294,28 @@ def _get_cached_diet_document(
 
 
 def get_active_diet_document_for_date(database, user_id: str, target_date: date) -> dict[str, Any] | None:
+    start_boundary = _get_day_start_boundary(target_date)
+    end_boundary = _get_day_end_boundary(target_date)
+    document = database.diets.find_one(
+        {
+            "user_id": _get_user_object_id(user_id),
+            "valid_from": {"$lt": end_boundary},
+            "$or": [
+                {"valid_to": None},
+                {"valid_to": {"$exists": False}},
+                {"valid_to": {"$gte": start_boundary}},
+            ],
+        },
+        sort=[("valid_from", -1), ("created_at", -1)],
+    )
+    if document is not None:
+        return document
+
     return database.diets.find_one(
         {
             "user_id": _get_user_object_id(user_id),
-            "created_at": {"$lt": _get_day_end_boundary(target_date)},
+            "is_active": {"$exists": False},
+            "created_at": {"$lt": end_boundary},
         },
         sort=[("created_at", -1)],
     )

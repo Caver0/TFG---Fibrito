@@ -15,9 +15,9 @@ from app.services.diet_service import (
     build_updated_diet_payload,
     calculate_difference_summary,
     calculate_meal_actuals_from_foods,
-    get_latest_user_diet,
+    get_active_user_diet,
     resolve_meal_context,
-    update_diet,
+    save_diet,
 )
 from app.services.food_catalog_service import build_catalog_food_from_diet_food
 from app.services.meal_regeneration_service import (
@@ -631,7 +631,7 @@ def _recalculate_active_diet_after_adjustment(
     new_target_calories: float,
     reference_weight: float,
 ) -> list[str]:
-    latest_diet = get_latest_user_diet(database, user_id)
+    latest_diet = get_active_user_diet(database, user_id)
     if not latest_diet:
         return [
             "No habia una dieta activa para reajustar; solo se actualizaron los objetivos nutricionales."
@@ -680,14 +680,21 @@ def _recalculate_active_diet_after_adjustment(
         existing_diet=updated_diet,
         meals=updated_meals,
     )
-    update_diet(database, user_id, latest_diet.id, updated_diet_payload)
+    save_diet(
+        database,
+        user_id,
+        updated_diet_payload,
+        adjusted_from_diet_id=latest_diet.id,
+    )
 
     if not update_notes:
         return [
-            "Se reajusto la dieta activa manteniendo las mismas comidas y los mismos alimentos en cada comida."
+            "Se creo una nueva version derivada de la dieta activa y se archivo la anterior.",
+            "Se reajusto la dieta activa manteniendo las mismas comidas y los mismos alimentos en cada comida.",
         ]
 
     return [
+        "Se creo una nueva version derivada de la dieta activa y se archivo la anterior.",
         "Se reajusto la dieta activa manteniendo las mismas comidas y los mismos alimentos.",
         *update_notes,
     ]

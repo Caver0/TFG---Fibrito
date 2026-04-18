@@ -2452,10 +2452,142 @@ def _build_persistable_diet_fields(diet_payload: dict[str, Any]) -> dict[str, An
     }
 
 
-def save_diet(database, user_id: str, diet_payload: dict) -> DailyDiet:
+def _get_user_object_id(user_id: str) -> ObjectId:
+    return ObjectId(user_id)
+
+
+def _get_optional_diet_object_id(diet_id: str | None) -> ObjectId | None:
+    if diet_id is None:
+        return None
+
+    if not ObjectId.is_valid(diet_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Diet not found",
+        )
+
+    return ObjectId(diet_id)
+
+
+def _build_diet_lifecycle_fields(
+    *,
+    created_at: datetime,
+    is_active: bool,
+    valid_from: datetime | None = None,
+    valid_to: datetime | None = None,
+    adjusted_from_diet_id: str | None = None,
+) -> dict[str, Any]:
+    lifecycle_fields: dict[str, Any] = {
+        "is_active": is_active,
+        "valid_from": valid_from or created_at,
+        "valid_to": valid_to,
+        "adjusted_from_diet_id": _get_optional_diet_object_id(adjusted_from_diet_id),
+    }
+    return lifecycle_fields
+
+
+def get_active_user_diet_document(
+    database,
+    user_id: str,
+    *,
+    include_legacy_fallback: bool = True,
+) -> dict[str, Any] | None:
+    user_object_id = _get_user_object_id(user_id)
+    document = database.diets.find_one(
+        {
+            "user_id": user_object_id,
+            "is_active": True,
+        },
+        sort=[("valid_from", -1), ("created_at", -1)],
+    )
+    if document is not None or not include_legacy_fallback:
+        return document
+
+    return database.diets.find_one(
+        {
+            "user_id": user_object_id,
+            "is_active": {"$exists": False},
+        },
+        sort=[("created_at", -1)],
+    )
+
+
+def _deactivate_user_active_diets(
+    database,
+    *,
+    user_id: str,
+    changed_at: datetime,
+    exclude_diet_id: ObjectId | None = None,
+) -> None:
+    user_object_id = _get_user_object_id(user_id)
+    active_query: dict[str, Any] = {
+        "user_id": user_object_id,
+        "is_active": True,
+    }
+    if exclude_diet_id is not None:
+        active_query["_id"] = {"$ne": exclude_diet_id}
+
+    had_explicit_active = database.diets.count_documents(active_query, limit=1) > 0
+    database.diets.update_many(
+        active_query,
+        {
+            "$set": {
+                "is_active": False,
+                "valid_to": changed_at,
+            }
+        },
+    )
+
+    if had_explicit_active:
+        return
+
+    legacy_active_document = get_active_user_diet_document(
+        database,
+        user_id,
+        include_legacy_fallback=True,
+    )
+    if (
+        legacy_active_document is not None
+        and not legacy_active_document.get("is_active", False)
+        and (exclude_diet_id is None or legacy_active_document["_id"] != exclude_diet_id)
+    ):
+        database.diets.update_one(
+            {
+                "_id": legacy_active_document["_id"],
+                "user_id": user_object_id,
+            },
+            {
+                "$set": {
+                    "is_active": False,
+                    "valid_from": legacy_active_document.get("valid_from", legacy_active_document["created_at"]),
+                    "valid_to": changed_at,
+                }
+            },
+        )
+
+
+def save_diet(
+    database,
+    user_id: str,
+    diet_payload: dict,
+    *,
+    adjusted_from_diet_id: str | None = None,
+) -> DailyDiet:
+    created_at = datetime.now(UTC)
+    _deactivate_user_active_diets(
+        database,
+        user_id=user_id,
+        changed_at=created_at,
+    )
     diet_document = {
-        "user_id": ObjectId(user_id),
-        "created_at": datetime.now(UTC),
+        "user_id": _get_user_object_id(user_id),
+        "created_at": created_at,
+        **_build_diet_lifecycle_fields(
+            created_at=created_at,
+            is_active=True,
+            valid_from=created_at,
+            adjusted_from_diet_id=adjusted_from_diet_id,
+        ),
         **_build_persistable_diet_fields(diet_payload),
     }
     inserted = database.diets.insert_one(diet_document)
@@ -2464,7 +2596,24 @@ def save_diet(database, user_id: str, diet_payload: dict) -> DailyDiet:
 
 
 def list_user_diets(database, user_id: str) -> list[DietListItem]:
-    documents = database.diets.find({"user_id": ObjectId(user_id)}).sort([("created_at", -1)])
+    active_document = get_active_user_diet_document(
+        database,
+        user_id,
+        include_legacy_fallback=True,
+    )
+    documents = list(
+        database.diets.find({"user_id": _get_user_object_id(user_id)}).sort([("created_at", -1)])
+    )
+    if active_document is not None:
+        documents = [
+            (
+                _mark_document_as_active_for_legacy_fallback(document)
+                if document["_id"] == active_document["_id"] and "is_active" not in document
+                else document
+            )
+            for document in documents
+        ]
+
     return [serialize_diet_list_item(document) for document in documents]
 
 
@@ -2478,7 +2627,7 @@ def get_user_diet_document_by_id(database, user_id: str, diet_id: str) -> dict[s
     document = database.diets.find_one(
         {
             "_id": ObjectId(diet_id),
-            "user_id": ObjectId(user_id),
+            "user_id": _get_user_object_id(user_id),
         }
     )
     if not document:
@@ -2495,10 +2644,23 @@ def update_diet(database, user_id: str, diet_id: str, diet_payload: dict[str, An
     database.diets.update_one(
         {
             "_id": existing_document["_id"],
-            "user_id": ObjectId(user_id),
+            "user_id": _get_user_object_id(user_id),
         },
         {
-            "$set": _build_persistable_diet_fields(diet_payload),
+            "$set": {
+                **_build_persistable_diet_fields(diet_payload),
+                **_build_diet_lifecycle_fields(
+                    created_at=existing_document["created_at"],
+                    is_active=bool(existing_document.get("is_active", False)),
+                    valid_from=existing_document.get("valid_from", existing_document["created_at"]),
+                    valid_to=existing_document.get("valid_to"),
+                    adjusted_from_diet_id=(
+                        str(existing_document["adjusted_from_diet_id"])
+                        if existing_document.get("adjusted_from_diet_id") is not None
+                        else None
+                    ),
+                ),
+            },
         },
     )
     updated_document = database.diets.find_one({"_id": existing_document["_id"]})
@@ -2506,15 +2668,41 @@ def update_diet(database, user_id: str, diet_id: str, diet_payload: dict[str, An
 
 
 def get_user_diet_by_id(database, user_id: str, diet_id: str) -> DailyDiet:
-    return serialize_daily_diet(get_user_diet_document_by_id(database, user_id, diet_id))
+    document = get_user_diet_document_by_id(database, user_id, diet_id)
+    if "is_active" not in document:
+        active_document = get_active_user_diet_document(
+            database,
+            user_id,
+            include_legacy_fallback=True,
+        )
+        if active_document is not None and active_document["_id"] == document["_id"]:
+            document = _mark_document_as_active_for_legacy_fallback(document)
+
+    return serialize_daily_diet(document)
 
 
-def get_latest_user_diet(database, user_id: str) -> DailyDiet | None:
-    document = database.diets.find_one(
-        {"user_id": ObjectId(user_id)},
-        sort=[("created_at", -1)],
+def get_active_user_diet(database, user_id: str) -> DailyDiet | None:
+    document = get_active_user_diet_document(
+        database,
+        user_id,
+        include_legacy_fallback=True,
     )
     if not document:
         return None
 
+    if "is_active" not in document:
+        document = _mark_document_as_active_for_legacy_fallback(document)
+
     return serialize_daily_diet(document)
+
+
+def _mark_document_as_active_for_legacy_fallback(document: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **document,
+        "is_active": True,
+        "valid_from": document.get("valid_from", document["created_at"]),
+    }
+
+
+def get_latest_user_diet(database, user_id: str) -> DailyDiet | None:
+    return get_active_user_diet(database, user_id)

@@ -33,6 +33,21 @@ def connect_to_mongo() -> MongoClient:
         database.diets.create_index(
             [("user_id", ASCENDING), ("created_at", ASCENDING)]
         )
+        database.diets.create_index(
+            [("user_id", ASCENDING), ("is_active", ASCENDING), ("valid_from", ASCENDING)]
+        )
+        database.diets.create_index(
+            [("user_id", ASCENDING), ("valid_from", ASCENDING), ("valid_to", ASCENDING)]
+        )
+        try:
+            database.diets.create_index(
+                [("user_id", ASCENDING), ("is_active", ASCENDING)],
+                unique=True,
+                partialFilterExpression={"is_active": True},
+            )
+        except (DuplicateKeyError, OperationFailure) as exc:
+            if "duplicate key error" not in str(exc).lower():
+                raise
         database.diet_adherence.create_index(
             [
                 ("user_id", ASCENDING),
