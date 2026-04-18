@@ -23,7 +23,7 @@ from bson import ObjectId
 
 from app.core.database import get_database
 
-USER_ID = ObjectId("69e0c0acbeb12727983b9127")
+USER_ID = ObjectId("69e3b01473a95447da4bf7af")
 TODAY = date.today()
 
 # Perfil nutricional: 75 kg, 180 cm, 25 años, hombre, ganar_masa, 4 dias/semana

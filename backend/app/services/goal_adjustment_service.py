@@ -5,9 +5,26 @@ from typing import Any
 
 from bson import ObjectId
 
+from app.schemas.diet import DietMeal
 from app.schemas.adjustments import AdjustmentHistoryEntry, serialize_adjustment_entry
 from app.schemas.progress import WeeklyAnalysisResponse, WeeklyAverage
 from app.schemas.user import UserPublic
+from app.services.diet_service import (
+    build_exact_meal_solution,
+    build_food_portion,
+    build_updated_diet_payload,
+    calculate_difference_summary,
+    calculate_meal_actuals_from_foods,
+    get_latest_user_diet,
+    resolve_meal_context,
+    update_diet,
+)
+from app.services.food_catalog_service import build_catalog_food_from_diet_food
+from app.services.meal_regeneration_service import (
+    build_diet_context_food_lookup,
+    get_training_focus_for_meal,
+    infer_existing_meal_plan,
+)
 from app.services.nutrition_service import (
     NutritionProfileIncompleteError,
     build_nutrition_summary,
@@ -55,6 +72,167 @@ def _build_macro_snapshot(
         "fat_grams": round(float(macros["fat_grams"]), 1),
         "carb_grams": round(float(macros["carb_grams"]), 1),
     }
+
+
+def _build_target_macros(
+    *,
+    reference_weight: float,
+    target_calories: float,
+) -> dict[str, float]:
+    macro_snapshot = _build_macro_snapshot(
+        reference_weight=reference_weight,
+        target_calories=target_calories,
+    )
+    if macro_snapshot is None:
+        raise ValueError("No se pudieron calcular los macros objetivo para reajustar la dieta activa.")
+
+    return macro_snapshot
+
+
+def _get_meal_distribution_percentage(latest_diet, meal_index: int, meal) -> float:
+    if meal.distribution_percentage is not None:
+        return float(meal.distribution_percentage)
+
+    if meal_index < len(latest_diet.distribution_percentages):
+        return float(latest_diet.distribution_percentages[meal_index])
+
+    if latest_diet.target_calories:
+        return round((float(meal.target_calories) / float(latest_diet.target_calories)) * 100.0, 1)
+
+    return 0.0
+
+
+def _build_adjusted_meal_target(
+    *,
+    latest_diet,
+    meal,
+    meal_index: int,
+    new_target_calories: float,
+    macro_targets: dict[str, float],
+) -> DietMeal:
+    distribution_percentage = _get_meal_distribution_percentage(latest_diet, meal_index, meal)
+    distribution_ratio = distribution_percentage / 100.0
+
+    return DietMeal.model_validate({
+        "meal_number": meal.meal_number,
+        "meal_slot": meal.meal_slot,
+        "meal_role": meal.meal_role,
+        "meal_label": meal.meal_label,
+        "distribution_percentage": distribution_percentage,
+        "target_calories": round(new_target_calories * distribution_ratio, 1),
+        "target_protein_grams": round(macro_targets["protein_grams"] * distribution_ratio, 1),
+        "target_fat_grams": round(macro_targets["fat_grams"] * distribution_ratio, 1),
+        "target_carb_grams": round(macro_targets["carb_grams"] * distribution_ratio, 1),
+        "actual_calories": 0.0,
+        "actual_protein_grams": 0.0,
+        "actual_fat_grams": 0.0,
+        "actual_carb_grams": 0.0,
+        "calorie_difference": 0.0,
+        "protein_difference": 0.0,
+        "fat_difference": 0.0,
+        "carb_difference": 0.0,
+        "foods": [],
+    })
+
+
+def _build_updated_meal_payload(
+    *,
+    target_meal: DietMeal,
+    foods: list[dict[str, Any]],
+) -> dict[str, Any]:
+    actuals = calculate_meal_actuals_from_foods(foods)
+    differences = calculate_difference_summary(
+        target_calories=target_meal.target_calories,
+        target_protein_grams=target_meal.target_protein_grams,
+        target_fat_grams=target_meal.target_fat_grams,
+        target_carb_grams=target_meal.target_carb_grams,
+        actual_calories=actuals["actual_calories"],
+        actual_protein_grams=actuals["actual_protein_grams"],
+        actual_fat_grams=actuals["actual_fat_grams"],
+        actual_carb_grams=actuals["actual_carb_grams"],
+    )
+    return {
+        "meal_number": target_meal.meal_number,
+        "distribution_percentage": target_meal.distribution_percentage or 0.0,
+        "target_calories": target_meal.target_calories,
+        "target_protein_grams": target_meal.target_protein_grams,
+        "target_fat_grams": target_meal.target_fat_grams,
+        "target_carb_grams": target_meal.target_carb_grams,
+        "actual_calories": actuals["actual_calories"],
+        "actual_protein_grams": actuals["actual_protein_grams"],
+        "actual_fat_grams": actuals["actual_fat_grams"],
+        "actual_carb_grams": actuals["actual_carb_grams"],
+        "calorie_difference": differences["calorie_difference"],
+        "protein_difference": differences["protein_difference"],
+        "fat_difference": differences["fat_difference"],
+        "carb_difference": differences["carb_difference"],
+        "foods": foods,
+    }
+
+
+def _reorder_foods_like_current_meal(current_meal, foods: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    ordered_foods: list[dict[str, Any]] = []
+    used_indexes: set[int] = set()
+
+    for current_food in current_meal.foods:
+        current_food_code = str(current_food.food_code or "").strip()
+        current_food_name = str(current_food.name or "").strip().lower()
+        matched_index: int | None = None
+
+        for index, food in enumerate(foods):
+            if index in used_indexes:
+                continue
+
+            if current_food_code and str(food.get("food_code") or "").strip() == current_food_code:
+                matched_index = index
+                break
+            if not current_food_code and str(food.get("name") or "").strip().lower() == current_food_name:
+                matched_index = index
+                break
+
+        if matched_index is None:
+            continue
+
+        ordered_foods.append(foods[matched_index])
+        used_indexes.add(matched_index)
+
+    ordered_foods.extend(
+        food
+        for index, food in enumerate(foods)
+        if index not in used_indexes
+    )
+    return ordered_foods
+
+
+def _calculate_meal_scale_ratio(current_meal, target_meal: DietMeal) -> float:
+    reference_calories = float(current_meal.target_calories or current_meal.actual_calories or 0.0)
+    if reference_calories <= 0:
+        return 1.0
+
+    return float(target_meal.target_calories) / reference_calories
+
+
+def _build_scaled_meal_with_same_foods(
+    *,
+    current_meal,
+    target_meal: DietMeal,
+) -> dict[str, Any]:
+    scale_ratio = _calculate_meal_scale_ratio(current_meal, target_meal)
+    scaled_foods = []
+
+    for food in current_meal.foods:
+        food_entry = build_catalog_food_from_diet_food(food.model_dump())
+        scaled_foods.append(
+            build_food_portion(
+                food_entry,
+                float(food.quantity) * scale_ratio,
+            )
+        )
+
+    return _build_updated_meal_payload(
+        target_meal=target_meal,
+        foods=scaled_foods,
+    )
 
 
 def _build_adjustment_decision(
@@ -346,6 +524,175 @@ def analyze_weekly_progress(
     )
 
 
+def _try_build_exact_meal_with_same_foods(
+    *,
+    latest_diet,
+    current_meal,
+    target_meal: DietMeal,
+    meal_index: int,
+    food_lookup: dict[str, dict[str, Any]],
+) -> tuple[dict[str, Any] | None, str | None]:
+    if any(not str(food.food_code or "").strip() for food in current_meal.foods):
+        return None, (
+            f"Comida {current_meal.meal_number}: se uso un reajuste proporcional porque faltaban "
+            "food_code en la dieta activa."
+        )
+
+    training_focus = get_training_focus_for_meal(latest_diet, meal_index)
+    original_food_codes = [
+        str(food.food_code).strip()
+        for food in current_meal.foods
+        if str(food.food_code or "").strip()
+    ]
+
+    try:
+        inferred_plan = infer_existing_meal_plan(
+            current_meal,
+            meal_index=meal_index,
+            meals_count=latest_diet.meals_count,
+            training_focus=training_focus,
+            food_lookup=food_lookup,
+        )
+    except Exception:
+        return None, (
+            f"Comida {current_meal.meal_number}: se uso un reajuste proporcional porque no se pudo "
+            "inferir su estructura exacta con el solver actual."
+        )
+
+    selected_role_codes = inferred_plan.get("selected_role_codes", {})
+    support_food_specs = inferred_plan.get("support_food_specs", [])
+    plan_food_codes = [
+        *selected_role_codes.values(),
+        *[support_food["food_code"] for support_food in support_food_specs],
+    ]
+    if (
+        len(selected_role_codes) != 3
+        or len(plan_food_codes) != len(original_food_codes)
+        or set(plan_food_codes) != set(original_food_codes)
+    ):
+        return None, (
+            f"Comida {current_meal.meal_number}: se uso un reajuste proporcional porque la estructura "
+            "guardada no se pudo reconstruir exactamente con los mismos alimentos."
+        )
+
+    meal_slot, _ = resolve_meal_context(
+        target_meal,
+        meal_index=meal_index,
+        meals_count=latest_diet.meals_count,
+        training_focus=training_focus,
+    )
+    scale_ratio = _calculate_meal_scale_ratio(current_meal, target_meal)
+    scaled_support_foods = [
+        {
+            "role": support_food["role"],
+            "food_code": support_food["food_code"],
+            "quantity": float(support_food["quantity"]) * scale_ratio,
+        }
+        for support_food in support_food_specs
+    ]
+    exact_solution = build_exact_meal_solution(
+        meal=target_meal,
+        role_foods={
+            role: food_lookup[food_code]
+            for role, food_code in selected_role_codes.items()
+        },
+        support_food_specs=scaled_support_foods,
+        candidate_indexes={"protein": 0, "carb": 0, "fat": 0},
+        food_lookup=food_lookup,
+        training_focus=training_focus,
+        meal_slot=meal_slot,
+    )
+    if not exact_solution:
+        return None, (
+            f"Comida {current_meal.meal_number}: se uso un reajuste proporcional porque el solver no "
+            "encontro una solucion exacta manteniendo los mismos alimentos."
+        )
+
+    exact_food_codes = [
+        str(food.get("food_code") or "").strip()
+        for food in exact_solution.get("foods", [])
+        if str(food.get("food_code") or "").strip()
+    ]
+    if len(exact_food_codes) != len(original_food_codes) or set(exact_food_codes) != set(original_food_codes):
+        return None, (
+            f"Comida {current_meal.meal_number}: se uso un reajuste proporcional porque la solucion exacta "
+            "eliminaba o sustituia alimentos de la comida original."
+        )
+
+    return _build_updated_meal_payload(
+        target_meal=target_meal,
+        foods=_reorder_foods_like_current_meal(current_meal, exact_solution["foods"]),
+    ), None
+
+
+def _recalculate_active_diet_after_adjustment(
+    database,
+    user_id: str,
+    new_target_calories: float,
+    reference_weight: float,
+) -> list[str]:
+    latest_diet = get_latest_user_diet(database, user_id)
+    if not latest_diet:
+        return [
+            "No habia una dieta activa para reajustar; solo se actualizaron los objetivos nutricionales."
+        ]
+
+    macro_targets = _build_target_macros(
+        reference_weight=reference_weight,
+        target_calories=new_target_calories,
+    )
+    updated_diet = latest_diet.model_copy(update={
+        "target_calories": round(float(new_target_calories), 1),
+        "protein_grams": macro_targets["protein_grams"],
+        "fat_grams": macro_targets["fat_grams"],
+        "carb_grams": macro_targets["carb_grams"],
+    })
+    food_lookup = build_diet_context_food_lookup(database, latest_diet)
+    updated_meals: list[dict[str, Any]] = []
+    update_notes: list[str] = []
+
+    for meal_index, current_meal in enumerate(latest_diet.meals):
+        target_meal = _build_adjusted_meal_target(
+            latest_diet=latest_diet,
+            meal=current_meal,
+            meal_index=meal_index,
+            new_target_calories=new_target_calories,
+            macro_targets=macro_targets,
+        )
+        updated_meal, note = _try_build_exact_meal_with_same_foods(
+            latest_diet=latest_diet,
+            current_meal=current_meal,
+            target_meal=target_meal,
+            meal_index=meal_index,
+            food_lookup=food_lookup,
+        )
+        if updated_meal is None:
+            updated_meal = _build_scaled_meal_with_same_foods(
+                current_meal=current_meal,
+                target_meal=target_meal,
+            )
+        if note:
+            update_notes.append(note)
+
+        updated_meals.append(updated_meal)
+
+    updated_diet_payload = build_updated_diet_payload(
+        existing_diet=updated_diet,
+        meals=updated_meals,
+    )
+    update_diet(database, user_id, latest_diet.id, updated_diet_payload)
+
+    if not update_notes:
+        return [
+            "Se reajusto la dieta activa manteniendo las mismas comidas y los mismos alimentos en cada comida."
+        ]
+
+    return [
+        "Se reajusto la dieta activa manteniendo las mismas comidas y los mismos alimentos.",
+        *update_notes,
+    ]
+
+
 def _update_latest_diet_macro_targets(
     database,
     user_id: str,
@@ -414,17 +761,25 @@ def apply_calorie_adjustment(
     if not analysis.can_analyze:
         return None
 
+    reference_weight = current_weight if current_weight is not None else analysis.current_week_avg
+    diet_adjustment_notes: list[str] = []
     if analysis.adjustment_needed:
         database.users.update_one(
             {"_id": ObjectId(user_id)},
             {"$set": {"target_calories": analysis.new_target_calories}},
         )
-        if current_weight is not None:
-            _update_latest_diet_macro_targets(
-                database, user_id, analysis.new_target_calories, current_weight
+        if reference_weight is not None:
+            diet_adjustment_notes = _recalculate_active_diet_after_adjustment(
+                database,
+                user_id,
+                analysis.new_target_calories,
+                reference_weight,
             )
+        else:
+            diet_adjustment_notes = [
+                "Se actualizaron las calorias objetivo, pero no fue posible reajustar la dieta activa por falta de un peso de referencia."
+            ]
 
-    reference_weight = current_weight if current_weight is not None else analysis.current_week_avg
     adjustment_document = {
         "user_id": ObjectId(user_id),
         "created_at": datetime.now(UTC),
@@ -451,6 +806,7 @@ def apply_calorie_adjustment(
             reference_weight=reference_weight,
             target_calories=analysis.new_target_calories,
         ),
+        "diet_adjustment_notes": diet_adjustment_notes,
         "adjustment_reason": analysis.adjustment_reason,
         "reason": analysis.adjustment_reason,
     }

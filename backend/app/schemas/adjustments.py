@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.progress import WeeklyAnalysisResponse
 from app.schemas.user import GoalType
@@ -35,6 +35,7 @@ class AdjustmentHistoryEntry(BaseModel):
     new_target_calories: float
     previous_target_macros: AdjustmentMacroTargets | None = None
     new_target_macros: AdjustmentMacroTargets | None = None
+    diet_adjustment_notes: list[str] = Field(default_factory=list)
     adjustment_reason: str
     reason: str
 
@@ -121,6 +122,7 @@ def serialize_adjustment_entry(document: dict[str, Any]) -> AdjustmentHistoryEnt
             document=document,
             target_calories_key="new_target_calories",
         ),
+        diet_adjustment_notes=document.get("diet_adjustment_notes", []),
         adjustment_reason=adjustment_reason,
         reason=adjustment_reason,
     )
