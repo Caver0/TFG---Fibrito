@@ -7,7 +7,8 @@ from fastapi import HTTPException, status
 
 from app.schemas.diet import DietMeal
 from app.services.food_group_service import derive_functional_group
-from app.services.food_preferences_service import FoodPreferenceConflictError
+from app.services.food_preferences_service import FoodPreferenceConflictError, count_food_preference_matches
+from app.utils.normalization import normalize_food_name
 
 from app.services.diet.candidates import (
     _food_has_any_token,
@@ -38,20 +39,30 @@ from app.services.diet.common import (
     calculate_macro_calories,
     normalize_diet_food_source,
     resolve_meal_context,
+    rotate_codes,
     round_diet_value,
     round_food_value,
 )
 from app.services.diet.constants import (
+    BONUS_CORRELACION_ALIMENTARIA,
     BREAKFAST_BREAD_TOKENS,
     CANDIDATE_INDEX_WEIGHT,
+    CARB_FRUIT_MAX_QUANTITY_G,
+    CARB_FRUIT_MAX_QUANTITY_UNIDAD,
+    CORRELACIONES_ALIMENTOS_COMPATIBLES,
     CORE_MACRO_KEYS,
     EARLY_SWEET_FAT_CODES,
     EXACT_SOLVER_TOLERANCE,
+    FAT_OIL_MAX_QUANTITY_G,
     FOOD_OMIT_THRESHOLD,
+    FOOD_SEMANTIC_EQUIVALENCES,
+    FRUIT_CARB_TARGET_MULTIPLIER,
     LOW_FAT_MEAL_ROLES,
     MAX_ROLE_CANDIDATES_PER_MEAL,
     ROLE_DISPLAY_ORDER,
     ROLE_FALLBACK_CODE_POOLS,
+    ROLE_QUANTITY_SAFETY_CEILING_G,
+    ROLE_QUANTITY_TARGET_MULTIPLIER,
     SAVORY_FAT_CODES,
     SOFT_ROLE_MINIMUMS,
     VALID_MEAL_ROLES,
@@ -254,6 +265,20 @@ def build_culinary_pairing_adjustment(
     if "dairy" in support_roles and meal_slot == "early":
         score -= 0.12
 
+    all_codes = {
+        str(food.get("code") or "").strip().lower()
+        for food in [protein_food, carb_food, fat_food]
+        if food.get("code")
+    }
+    for support_food in support_foods:
+        support_code = str(support_food.get("code") or support_food.get("food_code") or "").strip().lower()
+        if support_code:
+            all_codes.add(support_code)
+    for code in list(all_codes):
+        compatible = CORRELACIONES_ALIMENTOS_COMPATIBLES.get(code, [])
+        hits = sum(1 for partner in compatible if partner in all_codes)
+        score -= hits * BONUS_CORRELACION_ALIMENTARIA
+
     return score
 
 
@@ -401,6 +426,30 @@ def build_solution_score(
     return score
 
 
+def _get_food_semantic_fingerprints(food: dict) -> frozenset[str]:
+    """Devuelve un conjunto de tokens normalizados que representan semánticamente al alimento.
+
+    Incluye código, nombres, nombre normalizado y aliases del catálogo.
+    También añade equivalencias conocidas (ej: 'banana' ↔ 'platano').
+    Se usa para evitar seleccionar dos alimentos que son el mismo con distinto nombre.
+    """
+    tokens: set[str] = set()
+    for field in ("code", "name", "normalized_name", "original_name", "display_name"):
+        raw = str(food.get(field) or "").replace("_", " ").strip()
+        norm = normalize_food_name(raw).strip()
+        if len(norm) >= 4:
+            tokens.add(norm)
+    for alias in food.get("aliases", []):
+        norm = normalize_food_name(str(alias).replace("_", " ")).strip()
+        if len(norm) >= 4:
+            tokens.add(norm)
+    # Añadir equivalencias conocidas entre idiomas o nombres alternativos
+    code_norm = normalize_food_name(str(food.get("code") or "").replace("_", " ")).strip()
+    for equiv in FOOD_SEMANTIC_EQUIVALENCES.get(code_norm, set()):
+        tokens.add(equiv)
+    return frozenset(tokens)
+
+
 def build_exact_meal_solution(
     *,
     meal: DietMeal,
@@ -427,6 +476,21 @@ def build_exact_meal_solution(
     ]
     if len(set(all_codes)) != len(all_codes):
         return None
+
+    # Evitar duplicados semánticos: alimentos distintos que representan el mismo producto
+    # (ej: 'Banana' y 'Plátano' tienen códigos diferentes pero son el mismo alimento)
+    all_foods_for_dedup = list(role_foods.values()) + [
+        food_lookup[sf["food_code"]]
+        for sf in support_food_specs
+        if sf["food_code"] in food_lookup
+    ]
+    seen_fingerprints: set[str] = set()
+    for food_item in all_foods_for_dedup:
+        fps = _get_food_semantic_fingerprints(food_item)
+        if fps & seen_fingerprints:
+            return None
+        seen_fingerprints.update(fps)
+
     if not is_role_combination_coherent(role_foods, meal_slot=meal_slot):
         return None
 
@@ -477,6 +541,51 @@ def build_exact_meal_solution(
             if role == "fat" and not is_cooking_fat(role_foods[role]):
                 floor_ratio = 0.6
             if quantity + EXACT_SOLVER_TOLERANCE < serving_floor * floor_ratio:
+                return None
+
+        # Límites de cantidad: dinámicos para proteínas, almidones y grasas principales;
+        # fijos solo donde el tipo de alimento lo justifica (frutas, aceites).
+        food_item = role_foods[role]
+        unit = food_item["reference_unit"]
+
+        if unit == "g":
+            # Límite dinámico: la cantidad no debe superar N× el objetivo macro del rol.
+            # Al derivarse de target_*_grams de la comida, escala con el peso corporal
+            # del usuario sin necesidad de conocerlo directamente.
+            role_macro_target = {
+                "protein": float(meal.target_protein_grams),
+                "carb": float(meal.target_carb_grams),
+                "fat": float(meal.target_fat_grams),
+            }[role]
+            role_macro_key = {
+                "protein": "protein_grams",
+                "carb": "carb_grams",
+                "fat": "fat_grams",
+            }[role]
+            macro_density = get_food_macro_density(food_item).get(role_macro_key, 0.0)
+            if macro_density > 0.01 and role_macro_target > 0:
+                is_fruit_carb = role == "carb" and derive_functional_group(food_item) == "fruit"
+                multiplier = FRUIT_CARB_TARGET_MULTIPLIER if is_fruit_carb else ROLE_QUANTITY_TARGET_MULTIPLIER
+                if quantity > (role_macro_target / macro_density) * multiplier:
+                    return None
+            # Techo de seguridad absoluto: red de última instancia si la densidad macro
+            # es muy baja y el límite dinámico resultara en un valor imposible.
+            if quantity > ROLE_QUANTITY_SAFETY_CEILING_G.get(role, 1000.0):
+                return None
+
+        # Límite fijo para frutas como carbohidrato principal: evitar que suplan toda
+        # la cuota de carbohidratos de comidas con objetivos altos (el solver elegirá
+        # almidones en ese caso, que es la elección nutricionalmente correcta).
+        if role == "carb" and derive_functional_group(food_item) == "fruit":
+            if unit == "unidad" and quantity > CARB_FRUIT_MAX_QUANTITY_UNIDAD:
+                return None
+            if unit == "g" and quantity > CARB_FRUIT_MAX_QUANTITY_G:
+                return None
+
+        # Límite fijo para aceites y grasas de cocina: su uso es culinario y no escala
+        # con el peso corporal del usuario.
+        if role == "fat" and is_cooking_fat(food_item):
+            if unit in {"g", "ml"} and quantity > FAT_OIL_MAX_QUANTITY_G:
                 return None
 
     foods: list[dict] = []
@@ -564,7 +673,17 @@ def find_exact_solution_for_meal(
     forced_role_codes: dict[str, str] | None = None,
     forced_support_foods: list[dict] | None = None,
     excluded_food_codes: set[str] | None = None,
+    variety_seed: int | None = None,
+    preferred_support_candidates: list[dict] | None = None,
 ) -> dict:
+    # Calcular contexto de comida al inicio para reutilizarlo en toda la función
+    meal_slot, meal_role = resolve_meal_context(
+        meal,
+        meal_index=meal_index,
+        meals_count=meals_count,
+        training_focus=training_focus,
+    )
+
     candidate_codes = get_role_candidate_codes(
         meal=meal,
         meal_index=meal_index,
@@ -579,13 +698,37 @@ def find_exact_solution_for_meal(
         training_focus=training_focus,
         food_lookup=food_lookup,
     )
+
+    # Inyectar alimentos de soporte preferidos como opciones adicionales.
+    # Se añaden antes del filtrado de preferencias para que el sistema de puntuación
+    # los priorice correctamente (los alimentos preferidos reciben bonus en el score).
+    # Solo se inyectan si no hay forced_support_foods que ya reemplacen todo el soporte.
+    if preferred_support_candidates and forced_support_foods is None:
+        for candidato in reversed(preferred_support_candidates):
+            if candidato["food_code"] in food_lookup:
+                support_options = [[{
+                    "role": candidato["role"],
+                    "food_code": candidato["food_code"],
+                    "quantity": candidato["quantity"],
+                }]] + support_options
+
     if preference_profile and preference_profile.get("has_preferences"):
-        candidate_codes, support_options = apply_user_food_preferences_to_meal_candidates(
-            candidate_codes=candidate_codes,
-            support_options=support_options,
-            food_lookup=food_lookup,
-            preference_profile=preference_profile,
-        )
+        try:
+            candidate_codes, support_options = apply_user_food_preferences_to_meal_candidates(
+                candidate_codes=candidate_codes,
+                support_options=support_options,
+                food_lookup=food_lookup,
+                preference_profile=preference_profile,
+            )
+        except FoodPreferenceConflictError:
+            # Las preferencias positivas son blandas: si el filtro falla sin ancla forzada
+            # pero no hay restricciones duras activas (alergias/disgustos/restricciones),
+            # continuamos con el pool original en lugar de abortar.
+            # Solo re-lanzamos si hay restricciones duras que justifiquen el bloqueo.
+            if not forced_role_codes and preference_profile.get("has_negative_preferences"):
+                raise
+            # Ancla forzada o solo preferencias positivas: continuar con pool sin filtrar.
+
     candidate_codes = apply_daily_usage_candidate_limits(
         candidate_codes,
         daily_food_usage=daily_food_usage,
@@ -602,12 +745,15 @@ def find_exact_solution_for_meal(
         forced_support_foods=forced_support_foods,
         excluded_food_codes=excluded_food_codes,
     )
-    meal_slot, _ = resolve_meal_context(
-        meal,
-        meal_index=meal_index,
-        meals_count=meals_count,
-        training_focus=training_focus,
-    )
+
+    # Variedad en regeneración: rotar el orden de candidatos para explorar combinaciones
+    # distintas en cada llamada. Solo se aplica sin alimentos forzados para no desplazar
+    # el alimento preferido del usuario de la posición 0.
+    if variety_seed is not None and not forced_role_codes:
+        candidate_codes = {
+            role: rotate_codes(codes, variety_seed + idx)
+            for idx, (role, codes) in enumerate(candidate_codes.items())
+        }
 
     best_solution: dict | None = None
 
@@ -652,12 +798,99 @@ def find_exact_solution_for_meal(
     if best_solution:
         return best_solution
 
-    if preference_profile and preference_profile.get("has_preferences"):
-        raise FoodPreferenceConflictError(
-            "No hay suficientes combinaciones de alimentos compatibles para generar esta comida "
-            "con tus preferencias actuales. Ajusta restricciones, alergias o alimentos no deseados."
+    # ── Estrategia A: pool ampliado para alimentos forzados por el usuario vía API ────────
+    # Cuando forced_role_codes está presente, el alimento forzado queda al frente de su rol
+    # pero los otros dos roles pueden no tener candidatos suficientes para complementarlo.
+    # Ampliamos el pool de esos roles con todos los alimentos compatibles del catálogo.
+    if forced_role_codes:
+        excluded = excluded_food_codes or set()
+        expanded_forced: dict[str, list[str]] = {}
+        for role in ("protein", "carb", "fat"):
+            if role in forced_role_codes:
+                expanded_forced[role] = candidate_codes[role]
+            else:
+                all_compatible = [
+                    code
+                    for code, food in food_lookup.items()
+                    if code not in excluded
+                    and is_food_allowed_for_role_and_slot(food, role=role, meal_slot=meal_slot)
+                ]
+                expanded_forced[role] = sort_codes_by_meal_fit(
+                    all_compatible,
+                    role=role,
+                    meal_slot=meal_slot,
+                    meal_role=meal_role,
+                    training_focus=training_focus,
+                    food_lookup=food_lookup,
+                )[:MAX_ROLE_CANDIDATES_PER_MEAL[role] * 2]
+        expanded_forced = apply_meal_candidate_constraints(
+            expanded_forced,
+            food_lookup=food_lookup,
+            forced_role_codes=forced_role_codes,
+            excluded_food_codes=excluded_food_codes,
         )
+        evaluate_candidate_sets(expanded_forced, [[]])
+        if best_solution:
+            return best_solution
 
+    # ── Estrategia B: alimentos preferidos como ancla de la comida ────────────────────────
+    # Solo se activa cuando el usuario indicó alimentos que QUIERE ver (preferencias positivas).
+    # Los disgustos o restricciones sin preferencias positivas no justifican esta búsqueda.
+    if not forced_role_codes and preference_profile and preference_profile.get("has_positive_preferences"):
+        excluded = excluded_food_codes or set()
+        for anchor_role in ("protein", "carb", "fat"):
+            if best_solution:
+                break
+            # Identificar qué alimentos preferidos del usuario pueden ocupar este rol
+            # en el slot de comida actual (desayuno, comida, cena…)
+            preferred_anchors = [
+                code
+                for code, food in food_lookup.items()
+                if code not in excluded
+                and is_food_allowed_for_role_and_slot(food, role=anchor_role, meal_slot=meal_slot)
+                and count_food_preference_matches(food, preference_profile) > 0
+            ]
+            if not preferred_anchors:
+                continue
+
+            # Construir pool: preferidos al frente del rol ancla,
+            # todos los compatibles del catálogo para los roles complementarios.
+            anchor_candidate_codes: dict[str, list[str]] = {}
+            for role in ("protein", "carb", "fat"):
+                all_role_compatible = [
+                    code
+                    for code, food in food_lookup.items()
+                    if code not in excluded
+                    and is_food_allowed_for_role_and_slot(food, role=role, meal_slot=meal_slot)
+                ]
+                sorted_compatible = sort_codes_by_meal_fit(
+                    all_role_compatible,
+                    role=role,
+                    meal_slot=meal_slot,
+                    meal_role=meal_role,
+                    training_focus=training_focus,
+                    food_lookup=food_lookup,
+                )
+                if role == anchor_role:
+                    anchors_set = set(preferred_anchors)
+                    rest = [c for c in sorted_compatible if c not in anchors_set]
+                    # Preferidos al frente + top N del resto para no explotar combinaciones
+                    anchor_candidate_codes[role] = (
+                        preferred_anchors + rest[:MAX_ROLE_CANDIDATES_PER_MEAL[role]]
+                    )
+                else:
+                    anchor_candidate_codes[role] = sorted_compatible[
+                        :MAX_ROLE_CANDIDATES_PER_MEAL[role] * 2
+                    ]
+            evaluate_candidate_sets(anchor_candidate_codes, [[]])
+
+    if best_solution:
+        return best_solution
+
+    # ── Estrategia C: pool de seguridad con alimentos básicos garantizados ────────────────
+    # Se ejecuta para TODOS los usuarios, incluidos los que tienen preferencias.
+    # Antes este bloque era inalcanzable para usuarios con has_preferences=True porque el
+    # error se lanzaba antes. Ahora es la última oportunidad antes del error definitivo.
     fallback_role_codes = {
         "protein": ROLE_FALLBACK_CODE_POOLS["protein"],
         "carb": ROLE_FALLBACK_CODE_POOLS["carb"],
@@ -671,12 +904,6 @@ def find_exact_solution_for_meal(
         ]
         for role, codes in fallback_role_codes.items()
     }
-    _, meal_role = resolve_meal_context(
-        meal,
-        meal_index=meal_index,
-        meals_count=meals_count,
-        training_focus=training_focus,
-    )
     fallback_role_codes = {
         role: sort_codes_by_meal_fit(
             codes,
@@ -708,6 +935,61 @@ def find_exact_solution_for_meal(
 
     if best_solution:
         return best_solution
+
+    # ── Estrategia D: relajación completa de preferencias positivas ──────────────────────────
+    # Preferencias positivas = prioridad blanda. Si todas las estrategias anteriores
+    # fallaron con ellas activas, se reintenta ignorándolas por completo y manteniendo
+    # solo restricciones duras (alergias, disgustos, restricciones dietéticas).
+    # Esto garantiza que "quiero cornflakes" nunca bloquea la generación de la dieta.
+    if preference_profile and preference_profile.get("has_positive_preferences"):
+        relaxed_profile = {
+            **preference_profile,
+            "has_positive_preferences": False,
+            "has_preferences": preference_profile.get("has_negative_preferences", False),
+            "preferred_foods": [],
+            "normalized_preferred_foods": set(),
+        }
+        relaxed_candidate_codes = get_role_candidate_codes(
+            meal=meal,
+            meal_index=meal_index,
+            meals_count=meals_count,
+            training_focus=training_focus,
+            food_lookup=food_lookup,
+        )
+        relaxed_support_options = get_support_option_specs(
+            meal=meal,
+            meal_index=meal_index,
+            meals_count=meals_count,
+            training_focus=training_focus,
+            food_lookup=food_lookup,
+        )
+        if relaxed_profile.get("has_preferences"):
+            # Solo restricciones duras: si esto falla, el error sí es real
+            relaxed_candidate_codes, relaxed_support_options = apply_user_food_preferences_to_meal_candidates(
+                candidate_codes=relaxed_candidate_codes,
+                support_options=relaxed_support_options,
+                food_lookup=food_lookup,
+                preference_profile=relaxed_profile,
+            )
+        relaxed_candidate_codes = apply_daily_usage_candidate_limits(
+            relaxed_candidate_codes,
+            daily_food_usage=daily_food_usage,
+        )
+        relaxed_candidate_codes = apply_meal_candidate_constraints(
+            relaxed_candidate_codes,
+            food_lookup=food_lookup,
+            forced_role_codes=forced_role_codes,
+            excluded_food_codes=excluded_food_codes,
+        )
+        relaxed_support_options = apply_support_option_constraints(
+            relaxed_support_options,
+            food_lookup=food_lookup,
+            forced_support_foods=forced_support_foods,
+            excluded_food_codes=excluded_food_codes,
+        )
+        evaluate_candidate_sets(relaxed_candidate_codes, relaxed_support_options)
+        if best_solution:
+            return best_solution
 
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

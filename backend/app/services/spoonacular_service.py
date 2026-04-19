@@ -9,6 +9,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from app.core.config import get_settings
+from app.utils.normalization import translate_food_query_for_search
 
 _quota_blocked_until: datetime | None = None
 _last_error_message: str | None = None
@@ -103,10 +104,13 @@ def _request_json(path: str, params: dict[str, Any] | None = None) -> tuple[Any,
 
 
 def autocomplete_ingredients(query: str, number: int = 5) -> list[dict[str, Any]]:
+    # Traducir el término al inglés antes de enviarlo a Spoonacular,
+    # ya que la API opera principalmente en inglés.
+    query_en = translate_food_query_for_search(query)
     payload, _ = _request_json(
         "/food/ingredients/autocomplete",
         {
-            "query": query,
+            "query": query_en,
             "number": max(1, min(number, 10)),
             "metaInformation": True,
         },
@@ -115,10 +119,12 @@ def autocomplete_ingredients(query: str, number: int = 5) -> list[dict[str, Any]
 
 
 def search_ingredients(query: str, number: int = 10) -> list[dict[str, Any]]:
+    # Traducir el término al inglés antes de enviarlo a Spoonacular.
+    query_en = translate_food_query_for_search(query)
     payload, _ = _request_json(
         "/food/ingredients/search",
         {
-            "query": query,
+            "query": query_en,
             "number": max(1, min(number, 10)),
             "metaInformation": False,
         },

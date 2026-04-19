@@ -13,6 +13,7 @@ from app.services.food_preferences_service import (
     FoodPreferenceConflictError,
     apply_user_food_preferences,
     count_food_preference_matches,
+    filter_allowed_foods,
     prioritize_preferred_foods,
 )
 from app.utils.normalization import normalize_food_name
@@ -153,21 +154,43 @@ def apply_user_food_preferences_to_meal_candidates(
     if not preference_profile.get("has_preferences"):
         return candidate_codes, support_options
 
-    filtered_candidate_codes = {
-        role: _build_preference_filtered_role_codes(
-            role=role,
-            candidate_codes=role_codes,
+    # ── Ruta con preferencias positivas (el usuario especificó alimentos deseados) ──
+    # Filtrado completo con priorización de preferidos y posible FoodPreferenceConflictError
+    # si el pool de un rol queda vacío tras aplicar restricciones.
+    if preference_profile.get("has_positive_preferences"):
+        filtered_candidate_codes = {
+            role: _build_preference_filtered_role_codes(
+                role=role,
+                candidate_codes=role_codes,
+                food_lookup=food_lookup,
+                preference_profile=preference_profile,
+            )
+            for role, role_codes in candidate_codes.items()
+        }
+        filtered_support_options = _build_preference_filtered_support_options(
+            support_options=support_options,
             food_lookup=food_lookup,
             preference_profile=preference_profile,
         )
-        for role, role_codes in candidate_codes.items()
-    }
+        return filtered_candidate_codes, filtered_support_options
+
+    # ── Ruta con solo preferencias negativas (disgustos, restricciones, alergias) ──
+    # Excluir alimentos no permitidos sin restringir el pool innecesariamente.
+    # Si el filtro vaciara un rol, se conserva el pool original para que el solver
+    # pueda recurrir a la Estrategia C sin lanzar error prematuro.
+    filtered_codes: dict[str, list[str]] = {}
+    for role, role_codes in candidate_codes.items():
+        role_foods = [food_lookup[code] for code in role_codes if code in food_lookup]
+        allowed_foods, _ = filter_allowed_foods(role_foods, preference_profile)
+        filtered_pool = [food["code"] for food in allowed_foods]
+        filtered_codes[role] = filtered_pool if filtered_pool else role_codes
+
     filtered_support_options = _build_preference_filtered_support_options(
         support_options=support_options,
         food_lookup=food_lookup,
         preference_profile=preference_profile,
     )
-    return filtered_candidate_codes, filtered_support_options
+    return filtered_codes, filtered_support_options
 
 
 def apply_meal_candidate_constraints(
@@ -284,11 +307,21 @@ def get_allowed_meal_slots_for_food(food: dict[str, Any]) -> set[str]:
     }
 
     if not slots:
-        functional_group = derive_functional_group(food)
-        if functional_group in {"protein", "carb", "fat", "vegetable"}:
-            slots.update({"main", "late"})
-        elif functional_group in {"fruit", "dairy"}:
-            slots.update({"early", "snack"})
+        # Heurística por tokens antes de usar el grupo funcional genérico.
+        # Permite clasificar correctamente cereales, lácteos de desayuno y frutos secos
+        # sin depender de un campo 'suitable_meals' en el catálogo.
+        if is_sweet_breakfast_carb(food) or is_breakfast_only_protein(food):
+            # Cereales, copos, yogures, leche → típicamente desayuno o merienda
+            slots.update({"early"})
+        elif is_breakfast_fat(food):
+            # Frutos secos, semillas → válidos en cualquier comida
+            slots.update({"early", "main", "late"})
+        else:
+            functional_group = derive_functional_group(food)
+            if functional_group in {"protein", "carb", "fat", "vegetable"}:
+                slots.update({"main", "late"})
+            elif functional_group in {"fruit", "dairy"}:
+                slots.update({"early", "snack"})
 
     if "main" in slots:
         slots.add("late")

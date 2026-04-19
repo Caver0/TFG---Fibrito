@@ -135,17 +135,69 @@ def generate_food_based_diet(
 
     daily_food_usage = create_daily_food_usage_tracker()
     weekly_food_usage = build_weekly_food_usage(database, user.id)
+
+    # Calcular contexto de cada comida (slot, rol, foco de entrenamiento)
+    # antes del loop para poder pasarlo al resolvedor de anclas sin duplicar lógica.
+    meals_context: list[dict] = []
+    for meal_index, meal in enumerate(meal_distribution["meals"]):
+        training_focus_i = meal_distribution["training_optimization_applied"] and meal_index in focus_indexes
+        meal_slot_i, meal_role_i = resolve_meal_context(
+            DietMeal.model_validate(meal),
+            meal_index=meal_index,
+            meals_count=meals_count,
+            training_focus=training_focus_i,
+        )
+        meals_context.append({
+            "meal_slot": meal_slot_i,
+            "meal_role": meal_role_i,
+            "training_focus": training_focus_i,
+        })
+
+    # ── Fase previa: inyectar alimentos preferidos en full_food_lookup ───────────────────────
+    # Si el usuario indicó alimentos preferidos que no existen en el catálogo interno ni
+    # en la base de datos local, intentamos resolverlos desde Spoonacular/caché y añadirlos
+    # al lookup de trabajo ANTES de calcular anclas y generar comidas.
+    # Sin este paso, 'buscar_alimentos_por_nombre' devuelve [] para esos alimentos y todo
+    # el sistema de anclas/soportes queda inoperativo aunque la normalización sea correcta.
+    if preference_profile.get("has_positive_preferences"):
+        from app.services.preferred_food_resolver import enrich_lookup_con_preferidos
+        enrich_lookup_con_preferidos(
+            database,
+            preferred_foods=preference_profile.get("preferred_foods", []),
+            full_food_lookup=full_food_lookup,
+        )
+
+    # Resolver qué alimentos preferidos anclar en qué comidas antes de iniciar el solver.
+    # Solo se ejecuta si el usuario especificó alimentos que quiere que aparezcan.
+    anclas_por_comida: dict[int, dict[str, str]] = {}
+    soporte_por_comida: dict[int, list[dict]] = {}
+    if preference_profile.get("has_positive_preferences"):
+        from app.services.diet.preference_anchors import resolver_anclas_preferidas
+        resultado_anclas = resolver_anclas_preferidas(
+            preferred_foods=preference_profile.get("preferred_foods", []),
+            food_lookup=full_food_lookup,
+            meal_slots=[ctx["meal_slot"] for ctx in meals_context],
+            meal_roles=[ctx["meal_role"] for ctx in meals_context],
+            training_focus_flags=[ctx["training_focus"] for ctx in meals_context],
+        )
+        anclas_por_comida = resultado_anclas["anclas"]
+        soporte_por_comida = resultado_anclas.get("soporte", {})
+        # Los diagnósticos quedan en el perfil para depuración y para el campo de respuesta
+        preference_profile["anchor_diagnostics"] = resultado_anclas["diagnosticos"]
+
     planned_meals: list[dict] = []
     for meal_index, meal in enumerate(meal_distribution["meals"]):
         planned_meal = find_exact_solution_for_meal(
             meal=DietMeal.model_validate(meal),
             meal_index=meal_index,
             meals_count=meals_count,
-            training_focus=meal_distribution["training_optimization_applied"] and meal_index in focus_indexes,
+            training_focus=meals_context[meal_index]["training_focus"],
             food_lookup=full_food_lookup,
             preference_profile=preference_profile,
             daily_food_usage=daily_food_usage,
             weekly_food_usage=weekly_food_usage,
+            forced_role_codes=anclas_por_comida.get(meal_index),
+            preferred_support_candidates=soporte_por_comida.get(meal_index),
         )
         planned_meals.append(planned_meal)
         track_food_usage_across_day(daily_food_usage, planned_meal)
@@ -211,6 +263,7 @@ def generate_food_based_diet(
         "diversity_strategy_applied": True,
         "food_usage_summary": get_food_usage_summary_from_meals(generated_meals),
         "food_filter_warnings": preference_profile.get("warnings", []),
+        "anchor_diagnostics": preference_profile.get("anchor_diagnostics", []),
         "catalog_source_strategy": lookup_metadata.get("catalog_source_strategy", CATALOG_SOURCE_STRATEGY_DEFAULT),
         "spoonacular_attempted": lookup_metadata.get("spoonacular_attempted", False),
         "spoonacular_attempts": lookup_metadata.get("spoonacular_attempts", 0),

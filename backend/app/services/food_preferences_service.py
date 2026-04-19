@@ -173,6 +173,15 @@ def build_user_food_preferences_profile(user: Any) -> dict[str, Any]:
             "allergies": user_data.get("allergies") or [],
         }
     )
+    # has_positive_preferences: el usuario indicó alimentos que QUIERE ver.
+    # has_negative_preferences: el usuario indicó disgustos, restricciones o alergias.
+    # has_preferences: cualquier preferencia, positiva o negativa (compatibilidad con código existente).
+    tiene_preferencias_positivas = bool(serialized_preferences["preferred_foods"])
+    tiene_preferencias_negativas = bool(
+        serialized_preferences["disliked_foods"]
+        or serialized_preferences["dietary_restrictions"]
+        or serialized_preferences["allergies"]
+    )
     return {
         **serialized_preferences,
         "normalized_preferred_foods": set(serialized_preferences["preferred_foods"]),
@@ -184,7 +193,9 @@ def build_user_food_preferences_profile(user: Any) -> dict[str, Any]:
             for allergy in serialized_preferences["allergies"]
             if allergy in ALLERGY_ALIASES
         },
-        "has_preferences": any(serialized_preferences.values()),
+        "has_positive_preferences": tiene_preferencias_positivas,
+        "has_negative_preferences": tiene_preferencias_negativas,
+        "has_preferences": tiene_preferencias_positivas or tiene_preferencias_negativas,
         "warnings": [],
     }
 
@@ -407,3 +418,33 @@ def count_preferred_food_matches_in_meals(meals: list[dict[str, Any]], profile: 
         for food in meal.get("foods", [])
         if count_food_preference_matches(food, profile) > 0
     )
+
+
+def buscar_alimentos_por_nombre(texto: str, food_lookup: dict[str, Any]) -> list[str]:
+    """Devuelve food_codes del catálogo que coinciden con el texto de alimento dado.
+
+    Busca con el texto normalizado y, si existe traducción ES→EN conocida, también
+    con la versión en inglés. Esto permite encontrar alimentos indexados en inglés
+    (p.ej. de Spoonacular) cuando el usuario escribe el nombre en español.
+    """
+    from app.utils.normalization import translate_food_query_for_search
+
+    if not texto:
+        return []
+
+    normalized = normalize_food_label(texto)
+    traduccion_en = translate_food_query_for_search(texto)
+
+    terminos: set[str] = {normalized}
+    if traduccion_en and traduccion_en != normalized:
+        terminos.add(traduccion_en)
+
+    resultado: list[str] = []
+    for code, food in food_lookup.items():
+        food_anotado = food if food.get("preference_labels") else annotate_food_compatibility(food)
+        for termino in terminos:
+            if _matches_food_label(food_anotado, termino):
+                resultado.append(code)
+                break
+
+    return resultado

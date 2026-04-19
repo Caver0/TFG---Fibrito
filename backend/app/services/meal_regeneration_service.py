@@ -1,6 +1,7 @@
 """Services to regenerate a single meal while preserving the rest of the diet."""
 from __future__ import annotations
 
+import random
 from itertools import product
 from typing import Any
 
@@ -497,6 +498,9 @@ def regenerate_meal(
     }
     training_focus = get_training_focus_for_meal(diet, meal_index)
 
+    # Semilla de variedad: garantiza que cada regeneración explore combinaciones distintas
+    variety_seed = random.randint(0, 9999)
+
     try:
         regenerated_meal_plan = find_exact_solution_for_meal(
             meal=meal,
@@ -507,6 +511,7 @@ def regenerate_meal(
             preference_profile=preference_profile,
             daily_food_usage=daily_food_usage,
             excluded_food_codes=current_food_codes,
+            variety_seed=variety_seed,
         )
     except (FoodPreferenceConflictError, HTTPException):
         regenerated_meal_plan = find_exact_solution_for_meal(
@@ -517,6 +522,7 @@ def regenerate_meal(
             food_lookup=internal_food_lookup,
             preference_profile=preference_profile,
             daily_food_usage=daily_food_usage,
+            variety_seed=variety_seed,
         )
 
     selected_food_codes = collect_selected_food_codes([regenerated_meal_plan])

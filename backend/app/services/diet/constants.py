@@ -202,3 +202,62 @@ LEAN_PROTEIN_CODES = {"chicken_breast", "turkey_breast", "tuna", "egg_whites", "
 FAST_DIGESTING_CARB_CODES = {"rice", "potato", "pasta", "oats", "banana", "whole_wheat_bread"}
 EARLY_SWEET_FAT_CODES = {"mixed_nuts"}
 SAVORY_FAT_CODES = {"olive_oil", "avocado"}
+
+# Límites de cantidad dinámicos: la cantidad máxima permitida para un alimento es
+# N veces el objetivo macro que ese rol debe cubrir en la comida. Así el límite escala
+# con el peso corporal del usuario (vía sus objetivos nutricionales) en lugar de ser fijo.
+ROLE_QUANTITY_TARGET_MULTIPLIER = 2.0
+# Multiplicador más conservador para frutas como carbohidrato: su densidad en hidratos
+# es baja y no es razonable que suplan toda la cuota de carbohidratos de la comida.
+FRUIT_CARB_TARGET_MULTIPLIER = 1.5
+
+# Techo de seguridad absoluto como última red: se activa solo si la densidad del alimento
+# es tan baja que el límite dinámico resultaría en una cantidad físicamente imposible.
+ROLE_QUANTITY_SAFETY_CEILING_G = {
+    "protein": 450.0,
+    "carb": 350.0,
+    "fat": 150.0,
+}
+
+# Límite absoluto para frutas como carbohidrato principal: incluso para usuarios grandes,
+# una fruta no debe suplir más de ~200 g en una comida; el solver elegirá almidones si
+# los objetivos de carbohidratos son altos.
+CARB_FRUIT_MAX_QUANTITY_UNIDAD = 3.0
+CARB_FRUIT_MAX_QUANTITY_G = 200.0
+# Tope fijo para aceites y grasas de cocina: su uso es culinario, no proporcional al peso.
+FAT_OIL_MAX_QUANTITY_G = 25.0
+
+BONUS_CORRELACION_ALIMENTARIA = 0.18
+
+# Pares de alimentos que combinan bien culinariamente. La clave es el código de uno de los
+# alimentos; el valor es la lista de códigos con los que armoniza bien.
+# Se aplica como bonus negativo en build_solution_score (menor score = mejor candidato).
+CORRELACIONES_ALIMENTOS_COMPATIBLES: dict[str, list[str]] = {
+    "cornflakes": ["greek_yogurt", "milk", "oats"],
+    "oats": ["greek_yogurt", "milk", "banana", "mixed_nuts"],
+    "muesli": ["greek_yogurt", "milk", "banana"],
+    "granola": ["greek_yogurt", "milk"],
+    "rice": ["chicken_breast", "turkey_breast", "tuna", "eggs"],
+    "pasta": ["chicken_breast", "turkey_breast", "tuna"],
+    "potato": ["chicken_breast", "salmon", "eggs"],
+    "whole_wheat_bread": ["eggs", "turkey_breast", "avocado"],
+    "banana": ["oats", "greek_yogurt"],
+    "chicken_breast": ["rice", "potato", "pasta"],
+    "turkey_breast": ["rice", "pasta", "whole_wheat_bread"],
+    "tuna": ["rice", "pasta", "potato"],
+    "salmon": ["potato", "rice"],
+    "eggs": ["whole_wheat_bread", "potato", "rice"],
+    "greek_yogurt": ["oats", "cornflakes", "banana", "muesli", "granola"],
+}
+
+# Equivalencias semánticas conocidas entre alimentos con distintos nombres o idiomas.
+# Evita seleccionar el mismo alimento dos veces en la misma comida con códigos distintos.
+FOOD_SEMANTIC_EQUIVALENCES: dict[str, set[str]] = {
+    "banana": {"platano", "banano"},
+    "platano": {"banana", "banano"},
+    "banano": {"banana", "platano"},
+    "potato": {"patata"},
+    "patata": {"potato"},
+    "tuna": {"atun"},
+    "atun": {"tuna"},
+}

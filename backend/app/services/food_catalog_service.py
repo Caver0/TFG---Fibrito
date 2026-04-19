@@ -77,6 +77,14 @@ def calculate_macro_calories(protein_grams: float, fat_grams: float, carb_grams:
     )
 
 
+_FRUIT_NAME_TOKENS = (
+    "banana", "platano", "apple", "manzana", "orange", "naranja",
+    "fruit", "fruta", "dates", "date", "fig", "mango", "grape",
+    "berr", "cherry", "cherr", "peach", "pear", "plum", "apricot",
+    "melon", "pineapple", "kiwi", "papaya", "lychee", "passion",
+)
+
+
 def _infer_food_category(name: str, protein_grams: float, fat_grams: float, carb_grams: float) -> str:
     normalized_name = normalize_food_name(name)
     if any(token in normalized_name for token in ("oil", "aceite", "nuts", "aguacate", "avocado")):
@@ -84,7 +92,7 @@ def _infer_food_category(name: str, protein_grams: float, fat_grams: float, carb
     if protein_grams >= max(fat_grams, carb_grams) and protein_grams >= 8:
         return "proteinas"
     if carb_grams >= max(protein_grams, fat_grams):
-        if any(token in normalized_name for token in ("banana", "apple", "orange", "fruit", "platano", "fruta")):
+        if any(token in normalized_name for token in _FRUIT_NAME_TOKENS):
             return "frutas"
         return "carbohidratos"
     if any(token in normalized_name for token in ("milk", "yogurt", "cheese", "leche", "yogur", "queso")):
