@@ -28,6 +28,7 @@ from app.services.diet.constants import (
     DEFAULT_PROTEIN_ROLE_DAILY_MAX_USAGE,
     EARLY_SWEET_FAT_CODES,
     FAST_DIGESTING_CARB_CODES,
+    FOOD_OMIT_THRESHOLD,
     LEAN_PROTEIN_CODES,
     LOW_FAT_MEAL_ROLES,
     MAX_ROLE_CANDIDATES_PER_MEAL,
@@ -643,6 +644,136 @@ def get_support_food_fit_score(
     return score
 
 
+def _calcular_aporte_estimado(food: dict[str, Any], quantity: float) -> dict[str, float]:
+    reference_amount = max(float(food.get("reference_amount") or 1.0), 1.0)
+    scale = float(quantity) / reference_amount
+    protein = max(0.0, float(food.get("protein_grams") or 0.0) * scale)
+    fat = max(0.0, float(food.get("fat_grams") or 0.0) * scale)
+    carbs = max(0.0, float(food.get("carb_grams") or 0.0) * scale)
+    return {
+        "protein_grams": protein,
+        "fat_grams": fat,
+        "carb_grams": carbs,
+        "calories": (protein * 4.0) + (fat * 9.0) + (carbs * 4.0),
+    }
+
+
+def _calcular_cantidad_por_objetivo_macro(
+    food: dict[str, Any],
+    *,
+    macro_key: str,
+    objetivo_macro: float,
+    fallback: float,
+) -> float:
+    reference_amount = max(float(food.get("reference_amount") or 1.0), 1.0)
+    macro_por_referencia = max(float(food.get(macro_key) or 0.0), 0.0)
+    if macro_por_referencia <= 0:
+        return fallback
+
+    densidad = macro_por_referencia / reference_amount
+    if densidad <= 0:
+        return fallback
+
+    return objetivo_macro / densidad
+
+
+def construir_cantidad_soporte_razonable(food: dict[str, Any], *, support_role: str) -> float:
+    """Calcula una racion de soporte visible y moderada para el alimento dado.
+
+    La idea no es reutilizar ciegamente el `default_quantity`, porque en muchos
+    catálogos externos esa cifra representa una ración genérica del alimento,
+    no una porción razonable como acompañamiento. En su lugar:
+      - fruta: apunta a un aporte moderado de hidratos;
+      - lácteo: apunta a un aporte moderado de proteína;
+      - verdura: prioriza volumen culinario.
+    """
+    unit = str(food.get("reference_unit") or "unidad").strip().lower()
+    default_quantity = max(float(food.get("default_quantity") or 0.0), 0.0)
+    max_quantity = max(float(food.get("max_quantity") or 0.0), 0.0)
+
+    minimos = {
+        "fruit": {"g": 10.0, "ml": 80.0, "unidad": 0.5},
+        "dairy": {"g": 80.0, "ml": 150.0, "unidad": 1.0},
+        "vegetable": {"g": 60.0, "ml": 80.0, "unidad": 1.0},
+    }
+    maximos = {
+        "fruit": {"g": 120.0, "ml": 250.0, "unidad": 1.5},
+        "dairy": {"g": 180.0, "ml": 300.0, "unidad": 1.5},
+        "vegetable": {"g": 150.0, "ml": 250.0, "unidad": 1.5},
+    }
+
+    if support_role == "fruit":
+        fallback = default_quantity or (1.0 if unit == "unidad" else 80.0)
+        quantity = _calcular_cantidad_por_objetivo_macro(
+            food,
+            macro_key="carb_grams",
+            objetivo_macro=8.0,
+            fallback=fallback,
+        )
+    elif support_role == "dairy":
+        fallback = default_quantity or (1.0 if unit == "unidad" else 125.0)
+        quantity = _calcular_cantidad_por_objetivo_macro(
+            food,
+            macro_key="protein_grams",
+            objetivo_macro=10.0,
+            fallback=fallback,
+        )
+    else:
+        quantity = default_quantity or (1.0 if unit == "unidad" else 100.0)
+
+    minimo = minimos.get(support_role, {}).get(unit, 0.0)
+    maximo = maximos.get(support_role, {}).get(unit, 0.0)
+
+    if quantity <= 0:
+        quantity = minimo
+    if minimo > 0:
+        quantity = max(quantity, minimo)
+    if maximo > 0:
+        quantity = min(quantity, maximo)
+    if max_quantity > 0:
+        quantity = min(quantity, max_quantity)
+
+    return max(quantity, 0.0)
+
+
+def es_soporte_significativo(
+    food: dict[str, Any],
+    *,
+    support_role: str,
+    quantity: float,
+) -> bool:
+    """Filtra soportes residuales que no aportan valor nutricional ni culinario."""
+    if quantity <= 0:
+        return False
+    if quantity + 1e-6 < FOOD_OMIT_THRESHOLD.get(str(food.get("reference_unit") or "").strip().lower(), 0.0):
+        return False
+
+    unit = str(food.get("reference_unit") or "unidad").strip().lower()
+    aporte = _calcular_aporte_estimado(food, quantity)
+    tiene_datos_macro = any(float(food.get(macro_key) or 0.0) > 0 for macro_key in CORE_MACRO_KEYS)
+
+    if support_role == "vegetable":
+        if unit in {"g", "ml"}:
+            return quantity >= 60.0 or aporte["calories"] >= 15.0
+        return quantity >= 1.0
+
+    if support_role == "fruit":
+        if unit == "unidad":
+            return quantity >= 0.5
+        if not tiene_datos_macro:
+            return quantity >= 40.0
+        return aporte["carb_grams"] >= 8.0 or aporte["calories"] >= 30.0
+
+    if support_role == "dairy":
+        if unit == "unidad":
+            return quantity >= 1.0
+        if not tiene_datos_macro:
+            return quantity >= 80.0
+        return aporte["protein_grams"] >= 6.0 or aporte["calories"] >= 45.0
+
+    return True
+
+
 def get_support_candidate_foods(
     food_lookup: dict[str, dict[str, Any]],
     *,
@@ -1016,19 +1147,26 @@ def get_support_option_specs(
 
         return [food_lookup[code] for code in fallback_codes if code in food_lookup]
 
-    if meal_slot != "early" and meal.target_calories >= 320 and meal.target_carb_grams >= 15:
-        vegetable_quantity = 80.0 if meal.target_calories < 520 else 120.0
-        for vegetable_food in iter_support_foods("vegetable", ["mixed_vegetables"]):
-            add_support_option("vegetable", vegetable_food["code"], vegetable_quantity)
+    roles_soporte: list[tuple[str, list[str]]] = []
+    if meal_slot != "early":
+        roles_soporte.append(("vegetable", ["mixed_vegetables"]))
+    if meal_slot == "early" or meal_role in LOW_FAT_MEAL_ROLES:
+        roles_soporte.append(("fruit", ["banana"]))
+    if meal_slot == "early":
+        roles_soporte.append(("dairy", ["greek_yogurt"]))
 
-    if (meal_slot == "early" or meal_role in LOW_FAT_MEAL_ROLES) and meal.target_carb_grams >= 35:
-        fruit_quantity = 0.5 if meal.target_carb_grams < 80 else 1.0
-        for fruit_food in iter_support_foods("fruit", ["banana"]):
-            add_support_option("fruit", fruit_food["code"], fruit_quantity)
-
-    if meal_slot == "early" and meal.target_calories <= 320 and meal.target_protein_grams <= 28:
-        for dairy_food in iter_support_foods("dairy", ["greek_yogurt"]):
-            default_quantity = float(dairy_food.get("default_quantity") or 1.0)
-            add_support_option("dairy", dairy_food["code"], default_quantity)
+    for support_role, fallback_codes in roles_soporte:
+        for support_food in iter_support_foods(support_role, fallback_codes):
+            quantity = construir_cantidad_soporte_razonable(
+                support_food,
+                support_role=support_role,
+            )
+            if not es_soporte_significativo(
+                support_food,
+                support_role=support_role,
+                quantity=quantity,
+            ):
+                continue
+            add_support_option(support_role, support_food["code"], quantity)
 
     return support_options

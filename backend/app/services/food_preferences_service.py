@@ -106,6 +106,20 @@ class FoodPreferenceConflictError(ValueError):
     """Raised when user preferences leave too few compatible foods to build a diet."""
 
 
+def _esta_alimento_anotado(food: dict[str, Any]) -> bool:
+    return (
+        "preference_labels" in food
+        and "dietary_tags" in food
+        and "allergen_tags" in food
+    )
+
+
+def _asegurar_alimento_anotado(food: dict[str, Any]) -> dict[str, Any]:
+    if _esta_alimento_anotado(food):
+        return food
+    return annotate_food_compatibility(food)
+
+
 def normalize_food_label(value: str) -> str:
     return normalize_food_name(value)
 
@@ -327,12 +341,12 @@ def _count_preferred_matches(food: dict[str, Any], profile: dict[str, Any]) -> i
 
 
 def count_food_preference_matches(food: dict[str, Any], profile: dict[str, Any]) -> int:
-    annotated_food = food if food.get("preference_labels") else annotate_food_compatibility(food)
+    annotated_food = _asegurar_alimento_anotado(food)
     return _count_preferred_matches(annotated_food, profile)
 
 
 def is_food_allowed_for_user(food: dict[str, Any], profile: dict[str, Any]) -> tuple[bool, list[str]]:
-    annotated_food = annotate_food_compatibility(food)
+    annotated_food = _asegurar_alimento_anotado(food)
     reasons: list[str] = []
 
     for disliked_food in profile["normalized_disliked_foods"]:
@@ -360,7 +374,7 @@ def filter_allowed_foods(foods: list[dict[str, Any]], profile: dict[str, Any]) -
     blocked_foods: list[dict[str, Any]] = []
 
     for food in foods:
-        annotated_food = annotate_food_compatibility(food)
+        annotated_food = _asegurar_alimento_anotado(food)
         is_allowed, reasons = is_food_allowed_for_user(annotated_food, profile)
         if is_allowed:
             allowed_foods.append(annotated_food)
@@ -391,7 +405,7 @@ def prioritize_preferred_foods(foods: list[dict[str, Any]], profile: dict[str, A
 
 def apply_user_food_preferences(foods: list[dict[str, Any]], profile: dict[str, Any]) -> dict[str, Any]:
     if not profile.get("has_preferences"):
-        annotated_foods = [annotate_food_compatibility(food) for food in foods]
+        annotated_foods = [_asegurar_alimento_anotado(food) for food in foods]
         return {
             "foods": annotated_foods,
             "blocked_foods": [],
@@ -441,7 +455,7 @@ def buscar_alimentos_por_nombre(texto: str, food_lookup: dict[str, Any]) -> list
 
     resultado: list[str] = []
     for code, food in food_lookup.items():
-        food_anotado = food if food.get("preference_labels") else annotate_food_compatibility(food)
+        food_anotado = _asegurar_alimento_anotado(food)
         for termino in terminos:
             if _matches_food_label(food_anotado, termino):
                 resultado.append(code)

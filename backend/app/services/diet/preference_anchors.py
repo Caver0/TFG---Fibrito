@@ -25,6 +25,8 @@ Ejemplos:
 from __future__ import annotations
 
 from app.services.diet.candidates import (
+    construir_cantidad_soporte_razonable,
+    es_soporte_significativo,
     get_candidate_role_for_food,
     get_food_role_fit_score,
     get_support_food_fit_score,
@@ -36,16 +38,6 @@ from app.services.food_preferences_service import buscar_alimentos_por_nombre
 
 # Grupos funcionales que pueden actuar como soporte complementario fuera del sistema lineal
 _GRUPOS_SOPORTE = {"fruit", "dairy", "vegetable"}
-
-
-def _cantidad_soporte(food: dict) -> float:
-    """Cantidad de soporte razonable según el tipo de unidad del alimento."""
-    unit = str(food.get("reference_unit") or "unidad")
-    qty = float(food.get("default_quantity") or 0)
-    if qty > 0:
-        return qty
-    # Fallbacks razonables si default_quantity no está definido
-    return {"g": 50.0, "ml": 100.0}.get(unit, 1.0)
 
 
 def resolver_anclas_preferidas(
@@ -143,7 +135,7 @@ def resolver_anclas_preferidas(
         # El alimento no cabe como rol estructural principal, pero puede acompañar la comida
         # fuera del sistema lineal (ej: dátiles como fruta en el desayuno donde cornflakes
         # ya es el carb principal).
-        mejor_soporte: tuple[int, str, str, float] | None = None
+        mejor_soporte: tuple[int, str, str, float, float] | None = None
 
         for code in codigos:
             food = food_lookup.get(code)
@@ -169,6 +161,16 @@ def resolver_anclas_preferidas(
                     meal_role=meal_role,
                 ):
                     continue
+                cantidad = construir_cantidad_soporte_razonable(
+                    food,
+                    support_role=support_role,
+                )
+                if not es_soporte_significativo(
+                    food,
+                    support_role=support_role,
+                    quantity=cantidad,
+                ):
+                    continue
 
                 score = get_support_food_fit_score(
                     food,
@@ -178,12 +180,10 @@ def resolver_anclas_preferidas(
                     training_focus=training_focus,
                 )
                 if mejor_soporte is None or score > mejor_soporte[3]:
-                    mejor_soporte = (meal_index, support_role, code, score)
+                    mejor_soporte = (meal_index, support_role, code, score, cantidad)
 
         if mejor_soporte is not None:
-            meal_index, support_role, code, _ = mejor_soporte
-            food = food_lookup[code]
-            cantidad = _cantidad_soporte(food)
+            meal_index, support_role, code, _, cantidad = mejor_soporte
             soporte.setdefault(meal_index, []).append({
                 "role": support_role,
                 "food_code": code,

@@ -207,6 +207,48 @@ def build_hidden_fat_penalty(food: dict[str, Any], quantity: float, *, role: str
     return actual_fat_grams * multiplier
 
 
+def _calcular_ajuste_correlacion_alimentaria(
+    *,
+    role_foods: dict[str, dict[str, Any]],
+    support_foods: list[dict[str, Any]],
+) -> float:
+    """Premia combinaciones compatibles sin sobrevalorar soportes opcionales."""
+    alimentos_por_codigo: dict[str, dict[str, Any]] = {}
+    rol_por_codigo: dict[str, str] = {}
+
+    for role, food in role_foods.items():
+        code = str(food.get("code") or "").strip().lower()
+        if not code:
+            continue
+        alimentos_por_codigo[code] = food
+        rol_por_codigo[code] = role
+
+    for support_food in support_foods:
+        code = str(support_food.get("code") or support_food.get("food_code") or "").strip().lower()
+        if not code:
+            continue
+        alimentos_por_codigo[code] = support_food
+        rol_por_codigo[code] = str(support_food.get("role") or "support")
+
+    codigos = sorted(alimentos_por_codigo)
+    roles_soporte = {"fruit", "vegetable", "dairy", "support"}
+    score = 0.0
+
+    for index, code in enumerate(codigos):
+        compatibles_code = set(CORRELACIONES_ALIMENTOS_COMPATIBLES.get(code, []))
+        for partner in codigos[index + 1:]:
+            compatibles_partner = set(CORRELACIONES_ALIMENTOS_COMPATIBLES.get(partner, []))
+            if partner not in compatibles_code and code not in compatibles_partner:
+                continue
+
+            bonus = BONUS_CORRELACION_ALIMENTARIA
+            if rol_por_codigo.get(code) in roles_soporte or rol_por_codigo.get(partner) in roles_soporte:
+                bonus *= 0.5
+            score -= bonus
+
+    return score
+
+
 def build_culinary_pairing_adjustment(
     *,
     role_foods: dict[str, dict[str, Any]],
@@ -256,28 +298,16 @@ def build_culinary_pairing_adjustment(
             score += 0.45
 
     if "vegetable" in support_roles and meal_slot != "early":
-        score -= 0.25
-    if "fruit" in support_roles:
-        if meal_slot == "early" or meal_role in LOW_FAT_MEAL_ROLES:
-            score -= 0.18
-        else:
-            score += 0.12
+        score -= 0.08
+    if "fruit" in support_roles and meal_role in LOW_FAT_MEAL_ROLES:
+        score -= 0.06
     if "dairy" in support_roles and meal_slot == "early":
-        score -= 0.12
+        score -= 0.04
 
-    all_codes = {
-        str(food.get("code") or "").strip().lower()
-        for food in [protein_food, carb_food, fat_food]
-        if food.get("code")
-    }
-    for support_food in support_foods:
-        support_code = str(support_food.get("code") or support_food.get("food_code") or "").strip().lower()
-        if support_code:
-            all_codes.add(support_code)
-    for code in list(all_codes):
-        compatible = CORRELACIONES_ALIMENTOS_COMPATIBLES.get(code, [])
-        hits = sum(1 for partner in compatible if partner in all_codes)
-        score -= hits * BONUS_CORRELACION_ALIMENTARIA
+    score += _calcular_ajuste_correlacion_alimentaria(
+        role_foods=role_foods,
+        support_foods=support_foods,
+    )
 
     return score
 
@@ -396,14 +426,12 @@ def build_solution_score(
     )
 
     if support_foods:
-        score += 0.15 * len(support_foods)
-
-        if meal_slot != "early" and support_foods[0]["role"] == "vegetable":
-            score -= 0.05
-        if training_focus and support_foods[0]["role"] == "fruit":
-            score -= 0.05
-
         for support_food in support_foods:
+            score += {
+                "vegetable": 0.22,
+                "fruit": 0.32,
+                "dairy": 0.28,
+            }.get(str(support_food.get("role") or "support"), 0.25)
             score -= apply_preference_priority(
                 support_food,
                 role=support_food["role"],
