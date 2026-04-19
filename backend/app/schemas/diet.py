@@ -260,6 +260,8 @@ class FoodReplacementOption(BaseModel):
     meal_carb_difference: float = 0.0
     strategy: Literal["strict", "relaxed"]
     note: str | None = None
+    macro_dominante: str
+    equivalent_grams: float | None = None
 
 
 class FoodReplacementOptionsResponse(BaseModel):
@@ -269,7 +271,35 @@ class FoodReplacementOptionsResponse(BaseModel):
     current_food_quantity: float = Field(gt=0)
     current_food_unit: str
     current_food_grams: float | None = Field(default=None, ge=0)
+    current_macro_dominante: str
     options: list[FoodReplacementOption] = Field(default_factory=list)
+
+
+class BuscarAlimentoSustitutoRequest(BaseModel):
+    current_food_name: str = Field(min_length=1, max_length=120)
+    current_food_code: str | None = None
+    query: str = Field(min_length=1, max_length=100)
+
+
+class AlimentoSustitutoCandidato(BaseModel):
+    food_code: str
+    name: str
+    category: str
+    macro_dominante: str
+    valid: bool
+    validation_note: str | None = None
+    calories: float = Field(ge=0)
+    protein_grams: float = Field(ge=0)
+    fat_grams: float = Field(ge=0)
+    carb_grams: float = Field(ge=0)
+    source: str = DEFAULT_DIET_SOURCE
+    equivalent_grams: float | None = None
+
+
+class BuscarAlimentoSustitutoResponse(BaseModel):
+    current_food_name: str
+    current_macro_dominante: str
+    candidates: list[AlimentoSustitutoCandidato] = Field(default_factory=list)
 
 
 class DietFood(BaseModel):

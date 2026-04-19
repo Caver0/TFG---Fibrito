@@ -18,7 +18,7 @@ from app.services.spoonacular_service import (
     get_spoonacular_status,
     search_ingredients,
 )
-from app.utils.normalization import build_food_aliases, normalize_food_name
+from app.utils.normalization import build_food_aliases, normalize_food_name, translate_food_query_for_search
 from app.services.food_classifier_service import predict_suitable_meals
 
 INTERNAL_FOOD_SOURCE = "internal_catalog"
@@ -438,6 +438,19 @@ def _score_food_match(food: dict[str, Any], normalized_query: str) -> tuple[int,
     )
 
 
+def _build_query_variants(query: str) -> list[str]:
+    normalized_query = normalize_food_name(query)
+    translated_query = translate_food_query_for_search(query)
+    return [
+        variant
+        for variant in dict.fromkeys(
+            variant
+            for variant in (query, normalized_query, translated_query)
+            if str(variant or "").strip()
+        )
+    ]
+
+
 def find_food_by_code_or_name(
     database,
     *,
@@ -454,12 +467,22 @@ def find_food_by_code_or_name(
     if not normalized_name:
         return None
 
-    candidate_foods = merge_internal_and_external_food_sources(
-        database,
-        food_name or normalized_name,
-        limit=10,
-        include_external=include_external,
-    )
+    merged_candidates: list[dict[str, Any]] = []
+    seen_codes: set[str] = set()
+    for query_variant in _build_query_variants(food_name or normalized_name):
+        for candidate_food in merge_internal_and_external_food_sources(
+            database,
+            query_variant,
+            limit=10,
+            include_external=include_external,
+        ):
+            candidate_code = str(candidate_food.get("code") or "")
+            if candidate_code in seen_codes:
+                continue
+            seen_codes.add(candidate_code)
+            merged_candidates.append(candidate_food)
+
+    candidate_foods = merged_candidates
     if not candidate_foods:
         return None
 
@@ -751,6 +774,7 @@ def merge_internal_and_external_food_sources(
 ) -> list[dict[str, Any]]:
     merged_foods: list[dict[str, Any]] = []
     seen_keys: set[str] = set()
+    query_variants = _build_query_variants(query)
 
     def add_food(food: dict[str, Any]) -> None:
         dedupe_key = food.get("internal_code") or food["normalized_name"]
@@ -760,22 +784,31 @@ def merge_internal_and_external_food_sources(
         merged_foods.append(food)
         seen_keys.add(dedupe_key)
 
-    for food in search_cached_foods(database, query, limit=limit):
-        add_food(food)
+    for query_variant in query_variants:
+        for food in search_cached_foods(database, query_variant, limit=limit):
+            add_food(food)
+        if len(merged_foods) >= limit:
+            return merged_foods[:limit]
 
-    for food in search_internal_food(query, limit=limit):
-        add_food(food)
+    for query_variant in query_variants:
+        for food in search_internal_food(query_variant, limit=limit):
+            add_food(food)
+        if len(merged_foods) >= limit:
+            return merged_foods[:limit]
 
     if include_external and len(merged_foods) < limit:
-        try:
-            external_food = search_spoonacular_food(database, query)
-        except SpoonacularUnavailableError:
-            external_food = None
-        except SpoonacularError:
-            external_food = None
+        for query_variant in query_variants:
+            try:
+                external_food = search_spoonacular_food(database, query_variant)
+            except SpoonacularUnavailableError:
+                external_food = None
+            except SpoonacularError:
+                external_food = None
 
-        if external_food:
-            add_food(external_food)
+            if external_food:
+                add_food(external_food)
+            if len(merged_foods) >= limit:
+                break
 
     return merged_foods[:limit]
 

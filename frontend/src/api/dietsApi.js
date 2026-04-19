@@ -53,3 +53,11 @@ export function getFoodReplacementOptions(token, dietId, mealNumber, payload) {
     body: payload,
   })
 }
+
+export function searchReplacementFood(token, dietId, mealNumber, payload) {
+  return apiRequest(`${DIETS_BASE_PATH}/${dietId}/meals/${mealNumber}/search-replacement-food`, {
+    method: 'POST',
+    token,
+    body: payload,
+  })
+}
