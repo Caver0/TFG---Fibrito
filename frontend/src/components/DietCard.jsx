@@ -29,56 +29,6 @@ function formatPercentage(value) {
   return `${formatNumber(value ?? 0)}%`
 }
 
-function formatFoodSource(value) {
-  if (value === 'legacy_structural') {
-    return 'Dieta estructural antigua'
-  }
-
-  if (value === 'mixed') {
-    return 'Mixta'
-  }
-
-  if (value === 'internal_catalog' || value === 'internal') {
-    return 'Catalogo interno'
-  }
-
-  if (value === 'local_cache' || value === 'cache') {
-    return 'Cache local'
-  }
-
-  if (value === 'spoonacular') {
-    return 'Spoonacular'
-  }
-
-  return value || 'No indicado'
-}
-
-function formatFoodSources(values, fallbackValue) {
-  const normalizedValues = values?.length ? values : [fallbackValue]
-  return normalizedValues.map((value) => formatFoodSource(value)).join(' + ')
-}
-
-function formatCatalogSourceStrategy(value) {
-  if (value === 'spoonacular_first_with_cache_fallback') {
-    return 'Spoonacular primero, luego cache local y por ultimo catalogo interno'
-  }
-
-  if (value === 'internal_catalog_with_optional_spoonacular_enrichment') {
-    return 'Catalogo interno con enriquecimiento opcional de Spoonacular'
-  }
-
-  return value || 'Sin estrategia registrada'
-}
-
-function formatResolutionSummary(diet) {
-  const attempts = Number(diet.spoonacular_attempts ?? 0)
-  if (!diet.spoonacular_attempted) {
-    return 'No'
-  }
-
-  return `Si (${attempts} consultas)`
-}
-
 function buildHighlightItems(diet) {
   return [
     {
@@ -92,7 +42,7 @@ function buildHighlightItems(diet) {
       detail: `${diet.meals_count} comidas`,
     },
     {
-      label: 'Proteina',
+      label: 'Proteína',
       value: `${formatNumber(diet.actual_protein_grams)} g`,
       detail: `Objetivo ${formatNumber(diet.protein_grams)} g`,
     },
@@ -107,7 +57,7 @@ function buildHighlightItems(diet) {
       detail: `Objetivo ${formatNumber(diet.carb_grams)} g`,
     },
     {
-      label: 'Entreno',
+      label: 'Entrenamiento',
       value: diet.training_optimization_applied ? 'Optimizada' : 'Sin optimizar',
       detail: formatTrainingTimeOfDay(diet.training_time_of_day),
     },
@@ -121,24 +71,12 @@ function buildMetaItems(diet) {
       value: formatDietTimestamp(diet.created_at),
     },
     {
-      label: 'Fuentes',
-      value: formatFoodSources(diet.food_data_sources, diet.food_data_source),
+      label: 'Comidas',
+      value: String(diet.meals_count ?? 0),
     },
     {
-      label: 'Catalogo',
-      value: diet.food_catalog_version ?? 'No aplica',
-    },
-    {
-      label: 'Resolucion',
-      value: formatCatalogSourceStrategy(diet.catalog_source_strategy),
-    },
-    {
-      label: 'Spoonacular',
-      value: formatResolutionSummary(diet),
-    },
-    {
-      label: 'Compatibilidad',
-      value: diet.food_preferences_applied ? 'Preferencias aplicadas' : 'Sin filtros extra',
+      label: 'Preferencias',
+      value: diet.food_preferences_applied ? 'Aplicadas' : 'No aplicadas',
     },
   ]
 }
@@ -236,7 +174,7 @@ function DietCard({
       {!isLoading && !error && actionMessage ? <p className="info-note">{actionMessage}</p> : null}
       {!isLoading && !error && actionSummary ? (
         <article className="diet-action-summary">
-          <strong>Ultimo cambio aplicado</strong>
+          <strong>Último cambio aplicado</strong>
           <p>{actionSummary.message}</p>
           {actionSummary.strategy_notes?.length ? (
             <ul className="diet-action-list">
@@ -248,7 +186,7 @@ function DietCard({
         </article>
       ) : null}
       {!isLoading && !error && !diet ? (
-        <p className="info-note">Todavia no hay una dieta generada para mostrar.</p>
+        <p className="info-note">Todavía no hay una dieta generada para mostrar.</p>
       ) : null}
 
       {!isLoading && diet ? (
@@ -268,9 +206,9 @@ function DietCard({
               <div className="diet-distribution-header">
                 <div>
                   <span className="eyebrow">Distribucion del dia</span>
-                  <h3>Calorias y macros del plan</h3>
+                  <h3>Calorías y macros del plan</h3>
                 </div>
-                <p>Mostramos el reparto calorico de los macros actuales y el peso relativo de cada comida con la misma paleta visual.</p>
+                <p>Mostramos el reparto calórico de los macros actuales y el peso relativo de cada comida.</p>
               </div>
 
               <div className="diet-macro-summary">
@@ -343,8 +281,8 @@ function DietCard({
             <section className="diet-meta-panel">
               <div className="diet-meta-panel-header">
                 <div>
-                  <span className="eyebrow">Contexto</span>
-                  <h3>Trazabilidad y resolucion</h3>
+                  <span className="eyebrow">Resumen</span>
+                  <h3>Información general</h3>
                 </div>
               </div>
 
@@ -360,7 +298,7 @@ function DietCard({
 
             {diet.food_filter_warnings?.length ? (
               <article className="diet-warning-panel">
-                <strong>Notas de compatibilidad</strong>
+                <strong>Notas</strong>
                 <ul className="diet-action-list">
                   {diet.food_filter_warnings.map((warning) => (
                     <li key={warning}>{warning}</li>

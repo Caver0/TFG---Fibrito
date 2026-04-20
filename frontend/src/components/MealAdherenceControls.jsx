@@ -15,15 +15,15 @@ function formatStatusLabel(status) {
 
 function formatScoreLabel(status) {
   if (status === 'completed') {
-    return 'Puntuacion 1.0'
+    return 'Puntuación 1.0'
   }
   if (status === 'modified') {
-    return 'Puntuacion 0.5'
+    return 'Puntuación 0.5'
   }
   if (status === 'omitted') {
-    return 'Puntuacion 0.0'
+    return 'Puntuación 0.0'
   }
-  return 'Sin registrar aun'
+  return 'Sin registrar aún'
 }
 
 function MealAdherenceControls({
@@ -94,7 +94,7 @@ function MealAdherenceControls({
             type="button"
             onClick={handleOpenModifiedEditor}
           >
-            {currentStatus === 'modified' ? 'Editar modificacion' : 'Modificada'}
+            {currentStatus === 'modified' ? 'Editar modificación' : 'Modificada'}
           </button>
           <button
             className={`secondary-button ${currentStatus === 'pending' ? 'secondary-button-active' : ''}`}
@@ -114,10 +114,10 @@ function MealAdherenceControls({
       {isEditingModified ? (
         <form className="meal-adherence-note" onSubmit={handleSubmitModified}>
           <label>
-            <span>Observacion de la desviacion</span>
+            <span>Observación de la desviación</span>
             <textarea
               maxLength={280}
-              placeholder="Ejemplo: cambie arroz por pan, comi menos cantidad, no tome el yogur..."
+              placeholder="Ejemplo: cambié arroz por pan, comí menos cantidad o no tomé el yogur."
               rows={3}
               value={note}
               onChange={(event) => setNote(event.target.value)}
@@ -126,7 +126,7 @@ function MealAdherenceControls({
 
           <div className="meal-adherence-note-actions">
             <button disabled={isSaving} type="submit">
-              {isSaving ? 'Guardando...' : 'Guardar modificacion'}
+              {isSaving ? 'Guardando...' : 'Guardar modificación'}
             </button>
             <button
               className="secondary-button"

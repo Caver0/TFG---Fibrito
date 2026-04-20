@@ -60,8 +60,8 @@ function OnboardingPage() {
     <AuthShell>
       <AuthCard
         mode="register"
-        title="Calibración Inicial"
-        subtitle="Introduce tus datos para calcular tus calorías base y objetivos nutricionales."
+        title="Configura tu perfil"
+        subtitle="Introduce tus datos para calcular tus calorías y objetivos nutricionales."
       >
         <form className="auth-command-form" onSubmit={handleSubmit}>
           <label className="auth-field">
@@ -161,7 +161,7 @@ function OnboardingPage() {
           {error ? <p className="auth-feedback auth-feedback-error">{error}</p> : null}
 
           <button type="submit" className="auth-primary-button" disabled={isSubmitting}>
-            <span>{isSubmitting ? 'Calibrando sistema...' : 'Activar perfil nutricional'}</span>
+            <span>{isSubmitting ? 'Guardando perfil...' : 'Guardar perfil'}</span>
             <i className="material-symbols-outlined" aria-hidden="true">arrow_forward</i>
           </button>
         </form>

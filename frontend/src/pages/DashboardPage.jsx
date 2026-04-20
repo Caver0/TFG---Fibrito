@@ -47,12 +47,12 @@ function buildTimestamp(value) {
 
 function getRelativeDayLabel(value) {
   if (!value) {
-    return 'Esperando eventos de ajuste'
+    return 'Esperando ajustes'
   }
 
   const targetDate = new Date(value)
   if (Number.isNaN(targetDate.getTime())) {
-    return 'Esperando eventos de ajuste'
+    return 'Esperando ajustes'
   }
 
   const today = new Date()
@@ -76,12 +76,12 @@ function getProgressStatusNote(analysis) {
 
   if (analysis.adjustment_needed) {
     return analysis.progress_status === 'needs_adjustment'
-      ? 'Ventana de ajuste detectada'
+      ? 'Se recomienda ajuste'
       : analysis.adjustment_reason
   }
 
   if (analysis.progress_status === 'on_track') {
-    return 'Rango objetivo alcanzado'
+    return 'Dentro del rango objetivo'
   }
 
   return analysis.adjustment_reason || 'Análisis semanal listo'
@@ -258,7 +258,7 @@ function DashboardPage() {
 
   const metricCards = [
     {
-      title: 'Peso Actual',
+      title: 'Peso actual',
       value: formatCompactNumber(summary?.current_weight, { maximumFractionDigits: 1, minimumFractionDigits: 1 }),
       suffix: 'KG',
       note: lastEntryDelta === null
@@ -269,7 +269,7 @@ function DashboardPage() {
       highlight: true,
     },
     {
-      title: 'Cambio Semanal',
+      title: 'Cambio semanal',
       value: formatCompactNumber(summary?.latest_weekly_change, { maximumFractionDigits: 1, minimumFractionDigits: 1 }),
       suffix: 'KG / SEM',
       note: getProgressStatusNote(latestAnalysis).toUpperCase(),
@@ -277,7 +277,7 @@ function DashboardPage() {
       icon: 'trending_down',
     },
     {
-      title: 'Calorías Objetivo',
+      title: 'Calorías objetivo',
       value: formatCompactNumber(summary?.current_target_calories, { maximumFractionDigits: 0 }),
       suffix: 'KCAL',
       note: getRelativeDayLabel(latestAdjustmentEvent?.date).toUpperCase(),
@@ -285,7 +285,7 @@ function DashboardPage() {
       icon: 'bolt',
     },
     {
-      title: '% Adherencia',
+      title: 'Adherencia',
       value: formatCompactNumber(summary?.weekly_adherence_percentage, { maximumFractionDigits: 1, minimumFractionDigits: 1 }),
       suffix: '%',
       note: (summary?.adherence_interpretation || 'Resumen de cumplimiento semanal').toUpperCase(),
@@ -318,11 +318,11 @@ function DashboardPage() {
   const dietMeals = activeDiet?.calories_per_meal?.slice(0, 3) ?? []
   const insightRows = [
     {
-      label: 'Protocolo objetivo',
+      label: 'Objetivo',
       value: formatGoalLabel(summary?.goal),
     },
     {
-      label: 'Comidas planeadas',
+      label: 'Comidas planificadas',
       value: activeDiet?.meals_count ? `${activeDiet.meals_count}` : 'N/A',
     },
     {
@@ -339,7 +339,7 @@ function DashboardPage() {
 
   return (
     <div className="dashboard-page">
-      {isLoading ? <p className="page-status">Cargando núcleo del panel...</p> : null}
+      {isLoading ? <p className="page-status">Cargando panel...</p> : null}
       {!isLoading && error ? <p className="page-status page-status-error">{error}</p> : null}
 
       {!isLoading && !error ? (
@@ -353,8 +353,8 @@ function DashboardPage() {
           <div className="dashboard-main-layout">
             <div className="dashboard-main-column">
               <SectionPanel
-                title="Velocidad de Masa Corporal"
-                description="PESO A LO LARGO DEL TIEMPO VS AJUSTES CALÓRICOS"
+                title="Evolución del peso"
+                description="Peso a lo largo del tiempo y ajustes calóricos"
                 actions={(
                   <div className="legend-group">
                     <span><i className="legend-dot legend-dot-primary" />Peso</span>
@@ -428,10 +428,10 @@ function DashboardPage() {
               </SectionPanel>
 
               <SectionPanel
-                title="Protocolo de Dieta Activo"
+                title="Dieta activa"
                 actions={(
                   <span className="panel-tag">
-                    {activeDiet ? 'CALIBRACIÓN_EN_VIVO' : 'SIN DIETA ACTIVA'}
+                    {activeDiet ? 'ACTIVA' : 'SIN DIETA ACTIVA'}
                   </span>
                 )}
               >
@@ -461,7 +461,7 @@ function DashboardPage() {
                       {dietMeals.map((meal) => (
                         <article key={meal.meal_number} className="dashboard-meal-preview">
                           <div>
-                            <small>{`COMIDA ${String(meal.meal_number).padStart(2, '0')}`}</small>
+                            <small>{`Comida ${String(meal.meal_number).padStart(2, '0')}`}</small>
                             <strong>{meal.label}</strong>
                           </div>
                           <p>
@@ -473,25 +473,25 @@ function DashboardPage() {
                     </div>
                   </div>
                 ) : (
-                  <p className="panel-placeholder">Genera una dieta para poblar el bloque de protocolo activo.</p>
+                  <p className="panel-placeholder">Genera una dieta para ver aquí su resumen.</p>
                 )}
               </SectionPanel>
             </div>
 
             <div className="dashboard-side-column">
-              <SectionPanel eyebrow="Cumplimiento Semanal" className="dashboard-gauge-panel">
+              <SectionPanel eyebrow="Cumplimiento semanal" className="dashboard-gauge-panel">
                 <CircularGauge
                   value={adherence?.adherence_percentage ?? 0}
                   label="Consistencia"
                 />
 
                 <div className="interpretation-card">
-                  <span>Interpretación de IA</span>
-                  <p>{summary?.adherence_interpretation || adherence?.interpretation_message || 'Los datos de adherencia guiarán esta interpretación una vez que se registren comidas.'}</p>
+                  <span>Interpretación</span>
+                  <p>{summary?.adherence_interpretation || adherence?.interpretation_message || 'Los datos de adherencia aparecerán aquí cuando empieces a registrar comidas.'}</p>
                 </div>
               </SectionPanel>
 
-              <SectionPanel eyebrow="Métricas de Protocolo">
+              <SectionPanel eyebrow="Resumen">
                 <div className="key-value-stack">
                   {insightRows.map((row) => (
                     <div key={row.label} className="key-value-row">
@@ -502,23 +502,23 @@ function DashboardPage() {
                 </div>
 
                 <button type="button" className="panel-cta-button" onClick={() => { window.location.hash = '#progress' }}>
-                  Ver Datos de Laboratorio
+                  Ver progreso
                 </button>
               </SectionPanel>
 
-              <SectionPanel eyebrow="Registros del Sistema">
+              <SectionPanel eyebrow="Últimos ajustes">
                 {logItems.length > 0 ? (
                   <div className="system-log-list">
                     {logItems.map((item) => (
                       <article key={item.id} className="system-log-item">
-                        <small>{item.calorie_change === 0 ? 'EVENTO DE ANÁLISIS' : 'EVENTO DE AJUSTE'}</small>
+                        <small>{item.calorie_change === 0 ? 'Análisis' : 'Ajuste'}</small>
                         <strong>{item.adjustment_reason}</strong>
                         <p>{formatDateLabel(item.date, { month: 'short', day: '2-digit', year: 'numeric' })}</p>
                       </article>
                     ))}
                   </div>
                 ) : (
-                  <p className="panel-placeholder">Los eventos de ajuste se listarán aquí después de aplicar el análisis semanal.</p>
+                  <p className="panel-placeholder">Los ajustes semanales aparecerán aquí cuando estén disponibles.</p>
                 )}
               </SectionPanel>
             </div>

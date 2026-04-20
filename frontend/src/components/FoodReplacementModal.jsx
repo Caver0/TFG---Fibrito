@@ -113,10 +113,10 @@ function FoodReplacementModal({
     <section className="replacement-panel">
       <div className="replacement-panel-header">
         <div>
-          <span className="eyebrow">Sustitucion</span>
+          <span className="eyebrow">Sustitución</span>
           <strong>{food.name}</strong>
           <p>
-            Comida {mealNumber}. Elige una alternativa cerrada y la cantidad recomendada para mantener la comida equilibrada.
+            Comida {mealNumber}. Elige una alternativa y revisa la cantidad recomendada antes de aplicarla.
           </p>
         </div>
 
@@ -149,7 +149,7 @@ function FoodReplacementModal({
                 ))}
               </select>
               <span className="input-helper">
-                Las cantidades ya vienen ajustadas para esta comida.
+                La cantidad ya viene ajustada para esta comida.
               </span>
             </label>
           </div>
@@ -184,9 +184,9 @@ function FoodReplacementModal({
                 <div className="replacement-selected-metrics">
                   <div className="replacement-result-grid replacement-result-grid-compact">
                     <span>Vs kcal: {formatSigned(selectedOption.calorie_delta_vs_current, 'kcal')}</span>
-                    <span>Vs proteina: {formatSigned(selectedOption.protein_delta_vs_current, 'g')}</span>
+                    <span>Vs proteína: {formatSigned(selectedOption.protein_delta_vs_current, 'g')}</span>
                     <span>Vs grasas: {formatSigned(selectedOption.fat_delta_vs_current, 'g')}</span>
-                    <span>Vs carbos: {formatSigned(selectedOption.carb_delta_vs_current, 'g')}</span>
+                    <span>Vs carbohidratos: {formatSigned(selectedOption.carb_delta_vs_current, 'g')}</span>
                   </div>
 
                   <p className="replacement-meal-impact">
@@ -202,7 +202,7 @@ function FoodReplacementModal({
               Cancelar
             </button>
             <button disabled={isSubmitting || !selectedOption} type="submit">
-              {isSubmitting ? 'Sustituyendo...' : 'Aplicar sustitucion'}
+              {isSubmitting ? 'Sustituyendo...' : 'Aplicar sustitución'}
             </button>
           </div>
         </form>

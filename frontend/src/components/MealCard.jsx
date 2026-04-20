@@ -23,44 +23,13 @@ function formatFoodQuantity(food) {
   return `${baseLabel} (${formatNumber(food.grams, 1)} g aprox.)`
 }
 
-function formatFoodSource(value) {
-  if (value === 'internal_catalog' || value === 'internal') {
-    return 'Catalogo interno'
-  }
-
-  if (value === 'local_cache' || value === 'cache') {
-    return 'Cache local'
-  }
-
-  if (value === 'spoonacular') {
-    return 'Spoonacular'
-  }
-
-  return value || 'No indicado'
-}
-
-function formatFoodLineage(food) {
-  const source = food.source
-  const originSource = food.origin_source
-
-  if ((source === 'local_cache' || source === 'cache') && originSource === 'spoonacular') {
-    return 'Cache local reutilizada desde Spoonacular'
-  }
-
-  if (source === 'spoonacular') {
-    return 'Spoonacular en vivo'
-  }
-
-  return formatFoodSource(source)
-}
-
 function MealMacroBar({ meal, compact = false }) {
   const macroBreakdown = buildMacroEnergyBreakdown(meal)
 
   return (
     <div className={`meal-macro-visual ${compact ? 'meal-macro-visual-compact' : ''}`}>
       <div className="meal-macro-header">
-        <strong>Distribucion calorica</strong>
+        <strong>Distribución calórica</strong>
         <span>{formatNumber(macroBreakdown.totalCalories)} kcal</span>
       </div>
 

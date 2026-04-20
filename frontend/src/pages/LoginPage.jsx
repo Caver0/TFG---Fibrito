@@ -44,20 +44,20 @@ function LoginPage({ onSwitch }) {
     <AuthShell>
       <AuthCard
         mode="login"
-        title="Autorización Requerida"
-        subtitle="Inicializa tu perfil de rendimiento para entrar al laboratorio."
+        title="Iniciar sesión"
+        subtitle="Accede a tu perfil para continuar"
         footer={(
           <p className="auth-switch-line">
-            <span>¿Nuevo operativo?</span>{' '}
+            <span>¿Aún no tienes cuenta?</span>{' '}
             <button type="button" className="auth-inline-link" onClick={onSwitch}>
-              Comenzar Reclutamiento
+              Crear cuenta
             </button>
           </p>
         )}
       >
         <form className="auth-command-form" onSubmit={handleSubmit}>
           <label className="auth-field">
-            <span>ID de Laboratorio (Email)</span>
+            <span>Email</span>
             <div className="auth-input-shell">
               <i className="material-symbols-outlined" aria-hidden="true">
                 alternate_email
@@ -65,7 +65,7 @@ function LoginPage({ onSwitch }) {
               <input
                 name="email"
                 type="email"
-                placeholder="usuario@laboratoriocinetico.io"
+                placeholder="usuario@email.com"
                 autoComplete="email"
                 value={form.email}
                 onChange={handleChange}
@@ -76,9 +76,9 @@ function LoginPage({ onSwitch }) {
 
           <label className="auth-field">
             <span className="auth-field-row">
-              <span>Clave de Acceso Segura</span>
+              <span>Contraseña</span>
               <button type="button" className="auth-inline-link auth-inline-link-utility" onClick={handleRecoverKey}>
-                Recuperar Clave
+                Recuperar contraseña
               </button>
             </span>
             <div className="auth-input-shell">

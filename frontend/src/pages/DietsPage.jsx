@@ -11,7 +11,6 @@ import {
 import {
   formatCalories,
   formatCompactNumber,
-  formatDataSource,
   formatDateLabel,
   formatMacro,
   formatPercent,
@@ -283,18 +282,18 @@ function DietsPage() {
   }, [isGenerating])
 
   function syncUpdatedDiet(updatedDiet) {
-    setSelectedDiet(updatedDiet);
+    setSelectedDiet(updatedDiet)
 
     setLatestDiet((currentLatest) => {
       if (!currentLatest || currentLatest.id === updatedDiet.id) {
-        return updatedDiet;
+        return updatedDiet
       }
-      return currentLatest;
-    });
+      return currentLatest
+    })
 
     setDietHistory((currentHistory) =>
       currentHistory.map((d) => (d.id === updatedDiet.id ? updatedDiet : d))
-    );
+    )
   }
 
   function handleGeneratorBaseChange(event) {
@@ -365,7 +364,7 @@ function DietsPage() {
       setSelectedDiet(createdDiet)
       await loadDietHistory(token)
       window.dispatchEvent(new CustomEvent('dashboard:refresh'))
-      setGenerateMessage('Protocolo basado en alimentos generado y guardado correctamente.')
+      setGenerateMessage('Dieta generada y guardada correctamente.')
     } catch (error) {
       setGenerateError(error.message)
     } finally {
@@ -584,14 +583,14 @@ function DietsPage() {
   }
 
   const macroPanels = [
-    { label: 'Protein', value: currentDiet?.actual_protein_grams, target: currentDiet?.protein_grams },
-    { label: 'Carbs', value: currentDiet?.actual_carb_grams, target: currentDiet?.carb_grams },
-    { label: 'Fats', value: currentDiet?.actual_fat_grams, target: currentDiet?.fat_grams },
+    { label: 'Proteína', value: currentDiet?.actual_protein_grams, target: currentDiet?.protein_grams },
+    { label: 'Carbohidratos', value: currentDiet?.actual_carb_grams, target: currentDiet?.carb_grams },
+    { label: 'Grasas', value: currentDiet?.actual_fat_grams, target: currentDiet?.fat_grams },
   ]
 
   return (
     <div className="diets-page">
-      {(isLatestDietLoading || isHistoryLoading) ? <p className="page-status">Loading diet protocol...</p> : null}
+      {(isLatestDietLoading || isHistoryLoading) ? <p className="page-status">Cargando dieta...</p> : null}
       {(latestDietError || selectedDietError || historyError || dietActionError || adherenceError || weeklyAdherenceError) ? (
         <p className="page-status page-status-error">
           {latestDietError || selectedDietError || historyError || dietActionError || adherenceError || weeklyAdherenceError}
@@ -599,7 +598,7 @@ function DietsPage() {
       ) : null}
 
       <div className="diets-hero-layout">
-        <SectionPanel eyebrow="Índice de Rendimiento Diario" className="diet-performance-panel">
+        <SectionPanel eyebrow="Resumen diario" className="diet-performance-panel">
           <div className="diet-performance-kcal">
             <strong>{formatCompactNumber(currentDiet?.actual_calories, { maximumFractionDigits: 0 })}</strong>
             <span>KCAL</span>
@@ -643,17 +642,12 @@ function DietsPage() {
               )
             })}
           </div>
-
-          <div className="diet-performance-meta">
-            <span>Pila de fuentes: {(currentDiet?.food_data_sources ?? []).map(formatDataSource).join(' / ') || 'Interno'}</span>
-            <span>Alimentos resueltos: {currentDiet?.resolved_foods_count ?? 0}</span>
-          </div>
         </SectionPanel>
 
         <SectionPanel
-          eyebrow="Generador de Protocolo"
-          title="Genera una dieta diaria calibrada"
-          description="Este panel se comunica directamente con el endpoint de dietas basado en alimentos."
+          eyebrow="Generador de dieta"
+          title="Genera una dieta diaria"
+          description="Configura el número de comidas y, si quieres, ajusta la distribución."
         >
           <form className="protocol-generator-form" onSubmit={handleGenerate}>
             <label>
@@ -666,14 +660,14 @@ function DietsPage() {
               >
                 {[3, 4, 5, 6].map((value) => (
                   <option key={value} value={value}>
-                    {value} meals
+                    {value} comidas
                   </option>
                 ))}
               </select>
             </label>
 
             <label>
-              <span>Hora de entrenamiento</span>
+              <span>Momento del entrenamiento</span>
               <select
                 disabled={isGenerating}
                 name="trainingTimeOfDay"
@@ -704,7 +698,7 @@ function DietsPage() {
               <div className="protocol-generator-percentages">
                 {generatorForm.customPercentages.map((value, index) => (
                   <label key={`distribution-${index}`}>
-                    <span>{`Meal ${index + 1}`}</span>
+                    <span>{`Comida ${index + 1}`}</span>
                     <input
                       disabled={isGenerating}
                       type="number"
@@ -743,7 +737,7 @@ function DietsPage() {
             ) : null}
 
             <button type="submit" className="panel-cta-button" disabled={isGenerating}>
-              {isGenerating ? 'Generando protocolo...' : 'Generar Dieta'}
+              {isGenerating ? 'Generando dieta...' : 'Generar dieta'}
             </button>
           </form>
         </SectionPanel>
@@ -752,11 +746,11 @@ function DietsPage() {
       {currentDiet ? (
         <>
           <SectionPanel
-            eyebrow="Ventana de Seguimiento"
+            eyebrow="Seguimiento"
             className="diet-tracking-strip"
             actions={(
               <label className="inline-date-field">
-                <span>Fecha de seguimiento</span>
+                <span>Fecha</span>
                 <input type="date" value={selectedAdherenceDate} onChange={(event) => setSelectedAdherenceDate(event.target.value)} />
               </label>
             )}
@@ -809,7 +803,7 @@ function DietsPage() {
                         >
                           <div className="protocol-food-copy">
                             <strong>{food.name}</strong>
-                            <small>{formatDataSource(food.source)} // {food.category}</small>
+                            <small>{food.category}</small>
                           </div>
                           <div className="protocol-food-inline-metrics">
                             <div className="protocol-food-breakdown">
@@ -844,7 +838,7 @@ function DietsPage() {
                         </div>
                         <div className="protocol-meal-macro-item">
                           <strong>{formatMacro(meal.actual_carb_grams)}</strong>
-                          <small>Carbos</small>
+                          <small>Carbohidratos</small>
                         </div>
                         <div className="protocol-meal-macro-item">
                           <strong>{formatMacro(meal.actual_fat_grams)}</strong>
@@ -869,7 +863,7 @@ function DietsPage() {
                         onClick={() => handleSaveMealAdherence(meal.meal_number, 'completed')}
                         disabled={isBusyMeal || isSavingMealAdherence}
                       >
-                        {isSavingMealAdherence && activeAdherenceMealNumber === meal.meal_number ? 'Guardando...' : 'Confirmar Ingesta'}
+                        {isSavingMealAdherence && activeAdherenceMealNumber === meal.meal_number ? 'Guardando...' : 'Confirmar ingesta'}
                       </button>
                     </div>
 
@@ -893,19 +887,19 @@ function DietsPage() {
           </div>
         </>
       ) : (
-        <SectionPanel title="Sin protocolo de dieta activo">
-          <p className="panel-placeholder">Genera tu primera dieta basada en alimentos para desbloquear la cuadrícula de comidas.</p>
+        <SectionPanel title="Sin dieta activa">
+          <p className="panel-placeholder">Genera tu primera dieta para empezar.</p>
         </SectionPanel>
       )}
 
       {replacementLab ? (
         <SectionPanel
-          eyebrow={`Laboratorio de Cambio // Comida ${String(replacementLab.mealNumber).padStart(2, '0')}`}
+          eyebrow={`Sustitución · Comida ${String(replacementLab.mealNumber).padStart(2, '0')}`}
           title={replacementLab.food.name}
-          description="Sustitución dentro del mismo macro dominante. El resto de alimentos se mantiene y solo se reajustan cantidades."
+          description="Sustituye este alimento por otro compatible dentro de la comida."
           actions={<button type="button" className="protocol-secondary-button" onClick={closeReplacementLab}>Cerrar</button>}
         >
-          {isReplacementLoading ? <p className="page-status">Calculando sustitutos compatibles...</p> : null}
+          {isReplacementLoading ? <p className="page-status">Calculando opciones compatibles...</p> : null}
           {replacementError ? <p className="page-status page-status-error">{replacementError}</p> : null}
 
           {!isReplacementLoading ? (() => {
@@ -930,8 +924,8 @@ function DietsPage() {
 
                 <form className="replacement-search-panel" onSubmit={handleSearchReplacementFood}>
                   <div className="replacement-search-head">
-                    <strong>Buscar alimento manual</strong>
-                    <small>Buscamos en catálogo local, caché y Spoonacular. Solo se aceptan alimentos del mismo macro dominante y con encaje mínimo en esta comida.</small>
+                    <strong>Buscar alimento</strong>
+                    <small>Solo se mostrarán alimentos compatibles con el papel nutricional de esta comida.</small>
                   </div>
 
                   <div className="replacement-search-row">
@@ -959,7 +953,7 @@ function DietsPage() {
                             <div>
                               <strong>{candidate.name}</strong>
                               <small>
-                                {candidate.category} · {formatMacroDominante(candidate.macro_dominante)} · {formatDataSource(candidate.source)}
+                                {candidate.category} · {formatMacroDominante(candidate.macro_dominante)}
                               </small>
                             </div>
                             <div className="replacement-search-card-meta">
@@ -1020,7 +1014,7 @@ function DietsPage() {
 
                     {selectedOption.equivalent_grams ? (
                       <p className="replacement-detail-equivalence">
-                        Equivalencia orientativa: {formatCompactNumber(selectedOption.equivalent_grams, { maximumFractionDigits: 0 })} g del nuevo alimento para cubrir el papel nutricional del actual.
+                        Equivalencia orientativa: {formatCompactNumber(selectedOption.equivalent_grams, { maximumFractionDigits: 0 })} g del nuevo alimento.
                       </p>
                     ) : null}
 
@@ -1040,7 +1034,7 @@ function DietsPage() {
                 ) : null}
 
                 <button type="button" className="panel-cta-button" disabled={isMealActionLoading || !selectedReplacementCode} onClick={handleApplyReplacement}>
-                  {isMealActionLoading ? 'Aplicando reemplazo...' : 'Aplicar Reemplazo'}
+                  {isMealActionLoading ? 'Aplicando reemplazo...' : 'Aplicar reemplazo'}
                 </button>
               </div>
             )
@@ -1049,7 +1043,7 @@ function DietsPage() {
       ) : null}
 
       <div className="diets-support-layout">
-        <SectionPanel eyebrow="Resumen de Adherencia Diaria">
+        <SectionPanel eyebrow="Resumen de adherencia diaria">
           {isDietAdherenceLoading ? <p className="page-status">Cargando adherencia de comidas...</p> : null}
           {!isDietAdherenceLoading ? (
             <div className="key-value-stack">
@@ -1061,7 +1055,7 @@ function DietsPage() {
           ) : null}
         </SectionPanel>
 
-        <SectionPanel eyebrow="Interpretación Semanal">
+        <SectionPanel eyebrow="Interpretación semanal">
           {isWeeklyAdherenceLoading ? <p className="page-status">Cargando adherencia semanal...</p> : null}
           {!isWeeklyAdherenceLoading ? (
             <>
@@ -1076,7 +1070,7 @@ function DietsPage() {
         </SectionPanel>
       </div>
 
-      <SectionPanel eyebrow="Archivo de Protocolos" title="Generaciones de dietas recientes">
+      <SectionPanel eyebrow="Historial" title="Dietas recientes">
         {dietHistory.length > 0 ? (
           <div className="protocol-history-list">
             {dietHistory.map((diet) => (
@@ -1089,7 +1083,7 @@ function DietsPage() {
               >
                 <div>
                   <strong>{formatDateLabel(diet.created_at, { month: 'short', day: '2-digit', year: 'numeric' })}</strong>
-                  <small>{diet.meals_count} comidas // {formatDataSource(diet.food_data_source)}</small>
+                  <small>{diet.meals_count} comidas</small>
                 </div>
                 <span>{formatCalories(diet.target_calories)}</span>
                 <span>{diet.food_preferences_applied ? 'Preferencias aplicadas' : 'Perfil estándar'}</span>

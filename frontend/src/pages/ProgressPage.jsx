@@ -333,7 +333,7 @@ function ProgressPage() {
     dashboardSnapshot?.weight_progress?.expected_trend,
     weeklyAverages,
   )
-  const confidenceScore = toConfidenceScore(weeklyAdherenceSummary?.weekly_adherence_factor ?? 0)
+  const confidenceScore = toConfidenceScore(weeklyAdherenceSummary?.confidence_factor ?? 0)
   const dailyBreakdown = dashboardSnapshot?.adherence?.daily_breakdown ?? []
   const recentEntries = [...entries].slice(-3).reverse()
   const todayEntry = entries.find((entry) => entry.date === getTodayDateInputValue())
@@ -361,37 +361,37 @@ function ProgressPage() {
   return (
     <div className="progress-page">
       {(isHistoryLoading || isSummaryLoading || isWeeklyAveragesLoading || isWeeklyAnalysisLoading || isWeeklyAdherenceLoading || isDashboardLoading)
-        ? <p className="page-status">Cargando análisis de adherencia...</p>
+        ? <p className="page-status">Cargando progreso...</p>
         : null}
       {(historyError || summaryError || weeklyAveragesError || weeklyAnalysisError || weeklyAdherenceError || dashboardError || saveError || applyError)
         ? <p className="page-status page-status-error">{historyError || summaryError || weeklyAveragesError || weeklyAnalysisError || weeklyAdherenceError || dashboardError || saveError || applyError}</p>
         : null}
 
       <div className="progress-hero-grid">
-        <SectionPanel eyebrow="Estado del Sistema" className="progress-hero-card progress-hero-copy">
-          <h3>Fiabilidad de Datos: <span>{formatAdherenceLevel(weeklyAdherenceSummary?.adherence_level)}</span></h3>
-          <p>{weeklyAdherenceSummary?.interpretation_message || dashboardSnapshot?.summary?.adherence_interpretation || 'El seguimiento de adherencia desbloqueará la interpretación de fiabilidad tras registrar comidas.'}</p>
-          <button type="button" className="panel-cta-button" onClick={() => window.location.hash = '#diets'}>Revisar Registros de Dieta</button>
+        <SectionPanel eyebrow="Resumen" className="progress-hero-card progress-hero-copy">
+          <h3>Fiabilidad de datos: <span>{formatAdherenceLevel(weeklyAdherenceSummary?.adherence_level)}</span></h3>
+          <p>{weeklyAdherenceSummary?.interpretation_message || dashboardSnapshot?.summary?.adherence_interpretation || 'El seguimiento de adherencia permitirá interpretar mejor la fiabilidad cuando empieces a registrar comidas.'}</p>
+          <button type="button" className="panel-cta-button" onClick={() => window.location.hash = '#diets'}>Revisar dieta</button>
         </SectionPanel>
 
         <SectionPanel className="progress-hero-card progress-gauge-card">
           <CircularGauge value={confidenceScore} label="Confianza" />
           <div className="progress-gauge-meta">
-            <div><small>Seguimiento</small><strong>{formatPercent(weeklyAdherenceSummary?.tracking_coverage_percentage ?? 0, 0)}</strong></div>
-            <div><small>Precisión</small><strong>{weeklyAnalysis?.can_analyze ? 'Ultra' : 'Pendiente'}</strong></div>
+            <div><small>Cobertura</small><strong>{formatPercent(weeklyAdherenceSummary?.tracking_coverage_percentage ?? 0, 0)}</strong></div>
+            <div><small>Análisis</small><strong>{weeklyAnalysis?.can_analyze ? 'Disponible' : 'Pendiente'}</strong></div>
           </div>
         </SectionPanel>
 
         <div className="progress-quick-stats">
-          <SectionPanel className="progress-quick-card"><small>Delta Semanal</small><strong>{formatSignedMass(weeklyAnalysis?.weekly_change, { maximumFractionDigits: 2, minimumFractionDigits: 2 })}</strong></SectionPanel>
-          <SectionPanel className="progress-quick-card progress-quick-card-danger"><small>Flujo Calórico</small><strong>{formatSignedCalories(weeklyAnalysis?.calorie_change)}</strong></SectionPanel>
+          <SectionPanel className="progress-quick-card"><small>Cambio semanal</small><strong>{formatSignedMass(weeklyAnalysis?.weekly_change, { maximumFractionDigits: 2, minimumFractionDigits: 2 })}</strong></SectionPanel>
+          <SectionPanel className="progress-quick-card progress-quick-card-danger"><small>Ajuste calórico</small><strong>{formatSignedCalories(weeklyAnalysis?.calorie_change)}</strong></SectionPanel>
         </div>
       </div>
 
       <SectionPanel
-        title="Tendencia de Análisis de Peso"
-        description="Actual (neón) vs. proyección esperada del modelo actual del backend."
-        actions={<div className="legend-group"><span><i className="legend-dot legend-dot-primary" />Actual</span><span><i className="legend-dot legend-dot-muted" />Objetivo</span></div>}
+        title="Tendencia del peso"
+        description="Comparación entre la evolución real y la tendencia esperada."
+        actions={<div className="legend-group"><span><i className="legend-dot legend-dot-primary" />Actual</span><span><i className="legend-dot legend-dot-muted" />Esperado</span></div>}
       >
         <div className="dashboard-chart-wrap">
           {chartSeries.length > 0 ? (
@@ -405,12 +405,12 @@ function ProgressPage() {
                 <Line type="monotone" dataKey="actualWeight" stroke="#daf900" strokeWidth={4} dot={false} />
               </ComposedChart>
             </ResponsiveContainer>
-          ) : <p className="panel-placeholder">Los datos de tendencia de peso aparecerán tras los primeros registros.</p>}
+          ) : <p className="panel-placeholder">Los datos de peso aparecerán aquí tras los primeros registros.</p>}
         </div>
       </SectionPanel>
 
       <div className="progress-bottom-layout">
-        <SectionPanel title="Mapa de Calor de Adherencia">
+        <SectionPanel title="Adherencia semanal">
           <div className="adherence-heatmap-grid">
             {(dailyBreakdown.length > 0 ? dailyBreakdown : new Array(7).fill(null)).map((day, index) => (
               <div key={`heat-${index}`} className="adherence-heatmap-cell-wrap">
@@ -421,14 +421,14 @@ function ProgressPage() {
           </div>
         </SectionPanel>
 
-        <SectionPanel title="Registros Recientes">
+        <SectionPanel title="Registros recientes">
           {recentEntries.length > 0 ? (
             <div className="recent-log-list">
               {recentEntries.map((entry) => (
                 <article key={entry.id} className="recent-log-item">
                   <div>
                     <strong>{formatMass(entry.weight)}</strong>
-                    <small>{formatDayLabel(entry.date)} // {formatDateLabel(entry.date, { month: 'short', day: '2-digit', year: 'numeric' })}</small>
+                    <small>{formatDayLabel(entry.date)} · {formatDateLabel(entry.date, { month: 'short', day: '2-digit', year: 'numeric' })}</small>
                   </div>
                   <button type="button" className="protocol-chip-button" disabled={deletingEntryId === entry.id} onClick={() => handleDelete(entry.id)}>
                     {deletingEntryId === entry.id ? 'Borrando...' : 'Borrar'}
@@ -444,18 +444,18 @@ function ProgressPage() {
         <form className="progress-log-form" onSubmit={handleSave}>
           <label><span>Peso (kg)</span><input type="number" step="0.1" min="0" value={weightForm.weight} onChange={(event) => setWeightForm((current) => ({ ...current, weight: event.target.value }))} required /></label>
           <label><span>Fecha</span><input type="date" value={weightForm.date} onChange={(event) => setWeightForm((current) => ({ ...current, date: event.target.value }))} disabled={Boolean(editingEntryId)} required /></label>
-          <button type="submit" className="protocol-secondary-button" disabled={isSaving}>{isSaving ? 'Guardando...' : editingEntryId ? 'Actualizar Peso de Hoy' : 'Registrar Peso'}</button>
+          <button type="submit" className="protocol-secondary-button" disabled={isSaving}>{isSaving ? 'Guardando...' : editingEntryId ? 'Actualizar peso de hoy' : 'Registrar peso'}</button>
         </form>
 
         <div className="progress-footer-copy">
-          <strong>{summary?.latest_weight ? `Último peso ${formatMass(summary.latest_weight)}` : 'Aún no hay último peso'}</strong>
-          <span>{summary?.number_of_entries ? `${summary.number_of_entries} registros observados` : 'Comienza a registrar tu peso para activar el análisis.'}</span>
-          {todayEntry && !editingEntryId ? <button type="button" className="protocol-chip-button" onClick={handleEditTodayEntry}>Modificar Peso de Hoy</button> : null}
-          {editingEntryId ? <button type="button" className="protocol-chip-button" onClick={handleCancelEdit}>Cancelar Edicion</button> : null}
+          <strong>{summary?.latest_weight ? `Último peso ${formatMass(summary.latest_weight)}` : 'Aún no hay registros de peso'}</strong>
+          <span>{summary?.number_of_entries ? `${summary.number_of_entries} registros guardados` : 'Empieza a registrar tu peso para activar el análisis.'}</span>
+          {todayEntry && !editingEntryId ? <button type="button" className="protocol-chip-button" onClick={handleEditTodayEntry}>Modificar peso de hoy</button> : null}
+          {editingEntryId ? <button type="button" className="protocol-chip-button" onClick={handleCancelEdit}>Cancelar edición</button> : null}
         </div>
 
         <button type="button" className="panel-cta-button" disabled={isApplyingAdjustment} onClick={handleApplyAdjustment}>
-          {isApplyingAdjustment ? 'Aplicando...' : 'Aplicar Ajuste Semanal'}
+          {isApplyingAdjustment ? 'Aplicando...' : 'Aplicar ajuste semanal'}
         </button>
       </SectionPanel>
 

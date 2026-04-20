@@ -16,8 +16,7 @@ const APP_VIEWS = [
     id: 'dashboard',
     sidebarLabel: 'Panel',
     icon: 'dashboard',
-    topbarTitle: 'PANEL_V2.0',
-    searchPlaceholder: 'BUSCAR MÉTRICAS...',
+    topbarTitle: 'PANEL',
     getTopbarContext: (user) => formatGoalPhase(user?.goal),
   },
   {
@@ -25,7 +24,6 @@ const APP_VIEWS = [
     sidebarLabel: 'Dietas',
     icon: 'restaurant',
     topbarTitle: 'GESTIÓN DE DIETAS',
-    searchPlaceholder: 'BUSCAR PROTOCOLOS...',
     getTopbarContext: () => formatDateLabel(new Date(), { month: 'long' }).toUpperCase(),
   },
   {
@@ -33,16 +31,14 @@ const APP_VIEWS = [
     sidebarLabel: 'Progreso',
     icon: 'insights',
     topbarTitle: 'ANÁLISIS DE ADHERENCIA',
-    searchPlaceholder: 'BUSCAR MÉTRICAS...',
-    getTopbarContext: () => 'FIABILIDAD DEL SISTEMA // TENDENCIA DE PESO',
+    getTopbarContext: () => 'FIABILIDAD DEL SISTEMA Y TENDENCIA DE PESO',
   },
   {
     id: 'profile',
     sidebarLabel: 'Perfil',
     icon: 'person',
     topbarTitle: 'PREFERENCIAS DE USUARIO',
-    searchPlaceholder: 'COMANDO DEL LAB...',
-    getTopbarContext: () => 'ESTADO ACTUAL /',
+    getTopbarContext: () => 'ESTADO ACTUAL',
   },
 ]
 
@@ -102,7 +98,7 @@ function App() {
     return (
       <main className="app-loading-screen">
         <div className="lab-frame auth-lab-frame app-loading-frame">
-          <p>Inicializando núcleo FIBRIT0...</p>
+          <p>Inicializando FIBRIT0...</p>
         </div>
       </main>
     )

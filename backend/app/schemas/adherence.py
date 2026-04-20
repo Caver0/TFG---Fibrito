@@ -68,6 +68,9 @@ class WeeklyAdherenceSummary(BaseModel):
     adherence_percentage: float = Field(default=0, ge=0, le=100)
     tracking_coverage_percentage: float = Field(default=0, ge=0, le=100)
     weekly_adherence_factor: float = Field(default=0, ge=0, le=1)
+    tracking_coverage_factor: float = Field(default=0, ge=0, le=1)
+    confidence_factor: float = Field(default=0, ge=0, le=1)
+    confidence_percentage: float = Field(default=0, ge=0, le=100)
     adherence_level: AdherenceLevel
     interpretation_message: str
 

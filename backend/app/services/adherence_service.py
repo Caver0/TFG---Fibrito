@@ -651,11 +651,13 @@ def calculate_weekly_adherence_summary(
         for document in adherence_documents
         if document.get("adherence_score") is not None
     ]
+
     weekly_adherence_factor = (
         round_adherence_value(sum(recorded_scores) / Decimal(len(recorded_scores)))
         if recorded_scores
         else 0.0
     )
+
     adherence_percentage = (
         round_adherence_value(
             (
@@ -668,6 +670,7 @@ def calculate_weekly_adherence_summary(
         if total_planned_meals > 0
         else 0.0
     )
+
     tracking_coverage_percentage = (
         round_adherence_value(
             Decimal(total_meals_registered) / Decimal(total_planned_meals) * Decimal("100")
@@ -675,6 +678,25 @@ def calculate_weekly_adherence_summary(
         if total_planned_meals > 0
         else 0.0
     )
+
+    tracking_coverage_factor = (
+        round_adherence_value(
+            Decimal(total_meals_registered) / Decimal(total_planned_meals),
+            precision="0.0001",
+        )
+        if total_planned_meals > 0
+        else 0.0
+    )
+
+    confidence_factor = round_adherence_value(
+        Decimal(str(weekly_adherence_factor)) * Decimal(str(tracking_coverage_factor)),
+        precision="0.0001",
+    )
+
+    confidence_percentage = round_adherence_value(
+        Decimal(str(confidence_factor)) * Decimal("100")
+    )
+
     adherence_level = classify_adherence_level(weekly_adherence_factor)
 
     return WeeklyAdherenceSummary(
@@ -692,6 +714,9 @@ def calculate_weekly_adherence_summary(
         adherence_percentage=adherence_percentage,
         tracking_coverage_percentage=tracking_coverage_percentage,
         weekly_adherence_factor=weekly_adherence_factor,
+        tracking_coverage_factor=tracking_coverage_factor,
+        confidence_factor=confidence_factor,
+        confidence_percentage=confidence_percentage,
         adherence_level=adherence_level,
         interpretation_message=build_adherence_interpretation(
             weekly_adherence_factor=weekly_adherence_factor,

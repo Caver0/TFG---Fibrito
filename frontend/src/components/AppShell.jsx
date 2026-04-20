@@ -17,7 +17,6 @@ function AppShell({
         <aside className="lab-sidebar">
           <div className="lab-brand">
             <h1>FIBRIT0</h1>
-            <span>KINETIC LAB</span>
           </div>
 
           <nav className="lab-nav" aria-label="Primary">
@@ -64,27 +63,6 @@ function AppShell({
               <h2>{viewMeta.topbarTitle}</h2>
               <div className="lab-topbar-divider" aria-hidden="true" />
               <p>{viewMeta.topbarContext}</p>
-            </div>
-
-            <div className="lab-topbar-actions">
-              <label className="lab-search" aria-label="Decorative search field">
-                <i className="material-symbols-outlined" aria-hidden="true">
-                  search
-                </i>
-                <input placeholder={viewMeta.searchPlaceholder} type="text" />
-              </label>
-
-              <button type="button" className="lab-icon-button" aria-label="Notifications">
-                <i className="material-symbols-outlined" aria-hidden="true">
-                  notifications
-                </i>
-              </button>
-
-              <button type="button" className="lab-icon-button" aria-label="Settings">
-                <i className="material-symbols-outlined" aria-hidden="true">
-                  settings
-                </i>
-              </button>
             </div>
           </header>
 

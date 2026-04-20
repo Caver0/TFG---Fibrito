@@ -67,12 +67,12 @@ function DietGeneratorForm({ error, isGenerating, message, onGenerate }) {
       <div className="section-heading">
         <span className="eyebrow">Generador de dieta</span>
         <h2>Crea una dieta diaria por alimentos</h2>
-        <p>Partimos de tu distribucion por comidas y la convertimos en alimentos reales mostrando despues si cada alimento se resolvio con Spoonacular, cache local o catalogo interno.</p>
+        <p>Define el número de comidas y si lo deseas ajusta su distribución.</p>
       </div>
 
       <form className="diet-form diet-form-wide" onSubmit={handleSubmit}>
         <label className="diet-form-field diet-form-field-compact">
-          <span>Numero de comidas</span>
+          <span>Número de comidas</span>
           <select
             name="meals_count"
             value={mealsCount}
@@ -139,7 +139,7 @@ function DietGeneratorForm({ error, isGenerating, message, onGenerate }) {
 
         {useTrainingOptimization ? (
           <label className="diet-form-field diet-form-field-secondary">
-            <span>Momento del dia</span>
+            <span>Momento del día</span>
             <select
               value={trainingTimeOfDay}
               onChange={(event) => setTrainingTimeOfDay(event.target.value)}
@@ -155,7 +155,7 @@ function DietGeneratorForm({ error, isGenerating, message, onGenerate }) {
           </label>
         ) : (
           <div className="info-note diet-form-placeholder">
-            Si tu horario de entreno es estable, puedes indicarlo para repartir mejor la energia entre comidas.
+            Puedes indicarlo para repartir mejor la energía entre comidas.
           </div>
         )}
 

@@ -32,15 +32,15 @@ function MacroDeltaCell({ previousMacros, newMacros }) {
 
   const rows = [
     { label: 'P', prev: previousMacros.protein_grams, next: newMacros.protein_grams },
-    { label: 'H', prev: previousMacros.carb_grams,    next: newMacros.carb_grams },
-    { label: 'G', prev: previousMacros.fat_grams,     next: newMacros.fat_grams },
+    { label: 'H', prev: previousMacros.carb_grams, next: newMacros.carb_grams },
+    { label: 'G', prev: previousMacros.fat_grams, next: newMacros.fat_grams },
   ]
 
   return (
     <td style={{ whiteSpace: 'nowrap' }}>
       {rows.map(({ label, prev, next }) => {
         const delta = Math.round((next - prev) * 10) / 10
-        const sign  = delta > 0 ? '+' : ''
+        const sign = delta > 0 ? '+' : ''
         const color = delta > 0 ? 'var(--lab-lime-soft)' : delta < 0 ? 'var(--lab-red)' : 'var(--lab-muted)'
         return (
           <div key={label} style={{ display: 'flex', gap: 6, fontSize: '0.82em', lineHeight: 1.6 }}>
@@ -66,8 +66,8 @@ function AdjustmentHistory({ entries, error, isLoading }) {
       <div className="collapsible-section-header">
         <div className="section-heading">
           <span className="eyebrow">Historial de ajustes</span>
-          <h2>Analisis realizados</h2>
-          <p>Cada fila muestra el cambio semanal detectado, la decision tomada y el ajuste aplicado.</p>
+          <h2>Análisis realizados</h2>
+          <p>Cada fila muestra el cambio semanal detectado, la decisión tomada y el ajuste aplicado.</p>
         </div>
 
         {entries.length > 0 ? (
@@ -84,7 +84,7 @@ function AdjustmentHistory({ entries, error, isLoading }) {
       {isLoading ? <p className="info-note">Cargando historial de ajustes...</p> : null}
       {!isLoading && error ? <p className="info-note info-note-warning">{error}</p> : null}
       {!isLoading && !error && entries.length === 0 ? (
-        <p className="info-note">Todavia no se ha guardado ningun analisis semanal.</p>
+        <p className="info-note">Todavía no se ha guardado ningún análisis semanal.</p>
       ) : null}
 
       {!isLoading && !error && entries.length > 0 && isExpanded ? (
@@ -93,13 +93,13 @@ function AdjustmentHistory({ entries, error, isLoading }) {
             <thead>
               <tr>
                 <th>Semana analizada</th>
-                <th>Sem. anterior</th>
+                <th>Semana anterior</th>
                 <th>Cambio semanal</th>
-                <th>Direccion</th>
+                <th>Dirección</th>
                 <th>Velocidad</th>
-                <th>Calorias</th>
+                <th>Calorías</th>
                 <th>Macros (P / H / G)</th>
-                <th>Razon</th>
+                <th>Razón</th>
               </tr>
             </thead>
             <tbody>
