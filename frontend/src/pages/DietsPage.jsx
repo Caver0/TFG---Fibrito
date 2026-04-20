@@ -73,6 +73,23 @@ function formatMacroDominante(value) {
   return value || 'No definido'
 }
 
+const GENERATION_LOADING_STAGES = [
+  { label: 'Calculando perfil', progress: 22 },
+  { label: 'Distribuyendo macros', progress: 58 },
+  { label: 'Generando dieta', progress: 86 },
+]
+
+function formatReplacementValidationNote(candidate) {
+  const note = String(candidate?.validation_note ?? '').trim()
+  if (note) {
+    return note
+  }
+
+  return candidate?.valid
+    ? 'Compatible con esta comida.'
+    : 'No compatible con esta comida.'
+}
+
 function DietsPage() {
   const { token } = useAuth()
 
@@ -113,6 +130,7 @@ function DietsPage() {
   const [isReplacementSearchLoading, setIsReplacementSearchLoading] = useState(false)
   const [isReplacementPreviewLoading, setIsReplacementPreviewLoading] = useState(false)
   const [activeReplacementPreviewCode, setActiveReplacementPreviewCode] = useState('')
+  const [generationStageIndex, setGenerationStageIndex] = useState(0)
 
   const currentDiet = selectedDiet ?? latestDiet
   const currentDietId = currentDiet?.id ?? ''
@@ -120,6 +138,9 @@ function DietsPage() {
     (dietAdherence?.meals ?? []).map((mealEntry) => [mealEntry.meal_number, mealEntry]),
   )
   const replacementOptions = getReplacementOptionsForDisplay(replacementLab)
+  const activeGenerationStage = GENERATION_LOADING_STAGES[
+    Math.min(generationStageIndex, GENERATION_LOADING_STAGES.length - 1)
+  ]
 
   function resetReplacementSearchState() {
     setReplacementSearchQuery('')
@@ -243,12 +264,27 @@ function DietsPage() {
     loadWeeklyAdherence(selectedAdherenceDate, token)
   }, [token, currentDietId, selectedAdherenceDate])
 
-  // Localiza la función syncUpdatedDiet (alrededor de la línea 158) y reemplázala:
+  useEffect(() => {
+    if (!isGenerating) {
+      setGenerationStageIndex(0)
+      return undefined
+    }
+
+    setGenerationStageIndex(0)
+    const timers = GENERATION_LOADING_STAGES.slice(1).map((_, stageOffset) => (
+      window.setTimeout(() => {
+        setGenerationStageIndex(stageOffset + 1)
+      }, (stageOffset + 1) * 900)
+    ))
+
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer))
+    }
+  }, [isGenerating])
+
   function syncUpdatedDiet(updatedDiet) {
-    // 1. Actualizamos la dieta que se está viendo actualmente
     setSelectedDiet(updatedDiet);
-    
-    // 2. Actualizamos la referencia de 'latestDiet' si es la misma dieta
+
     setLatestDiet((currentLatest) => {
       if (!currentLatest || currentLatest.id === updatedDiet.id) {
         return updatedDiet;
@@ -256,7 +292,6 @@ function DietsPage() {
       return currentLatest;
     });
 
-    // 3. CRITICO: Actualizamos el historial para que la lista de la derecha refleje los cambios
     setDietHistory((currentHistory) =>
       currentHistory.map((d) => (d.id === updatedDiet.id ? updatedDiet : d))
     );
@@ -292,9 +327,8 @@ function DietsPage() {
 
   async function handleGenerate(event) {
     event.preventDefault()
-    if (!token) return
+    if (!token || isGenerating) return
 
-    setIsGenerating(true)
     setGenerateError('')
     setGenerateMessage('')
     setSelectedDietError('')
@@ -303,27 +337,29 @@ function DietsPage() {
     setAdherenceError('')
     setReplacementError('')
 
+    const mealsCount = Number(generatorForm.mealsCount)
+    const payload = {
+      meals_count: mealsCount,
+      training_time_of_day: generatorForm.trainingTimeOfDay || undefined,
+    }
+
+    if (generatorForm.useCustomDistribution) {
+      const validation = validateDistribution(
+        generatorForm.customPercentages.map((value) => Number(value)),
+        mealsCount,
+      )
+
+      if (!validation.isValid) {
+        setGenerateError(validation.message)
+        return
+      }
+
+      payload.custom_percentages = generatorForm.customPercentages.map((value) => Number(value))
+    }
+
+    setIsGenerating(true)
+
     try {
-      const mealsCount = Number(generatorForm.mealsCount)
-      const payload = {
-        meals_count: mealsCount,
-        training_time_of_day: generatorForm.trainingTimeOfDay || undefined,
-      }
-
-      if (generatorForm.useCustomDistribution) {
-        const validation = validateDistribution(
-          generatorForm.customPercentages.map((value) => Number(value)),
-          mealsCount,
-        )
-
-        if (!validation.isValid) {
-          setGenerateError(validation.message)
-          return
-        }
-
-        payload.custom_percentages = generatorForm.customPercentages.map((value) => Number(value))
-      }
-
       const createdDiet = await dietsApi.generateDiet(token, payload)
       setLatestDiet(createdDiet)
       setSelectedDiet(createdDiet)
@@ -622,7 +658,12 @@ function DietsPage() {
           <form className="protocol-generator-form" onSubmit={handleGenerate}>
             <label>
               <span>Número de comidas</span>
-              <select name="mealsCount" value={generatorForm.mealsCount} onChange={handleGeneratorBaseChange}>
+              <select
+                disabled={isGenerating}
+                name="mealsCount"
+                value={generatorForm.mealsCount}
+                onChange={handleGeneratorBaseChange}
+              >
                 {[3, 4, 5, 6].map((value) => (
                   <option key={value} value={value}>
                     {value} meals
@@ -633,7 +674,12 @@ function DietsPage() {
 
             <label>
               <span>Hora de entrenamiento</span>
-              <select name="trainingTimeOfDay" value={generatorForm.trainingTimeOfDay} onChange={handleGeneratorBaseChange}>
+              <select
+                disabled={isGenerating}
+                name="trainingTimeOfDay"
+                value={generatorForm.trainingTimeOfDay}
+                onChange={handleGeneratorBaseChange}
+              >
                 <option value="">No especificado</option>
                 {TRAINING_TIME_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -644,7 +690,13 @@ function DietsPage() {
             </label>
 
             <label className="protocol-generator-toggle">
-              <input checked={generatorForm.useCustomDistribution} name="useCustomDistribution" type="checkbox" onChange={handleGeneratorBaseChange} />
+              <input
+                checked={generatorForm.useCustomDistribution}
+                disabled={isGenerating}
+                name="useCustomDistribution"
+                type="checkbox"
+                onChange={handleGeneratorBaseChange}
+              />
               <span>Usar distribución calórica personalizada</span>
             </label>
 
@@ -653,7 +705,14 @@ function DietsPage() {
                 {generatorForm.customPercentages.map((value, index) => (
                   <label key={`distribution-${index}`}>
                     <span>{`Meal ${index + 1}`}</span>
-                    <input type="number" min="1" max="100" value={value} onChange={(event) => handleDistributionChange(index, event.target.value)} />
+                    <input
+                      disabled={isGenerating}
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={value}
+                      onChange={(event) => handleDistributionChange(index, event.target.value)}
+                    />
                   </label>
                 ))}
               </div>
@@ -661,6 +720,27 @@ function DietsPage() {
 
             {generateError ? <p className="page-status page-status-error">{generateError}</p> : null}
             {generateMessage ? <p className="page-status page-status-success">{generateMessage}</p> : null}
+
+            {isGenerating ? (
+              <div className="protocol-generator-loading" aria-live="polite">
+                <div className="protocol-generator-loading-head">
+                  <strong>{activeGenerationStage.label}</strong>
+                  <span>{activeGenerationStage.progress}%</span>
+                </div>
+                <div
+                  aria-valuemax="100"
+                  aria-valuemin="0"
+                  aria-valuenow={activeGenerationStage.progress}
+                  className="protocol-generator-loading-bar"
+                  role="progressbar"
+                >
+                  <div
+                    className="protocol-generator-loading-fill"
+                    style={{ width: `${activeGenerationStage.progress}%` }}
+                  />
+                </div>
+              </div>
+            ) : null}
 
             <button type="submit" className="panel-cta-button" disabled={isGenerating}>
               {isGenerating ? 'Generando protocolo...' : 'Generar Dieta'}
@@ -882,7 +962,12 @@ function DietsPage() {
                                 {candidate.category} · {formatMacroDominante(candidate.macro_dominante)} · {formatDataSource(candidate.source)}
                               </small>
                             </div>
-                            <span>Eq. {formatCompactNumber(candidate.equivalent_grams, { maximumFractionDigits: 0 })} g</span>
+                            <div className="replacement-search-card-meta">
+                              <span>Eq. {formatCompactNumber(candidate.equivalent_grams, { maximumFractionDigits: 0 })} g</span>
+                              <span className={`replacement-search-status ${candidate.valid ? 'replacement-search-status-valid' : 'replacement-search-status-invalid'}`.trim()}>
+                                {candidate.valid ? 'Compatible' : 'No compatible'}
+                              </span>
+                            </div>
                           </div>
 
                           <div className="replacement-search-card-macros">
@@ -893,7 +978,7 @@ function DietsPage() {
                           </div>
 
                           <p className={`replacement-search-note ${candidate.valid ? '' : 'replacement-search-note-invalid'}`.trim()}>
-                            {candidate.validation_note}
+                            {formatReplacementValidationNote(candidate)}
                           </p>
 
                           {candidate.valid ? (

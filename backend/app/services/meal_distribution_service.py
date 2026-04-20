@@ -18,6 +18,9 @@ PERCENTAGE_TOTAL = Decimal("100.0")
 PERCENTAGE_TOLERANCE = Decimal("0.5")
 MIN_PERCENTAGE_AFTER_OPTIMIZATION = Decimal("1.0")
 CARB_CAPACITY_EPSILON = Decimal("0.05")
+MIN_CARB_GRAMS_PER_MEAL = Decimal("10.0")
+PRE_WORKOUT_CARB_REMAINDER_MULTIPLIER = Decimal("2.4")
+POST_WORKOUT_CARB_REMAINDER_MULTIPLIER = Decimal("1.35")
 DEFAULT_DISTRIBUTION_TEMPLATES = {
     3: [30.0, 40.0, 30.0],
     4: [25.0, 15.0, 35.0, 25.0],
@@ -313,6 +316,75 @@ def distribute_total_by_weighted_caps(
     return [round_distribution_value(value) for value in allocated]
 
 
+def build_carb_remainder_weights(
+    meals_count: int,
+    *,
+    focus_indexes: tuple[int, int | None],
+    training_time_of_day: TrainingTimeOfDay | None,
+) -> list[float]:
+    weights = [Decimal("1.0")] * meals_count
+    primary_index, secondary_index = focus_indexes
+
+    if training_time_of_day and primary_index >= 0:
+        weights[primary_index] *= PRE_WORKOUT_CARB_REMAINDER_MULTIPLIER
+        if secondary_index is not None:
+            weights[secondary_index] *= POST_WORKOUT_CARB_REMAINDER_MULTIPLIER
+
+    return normalize_weights([float(weight) for weight in weights])
+
+
+def calculate_shared_carb_minimum(
+    total_carb_grams: float,
+    *,
+    carb_caps: list[Decimal],
+) -> Decimal:
+    if total_carb_grams <= 0 or not carb_caps:
+        return Decimal("0.0")
+
+    average_carb_per_meal = Decimal(str(total_carb_grams)) / Decimal(str(len(carb_caps)))
+    desired_minimum = min(MIN_CARB_GRAMS_PER_MEAL, average_carb_per_meal)
+    feasible_minimum = min(desired_minimum, min(carb_caps))
+    return max(feasible_minimum, Decimal("0.0"))
+
+
+def distribute_carbs_with_minimum(
+    total_carb_grams: float,
+    *,
+    carb_caps: list[Decimal],
+    focus_indexes: tuple[int, int | None],
+    training_time_of_day: TrainingTimeOfDay | None,
+) -> list[float]:
+    shared_minimum = calculate_shared_carb_minimum(
+        total_carb_grams,
+        carb_caps=carb_caps,
+    )
+    minimum_distribution = [shared_minimum] * len(carb_caps)
+    remaining_carb = max(
+        Decimal(str(total_carb_grams)) - (shared_minimum * Decimal(str(len(carb_caps)))),
+        Decimal("0.0"),
+    )
+    if remaining_carb <= Decimal("0.0"):
+        return [round_distribution_value(value) for value in minimum_distribution]
+
+    remaining_caps = [
+        max(carb_cap - shared_minimum, Decimal("0.0"))
+        for carb_cap in carb_caps
+    ]
+    remainder_distribution = distribute_total_by_weighted_caps(
+        float(remaining_carb),
+        weights=build_carb_remainder_weights(
+            len(carb_caps),
+            focus_indexes=focus_indexes,
+            training_time_of_day=training_time_of_day,
+        ),
+        caps=[float(cap) for cap in remaining_caps],
+    )
+    return [
+        round_distribution_value(minimum_distribution[index] + Decimal(str(extra_carb)))
+        for index, extra_carb in enumerate(remainder_distribution)
+    ]
+
+
 def distribute_macros_across_meals(
     *,
     base_meals: list[dict],
@@ -374,16 +446,11 @@ def distribute_macros_across_meals(
             - (Decimal(str(fat_target)) * Decimal("9"))
         )
         carb_caps.append(max((remaining_calories / Decimal("4")).quantize(DIET_PRECISION, rounding=ROUND_HALF_UP), Decimal("0.0")))
-    carb_weights = normalize_weights(
-        [
-            max(float(carb_cap), 0.1) * CARB_ROLE_PRIORITY_MULTIPLIERS.get(meal_role, 1.0)
-            for carb_cap, meal_role in zip(carb_caps, meal_roles, strict=True)
-        ]
-    )
-    carb_distribution = distribute_total_by_weighted_caps(
+    carb_distribution = distribute_carbs_with_minimum(
         carb_grams,
-        weights=carb_weights,
-        caps=[float(carb_cap) for carb_cap in carb_caps],
+        carb_caps=carb_caps,
+        focus_indexes=focus_indexes,
+        training_time_of_day=training_time_of_day,
     )
     meals: list[DietMeal] = []
 

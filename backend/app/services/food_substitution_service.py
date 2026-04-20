@@ -55,6 +55,11 @@ ETIQUETAS_MACRO = {
     "carb": "carbohidrato",
     "fat": "grasa",
 }
+ETIQUETAS_MACRO_CATEGORIA = {
+    "protein": "proteinas",
+    "carb": "carbohidratos",
+    "fat": "grasas",
+}
 PESOS_REAJUSTE = {
     "calories": 0.015,
     "protein_grams": 3.4,
@@ -110,6 +115,20 @@ TOKEN_MACRO_PREFERIDO = {
     ),
 }
 GENERIC_SOLVER_EXACT_ERROR = "unable to fit meal exactly with current food catalog"
+
+
+def _format_status_note(note: str, *, compatible: bool) -> str:
+    cleaned_note = str(note or "").strip()
+    prefix = "Compatible:" if compatible else "No compatible:"
+    if not cleaned_note:
+        return prefix[:-1]
+
+    normalized_note = normalize_food_name(cleaned_note)
+    if normalized_note.startswith(normalize_food_name(prefix)):
+        return cleaned_note
+
+    leading_note = cleaned_note[0].lower() + cleaned_note[1:] if cleaned_note else cleaned_note
+    return f"{prefix} {leading_note}"
 
 
 def _macro_energetico(food: dict[str, Any]) -> dict[str, float]:
@@ -513,27 +532,42 @@ def _validar_candidato_base(
     current_code = str(current_food_entry.get("code") or "").strip()
 
     if candidate_code and current_code and candidate_code == current_code:
-        return False, "Debes elegir un alimento distinto del actual."
+        return False, _format_status_note(
+            "Debes elegir un alimento distinto del actual.",
+            compatible=False,
+        )
 
     if meal_food_codes and candidate_code and candidate_code in meal_food_codes and candidate_code != current_code:
-        return False, f"'{candidate_food['name']}' ya esta presente en esta comida."
+        return False, _format_status_note(
+            f"'{candidate_food['name']}' ya esta presente en esta comida.",
+            compatible=False,
+        )
 
     if macro_candidato != macro_original:
         return (
             False,
-            f"'{candidate_food['name']}' pertenece al macro dominante "
-            f"{ETIQUETAS_MACRO.get(macro_candidato, macro_candidato)} y el alimento original pertenece a "
-            f"{ETIQUETAS_MACRO.get(macro_original, macro_original)}.",
+            _format_status_note(
+                f"'{candidate_food['name']}' pertenece a "
+                f"{ETIQUETAS_MACRO_CATEGORIA.get(macro_candidato, macro_candidato)} y el alimento original es "
+                f"{ETIQUETAS_MACRO.get(macro_original, macro_original)}.",
+                compatible=False,
+            ),
         )
 
     permitido, razones = is_food_allowed_for_user(candidate_food, preference_profile)
     if not permitido:
         return (
             False,
-            f"'{candidate_food['name']}' no esta permitido por las restricciones activas: {', '.join(razones)}.",
+            _format_status_note(
+                f"'{candidate_food['name']}' no esta permitido por las restricciones activas: {', '.join(razones)}.",
+                compatible=False,
+            ),
         )
 
-    return True, "Compatible con el mismo macro dominante y con las restricciones activas."
+    return True, _format_status_note(
+        "Mismo macro dominante y restricciones activas respetadas.",
+        compatible=True,
+    )
 
 
 def _validar_candidato_encaje_comida(
@@ -552,9 +586,15 @@ def _validar_candidato_encaje_comida(
         meal_role=meal_role,
         training_focus=training_focus,
     ):
-        return False, f"'{candidate_food['name']}' no encaja de forma razonable en esta comida."
+        return False, _format_status_note(
+            f"'{candidate_food['name']}' no encaja de forma razonable en esta comida.",
+            compatible=False,
+        )
 
-    return True, "Compatible con el mismo macro dominante y con la comida."
+    return True, _format_status_note(
+        "Mismo macro dominante y buen encaje en esta comida.",
+        compatible=True,
+    )
 
 
 def validar_alimento_para_sustitucion(
@@ -812,6 +852,9 @@ def _sanitize_substitution_exception(
             f"'{candidate_name}' tiene el macro correcto, pero no se ha podido construir una "
             "previsualizacion razonable para esta comida."
         )
+    if exc.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY:
+        detail = _format_status_note(detail, compatible=False)
+
     return HTTPException(status_code=exc.status_code, detail=detail)
 
 

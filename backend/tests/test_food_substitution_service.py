@@ -476,6 +476,7 @@ def test_alimento_buscado_manualmente_se_rechaza_si_no_cumple_el_mismo_macro():
         response = search_replacement_food(MagicMock(), user=_build_user(), diet_id="diet-1", meal_number=1, payload=payload)
 
     assert response.candidates[0].valid is False
+    assert response.candidates[0].validation_note.startswith("No compatible:")
     assert "grasa" in (response.candidates[0].validation_note or "").lower()
 
 
@@ -564,7 +565,8 @@ def test_si_el_alimento_buscado_no_es_valido_la_previsualizacion_devuelve_un_mot
             )
 
     assert excinfo.value.status_code == 422
-    assert "macro dominante grasa" in excinfo.value.detail.lower()
+    assert excinfo.value.detail.startswith("No compatible:")
+    assert "pertenece a grasas" in excinfo.value.detail.lower()
 
 
 def test_al_sustituir_un_alimento_los_demas_siguen_siendo_los_mismos_y_solo_cambian_cantidades():

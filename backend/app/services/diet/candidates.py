@@ -49,6 +49,33 @@ from app.services.diet.constants import (
     CORE_MACRO_KEYS,
 )
 
+CONCENTRATED_FRUIT_TOKENS = (
+    "date",
+    "dates",
+    "datil",
+    "datiles",
+    "raisin",
+    "raisins",
+    "pasa",
+    "pasas",
+    "prune",
+    "prunes",
+    "ciruela pasa",
+    "dried",
+    "deshidrat",
+    "dehydrated",
+    "fig",
+    "figs",
+    "higo",
+    "higos",
+)
+CONCENTRATED_FRUIT_CARB_DENSITY_THRESHOLD = 0.45
+CONCENTRATED_FRUIT_CALORIE_DENSITY_THRESHOLD = 2.1
+CONCENTRATED_FRUIT_MAIN_CARB_PENALTY = 0.8
+BREAKFAST_CONCENTRATED_FRUIT_MAIN_CARB_EXTRA_PENALTY = 0.24
+CONCENTRATED_FRUIT_SUPPORT_PENALTY = 0.55
+BREAKFAST_CONCENTRATED_FRUIT_SUPPORT_EXTRA_PENALTY = 0.18
+
 
 def _dedupe_foods_by_code(foods: list[dict]) -> list[dict]:
     deduped_foods: list[dict] = []
@@ -324,6 +351,14 @@ def get_allowed_meal_slots_for_food(food: dict[str, Any]) -> set[str]:
             elif functional_group in {"fruit", "dairy"}:
                 slots.update({"early", "snack"})
 
+    # Algunos alimentos externos quedan clasificados como "main/late" aunque
+    # su texto describe claramente un desayuno dulce (ej. "corn cereal").
+    # Corregimos el slot sin eliminar los slots ya guardados.
+    if is_sweet_breakfast_carb(food) or is_breakfast_only_protein(food):
+        slots.add("early")
+    if is_breakfast_fat(food):
+        slots.add("early")
+
     if "main" in slots:
         slots.add("late")
     if "snack" in slots and "early" not in slots and "main" not in slots and "late" not in slots:
@@ -343,6 +378,9 @@ def is_sweet_breakfast_carb(food: dict[str, Any]) -> bool:
 def is_savory_starch(food: dict[str, Any]) -> bool:
     if _food_has_any_token(food, SAVORY_STARCH_TOKENS):
         return True
+
+    if is_sweet_breakfast_carb(food):
+        return False
 
     functional_group = derive_functional_group(food)
     category = str(food.get("category") or "").strip().lower()
@@ -443,6 +481,22 @@ def get_food_fat_density(food: dict) -> float:
     return get_food_macro_mass_profile(food)["fat_grams"]
 
 
+def is_concentrated_fruit_candidate(food: dict[str, Any]) -> bool:
+    if derive_functional_group(food) != "fruit":
+        return False
+
+    if _food_has_any_token(food, CONCENTRATED_FRUIT_TOKENS):
+        return True
+
+    reference_amount = max(float(food.get("reference_amount") or 1.0), 1.0)
+    carb_density = max(float(food.get("carb_grams") or 0.0), 0.0) / reference_amount
+    calorie_density = max(float(food.get("calories") or 0.0), 0.0) / reference_amount
+    return (
+        carb_density >= CONCENTRATED_FRUIT_CARB_DENSITY_THRESHOLD
+        and calorie_density >= CONCENTRATED_FRUIT_CALORIE_DENSITY_THRESHOLD
+    )
+
+
 def is_lean_protein_candidate(food: dict) -> bool:
     food_code = str(food.get("code") or "").strip().lower()
     if food_code in LEAN_PROTEIN_CODES:
@@ -536,6 +590,10 @@ def get_food_role_fit_score(
         if meal_slot == "early":
             if is_sweet_breakfast_carb(food) or _food_has_any_token(food, BREAKFAST_BREAD_TOKENS):
                 score += 0.22
+            if derive_functional_group(food) == "fruit" and is_concentrated_fruit_candidate(food):
+                score -= CONCENTRATED_FRUIT_MAIN_CARB_PENALTY
+                if meal_role == "breakfast":
+                    score -= BREAKFAST_CONCENTRATED_FRUIT_MAIN_CARB_EXTRA_PENALTY
         elif is_savory_starch(food):
             score += 0.24
         if meal_role in LOW_FAT_MEAL_ROLES and is_fast_digesting_carb(food):
@@ -632,6 +690,10 @@ def get_support_food_fit_score(
             score += 0.42
         score += macro_density["carb_grams"] * 0.45
         score -= fat_density * 8.0
+        if is_concentrated_fruit_candidate(food):
+            score -= CONCENTRATED_FRUIT_SUPPORT_PENALTY
+            if meal_slot == "early" or meal_role == "breakfast":
+                score -= BREAKFAST_CONCENTRATED_FRUIT_SUPPORT_EXTRA_PENALTY
     elif support_role == "dairy":
         score += protein_density * 1.1
         if meal_slot == "early":

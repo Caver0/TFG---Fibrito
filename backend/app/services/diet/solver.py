@@ -25,6 +25,7 @@ from app.services.diet.candidates import (
     is_breakfast_fat,
     is_breakfast_only_protein,
     is_cooking_fat,
+    is_concentrated_fruit_candidate,
     is_fast_digesting_carb,
     is_food_allowed_for_role_and_slot,
     is_lean_protein_candidate,
@@ -414,6 +415,13 @@ def build_solution_score(
 
         if role == "carb" and training_focus and food["code"] in {"rice", "pasta", "oats"}:
             score -= 0.2
+        if (
+            role == "carb"
+            and meal_slot == "early"
+            and derive_functional_group(food) == "fruit"
+            and is_concentrated_fruit_candidate(food)
+        ):
+            score += 0.9
 
         if role == "protein" and meal_slot == "early" and food["code"] in {"egg_whites", "greek_yogurt"}:
             score -= 0.1

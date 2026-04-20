@@ -194,7 +194,7 @@ VALID_MEAL_ROLES = {"meal", "breakfast", "pre_workout", "post_workout", "dinner"
 LOW_FAT_MEAL_ROLES = {"pre_workout", "post_workout", "training_focus"}
 MAX_ROLE_CANDIDATES_PER_MEAL = {
     "protein": 10,
-    "carb": 10,
+    "carb": 12,
     "fat": 8,
 }
 MAX_SUPPORT_CANDIDATES_PER_ROLE = 3
