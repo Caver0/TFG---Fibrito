@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 from app.utils.meal_roles import MealRole, MealSlot, format_meal_role_label, get_meal_slot, resolve_meal_role
+from app.utils.normalization import normalize_food_to_raw_reference
 
 TrainingTimeOfDay = Literal["manana", "mediodia", "tarde", "noche"]
 PERCENTAGE_PRECISION = Decimal("0.1")
@@ -446,12 +447,13 @@ def _derive_meal_semantics(
 
 
 def serialize_diet_food(document: dict[str, Any]) -> DietFood:
+    food_code = document.get("food_code") or document.get("code")
     return DietFood(
-        food_code=document.get("food_code") or document.get("code"),
+        food_code=food_code,
         source=_normalize_diet_source(document.get("source")),
         origin_source=_normalize_diet_source(document.get("origin_source", document.get("source"))),
         spoonacular_id=document.get("spoonacular_id"),
-        name=document["name"],
+        name=normalize_food_to_raw_reference(str(document["name"]), food_code=food_code),
         category=document.get("category", "otros"),
         quantity=_round_decimal(document["quantity"], FOOD_PRECISION),
         unit=document["unit"],

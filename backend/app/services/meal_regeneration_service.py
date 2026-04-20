@@ -31,6 +31,7 @@ from app.services.food_catalog_service import (
 )
 from app.services.food_group_service import derive_functional_group
 from app.services.food_preferences_service import FoodPreferenceConflictError, build_user_food_preferences_profile
+from app.services.meal_coherence_service import apply_generation_coherence, build_generation_food_lookup
 from app.services.meal_distribution_service import get_training_focus_indexes
 
 
@@ -486,6 +487,7 @@ def regenerate_meal(
     meal = diet.meals[meal_index]
     preference_profile = build_user_food_preferences_profile(user)
     internal_food_lookup = get_internal_food_lookup()
+    full_food_lookup = build_generation_food_lookup(database)
     daily_food_usage = track_daily_food_usage_excluding_current_meal(
         diet,
         meal_index_to_exclude=meal_index,
@@ -507,7 +509,7 @@ def regenerate_meal(
             meal_index=meal_index,
             meals_count=diet.meals_count,
             training_focus=training_focus,
-            food_lookup=internal_food_lookup,
+            food_lookup=full_food_lookup,
             preference_profile=preference_profile,
             daily_food_usage=daily_food_usage,
             excluded_food_codes=current_food_codes,
@@ -519,17 +521,38 @@ def regenerate_meal(
             meal_index=meal_index,
             meals_count=diet.meals_count,
             training_focus=training_focus,
-            food_lookup=internal_food_lookup,
+            food_lookup=full_food_lookup,
             preference_profile=preference_profile,
             daily_food_usage=daily_food_usage,
             variety_seed=variety_seed,
         )
 
-    selected_food_codes = collect_selected_food_codes([regenerated_meal_plan])
-    resolved_food_lookup, lookup_metadata = resolve_foods_by_codes(
-        database,
-        selected_food_codes,
+    regenerated_meal_plan = apply_generation_coherence(
+        meal=meal,
+        meal_index=meal_index,
+        meals_count=diet.meals_count,
+        training_focus=training_focus,
+        meal_plan=regenerated_meal_plan,
+        food_lookup=full_food_lookup,
+        preference_profile=preference_profile,
     )
+
+    selected_food_codes = collect_selected_food_codes([regenerated_meal_plan])
+    internal_codes_to_resolve = [code for code in selected_food_codes if code in internal_food_lookup]
+    if internal_codes_to_resolve:
+        resolved_food_lookup, lookup_metadata = resolve_foods_by_codes(
+            database,
+            internal_codes_to_resolve,
+        )
+    else:
+        resolved_food_lookup = {}
+        lookup_metadata = {
+            "food_catalog_version": diet.food_catalog_version,
+            "catalog_source_strategy": diet.catalog_source_strategy,
+            "spoonacular_attempted": False,
+            "spoonacular_attempts": 0,
+            "resolved_foods_count": len(selected_food_codes),
+        }
     generated_meal = generate_food_based_meal(
         meal=meal,
         meal_index=meal_index,
@@ -537,7 +560,7 @@ def regenerate_meal(
         training_focus=training_focus,
         meal_plan=regenerated_meal_plan,
         food_lookup={
-            **internal_food_lookup,
+            **full_food_lookup,
             **resolved_food_lookup,
         },
     )

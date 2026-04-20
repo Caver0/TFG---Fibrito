@@ -1,0 +1,227 @@
+{
+  "version": "2.0",
+  "templates": [
+    {
+      "id": "cereal_milk",
+      "name": "Cereales con leche",
+      "meal_types": ["breakfast", "snack"],
+      "priority": 100,
+      "foods": [
+        { "name": "cornflakes", "role": "carb", "ratio": 0.55 },
+        { "name": "leche semidesnatada", "role": "liquid", "ratio": 0.45 }
+      ]
+    },
+    {
+      "id": "oats_yogurt_banana",
+      "name": "Avena con yogur y platano",
+      "meal_types": ["breakfast", "snack", "preworkout"],
+      "priority": 95,
+      "foods": [
+        { "name": "avena", "role": "carb", "ratio": 0.4 },
+        { "name": "yogur", "role": "protein", "ratio": 0.35 },
+        { "name": "platano", "role": "carb", "ratio": 0.25 }
+      ]
+    },
+    {
+      "id": "toast_jam",
+      "name": "Tostadas con mermelada",
+      "meal_types": ["breakfast", "snack"],
+      "priority": 85,
+      "foods": [
+        { "name": "pan tostado", "role": "carb", "ratio": 0.75 },
+        { "name": "mermelada", "role": "spread", "ratio": 0.25 }
+      ]
+    },
+    {
+      "id": "toast_tomato_oil",
+      "name": "Tostadas con tomate y aceite",
+      "meal_types": ["breakfast"],
+      "priority": 90,
+      "foods": [
+        { "name": "pan tostado", "role": "carb", "ratio": 0.7 },
+        { "name": "tomate", "role": "vegetable", "ratio": 0.2 },
+        { "name": "aceite de oliva", "role": "fat", "ratio": 0.1 }
+      ]
+    },
+    {
+      "id": "toast_pb_banana",
+      "name": "Tostadas con crema de cacahuete y platano",
+      "meal_types": ["breakfast", "preworkout"],
+      "priority": 92,
+      "foods": [
+        { "name": "pan tostado", "role": "carb", "ratio": 0.6 },
+        { "name": "crema de cacahuete", "role": "fat", "ratio": 0.2 },
+        { "name": "platano", "role": "carb", "ratio": 0.2 }
+      ]
+    },
+    {
+      "id": "yogurt_bowl",
+      "name": "Yogur con fruta y cereales",
+      "meal_types": ["breakfast", "snack"],
+      "priority": 90,
+      "foods": [
+        { "name": "yogur", "role": "protein", "ratio": 0.5 },
+        { "name": "fruta", "role": "carb", "ratio": 0.25 },
+        { "name": "cereales", "role": "carb", "ratio": 0.2 },
+        { "name": "frutos secos", "role": "fat", "optional": true }
+      ]
+    },
+    {
+      "id": "pasta_bolognese",
+      "name": "Pasta bolonesa",
+      "meal_types": ["lunch", "dinner"],
+      "priority": 95,
+      "foods": [
+        { "name": "pasta", "role": "carb", "ratio": 0.45 },
+        { "name": "carne picada magra", "role": "protein", "ratio": 0.35 },
+        { "name": "tomate triturado", "role": "sauce", "ratio": 0.15 },
+        { "name": "cebolla", "role": "vegetable", "optional": true },
+        { "name": "pimiento", "role": "vegetable", "optional": true }
+      ]
+    },
+    {
+      "id": "rice_chicken",
+      "name": "Arroz con pollo",
+      "meal_types": ["lunch", "dinner", "postworkout"],
+      "priority": 100,
+      "foods": [
+        { "name": "arroz", "role": "carb", "ratio": 0.5 },
+        { "name": "pollo", "role": "protein", "ratio": 0.35 },
+        { "name": "verduras", "role": "vegetable", "ratio": 0.15 }
+      ]
+    },
+    {
+      "id": "pasta_tuna",
+      "name": "Pasta con atun",
+      "meal_types": ["lunch", "dinner"],
+      "priority": 90,
+      "foods": [
+        { "name": "pasta", "role": "carb", "ratio": 0.5 },
+        { "name": "atun", "role": "protein", "ratio": 0.3 },
+        { "name": "tomate", "role": "sauce", "ratio": 0.2 }
+      ]
+    },
+    {
+      "id": "rice_egg",
+      "name": "Arroz con huevo",
+      "meal_types": ["lunch", "dinner"],
+      "priority": 80,
+      "foods": [
+        { "name": "arroz", "role": "carb", "ratio": 0.6 },
+        { "name": "huevo", "role": "protein", "ratio": 0.4 }
+      ]
+    },
+    {
+      "id": "chicken_potato",
+      "name": "Pollo con patata",
+      "meal_types": ["lunch", "dinner"],
+      "priority": 95,
+      "foods": [
+        { "name": "pollo", "role": "protein", "ratio": 0.5 },
+        { "name": "patata", "role": "carb", "ratio": 0.5 }
+      ]
+    },
+    {
+      "id": "salmon_rice",
+      "name": "Salmon con arroz",
+      "meal_types": ["lunch", "dinner"],
+      "priority": 90,
+      "foods": [
+        { "name": "salmon", "role": "protein_fat", "ratio": 0.4 },
+        { "name": "arroz", "role": "carb", "ratio": 0.6 }
+      ]
+    },
+    {
+      "id": "chicken_salad",
+      "name": "Ensalada con pollo",
+      "meal_types": ["lunch", "dinner"],
+      "priority": 85,
+      "foods": [
+        { "name": "pollo", "role": "protein", "ratio": 0.4 },
+        { "name": "ensalada", "role": "vegetable", "ratio": 0.4 },
+        { "name": "aceite de oliva", "role": "fat", "ratio": 0.2 }
+      ]
+    },
+    {
+      "id": "wrap_chicken",
+      "name": "Wrap de pollo",
+      "meal_types": ["lunch", "dinner", "snack"],
+      "priority": 92,
+      "foods": [
+        { "name": "wrap", "role": "carb", "ratio": 0.5 },
+        { "name": "pollo", "role": "protein", "ratio": 0.35 },
+        { "name": "lechuga", "role": "vegetable", "ratio": 0.15 }
+      ]
+    },
+    {
+      "id": "omelette_toast",
+      "name": "Tortilla con tostadas",
+      "meal_types": ["lunch", "dinner"],
+      "priority": 85,
+      "foods": [
+        { "name": "huevos", "role": "protein", "ratio": 0.5 },
+        { "name": "pan tostado", "role": "carb", "ratio": 0.5 }
+      ]
+    },
+    {
+      "id": "rice_cakes_turkey",
+      "name": "Tortitas de arroz con pavo",
+      "meal_types": ["snack", "preworkout"],
+      "priority": 90,
+      "foods": [
+        { "name": "tortitas de arroz", "role": "carb", "ratio": 0.6 },
+        { "name": "pavo", "role": "protein", "ratio": 0.4 }
+      ]
+    },
+    {
+      "id": "rice_cakes_pb",
+      "name": "Tortitas con crema de cacahuete",
+      "meal_types": ["snack", "preworkout"],
+      "priority": 85,
+      "foods": [
+        { "name": "tortitas de arroz", "role": "carb", "ratio": 0.6 },
+        { "name": "crema de cacahuete", "role": "fat", "ratio": 0.4 }
+      ]
+    },
+    {
+      "id": "yogurt_nuts",
+      "name": "Yogur con frutos secos",
+      "meal_types": ["snack"],
+      "priority": 80,
+      "foods": [
+        { "name": "yogur", "role": "protein", "ratio": 0.7 },
+        { "name": "frutos secos", "role": "fat", "ratio": 0.3 }
+      ]
+    },
+    {
+      "id": "fruit_pb",
+      "name": "Fruta con crema de cacahuete",
+      "meal_types": ["snack"],
+      "priority": 75,
+      "foods": [
+        { "name": "platano", "role": "carb", "ratio": 0.6 },
+        { "name": "crema de cacahuete", "role": "fat", "ratio": 0.4 }
+      ]
+    },
+    {
+      "id": "postworkout_rice_chicken",
+      "name": "Arroz con pollo post-entreno",
+      "meal_types": ["postworkout"],
+      "priority": 100,
+      "foods": [
+        { "name": "arroz", "role": "carb", "ratio": 0.6 },
+        { "name": "pollo", "role": "protein", "ratio": 0.4 }
+      ]
+    },
+    {
+      "id": "postworkout_yogurt_cereal",
+      "name": "Yogur con cereales post-entreno",
+      "meal_types": ["postworkout"],
+      "priority": 95,
+      "foods": [
+        { "name": "yogur", "role": "protein", "ratio": 0.5 },
+        { "name": "cereales", "role": "carb", "ratio": 0.5 }
+      ]
+    }
+  ]
+}

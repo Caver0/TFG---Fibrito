@@ -4,6 +4,7 @@ from app.schemas.diet import DietMeal, TrainingTimeOfDay
 from app.schemas.user import UserPublic
 from app.services.food_catalog_service import get_food_catalog_version, get_internal_food_lookup, resolve_foods_by_codes
 from app.services.food_preferences_service import build_user_food_preferences_profile, count_preferred_food_matches_in_meals
+from app.services.meal_coherence_service import apply_generation_coherence, build_generation_food_lookup
 from app.services.meal_distribution_service import generate_meal_distribution_targets
 
 from app.services.diet.candidates import (
@@ -123,15 +124,7 @@ def generate_food_based_diet(
         training_time_of_day=training_time_of_day,
     )
     internal_food_lookup = get_internal_food_lookup()
-
-    from app.schemas.food import serialize_food_catalog_item
-    from copy import deepcopy
-
-    full_food_lookup = deepcopy(internal_food_lookup)
-    local_foods_cursor = database.foods_catalog.find({"suitable_meals": {"$exists": True, "$not": {"$size": 0}}})
-    for doc in local_foods_cursor:
-        serialized_dict = serialize_food_catalog_item(doc).model_dump()
-        full_food_lookup[serialized_dict["code"]] = serialized_dict
+    full_food_lookup = build_generation_food_lookup(database)
 
     daily_food_usage = create_daily_food_usage_tracker()
     weekly_food_usage = build_weekly_food_usage(database, user.id)
@@ -202,7 +195,20 @@ def generate_food_based_diet(
         planned_meals.append(planned_meal)
         track_food_usage_across_day(daily_food_usage, planned_meal)
 
-    selected_food_codes = collect_selected_food_codes(planned_meals)
+    coherent_planned_meals = [
+        apply_generation_coherence(
+            meal=DietMeal.model_validate(meal),
+            meal_index=meal_index,
+            meals_count=meals_count,
+            training_focus=meals_context[meal_index]["training_focus"],
+            meal_plan=planned_meals[meal_index],
+            food_lookup=full_food_lookup,
+            preference_profile=preference_profile,
+        )
+        for meal_index, meal in enumerate(meal_distribution["meals"])
+    ]
+
+    selected_food_codes = collect_selected_food_codes(coherent_planned_meals)
     internal_codes_to_resolve = [code for code in selected_food_codes if code in internal_food_lookup]
     resolved_food_lookup, lookup_metadata = resolve_foods_by_codes(
         database,
@@ -221,7 +227,7 @@ def generate_food_based_diet(
             meal_index=meal_index,
             meals_count=meals_count,
             training_focus=meal_distribution["training_optimization_applied"] and meal_index in focus_indexes,
-            meal_plan=planned_meals[meal_index],
+            meal_plan=coherent_planned_meals[meal_index],
             food_lookup=food_lookup,
         )
         for meal_index, meal in enumerate(meal_distribution["meals"])

@@ -18,7 +18,12 @@ from app.services.spoonacular_service import (
     get_spoonacular_status,
     search_ingredients,
 )
-from app.utils.normalization import build_food_aliases, normalize_food_name, translate_food_query_for_search
+from app.utils.normalization import (
+    build_food_aliases,
+    normalize_food_name,
+    normalize_food_to_raw_reference,
+    translate_food_query_for_search,
+)
 from app.services.food_classifier_service import predict_suitable_meals
 
 INTERNAL_FOOD_SOURCE = "internal_catalog"
@@ -46,6 +51,25 @@ NUTRIENT_NAME_MAP = {
     "fat_grams": "Fat",
     "carb_grams": "Carbohydrates",
 }
+RAW_INTERNAL_REFERENCE_FIELDS = (
+    "normalized_name",
+    "original_name",
+    "name",
+    "display_name",
+    "category",
+    "reference_amount",
+    "reference_unit",
+    "grams_per_reference",
+    "calories",
+    "protein_grams",
+    "fat_grams",
+    "carb_grams",
+    "default_quantity",
+    "min_quantity",
+    "max_quantity",
+    "step",
+    "suitable_meals",
+)
 
 
 def _build_resolution_summary(
@@ -101,7 +125,7 @@ def _infer_food_category(name: str, protein_grams: float, fat_grams: float, carb
 
 
 def _build_external_food_code(name: str, spoonacular_id: int | None = None) -> str:
-    base_code = normalize_food_name(name).replace(" ", "_") or "food"
+    base_code = normalize_food_name(normalize_food_to_raw_reference(name)).replace(" ", "_") or "food"
     if spoonacular_id is not None:
         return f"spoonacular_{base_code}_{spoonacular_id}"
 
@@ -131,6 +155,76 @@ def _extract_nutrient_amounts(nutrients: list[dict[str, Any]]) -> dict[str, floa
     return extracted_values
 
 
+def _get_internal_raw_reference(food: dict[str, Any]) -> dict[str, Any] | None:
+    internal_lookup = get_internal_food_lookup()
+
+    for explicit_code in (food.get("internal_code"), food.get("code")):
+        normalized_code = str(explicit_code or "").strip()
+        if normalized_code in internal_lookup:
+            return internal_lookup[normalized_code]
+
+    candidate_aliases = build_food_aliases(
+        normalize_food_to_raw_reference(str(food.get("name") or ""), food_code=food.get("code")),
+        normalize_food_to_raw_reference(str(food.get("display_name") or ""), food_code=food.get("code")),
+        normalize_food_to_raw_reference(str(food.get("original_name") or ""), food_code=food.get("code")),
+        str(food.get("code") or "").replace("_", " "),
+        str(food.get("internal_code") or "").replace("_", " "),
+        *(food.get("aliases") or []),
+    )
+    if not candidate_aliases:
+        return None
+
+    for internal_food in internal_lookup.values():
+        internal_aliases = set(internal_food.get("aliases", []))
+        if internal_food["normalized_name"] in candidate_aliases or internal_aliases.intersection(candidate_aliases):
+            return internal_food
+
+    return None
+
+
+def _align_food_with_raw_reference(food: dict[str, Any]) -> dict[str, Any]:
+    aligned_food = deepcopy(food)
+    raw_name = normalize_food_to_raw_reference(
+        str(aligned_food.get("name") or aligned_food.get("display_name") or aligned_food.get("original_name") or ""),
+        food_code=aligned_food.get("internal_code") or aligned_food.get("code"),
+    )
+    raw_display_name = normalize_food_to_raw_reference(
+        str(aligned_food.get("display_name") or raw_name),
+        food_code=aligned_food.get("internal_code") or aligned_food.get("code"),
+    )
+    raw_original_name = normalize_food_to_raw_reference(
+        str(aligned_food.get("original_name") or raw_name),
+        food_code=aligned_food.get("internal_code") or aligned_food.get("code"),
+    )
+
+    aligned_food["name"] = raw_name or raw_display_name or raw_original_name
+    aligned_food["display_name"] = raw_display_name or aligned_food["name"]
+    aligned_food["original_name"] = raw_original_name or aligned_food["name"]
+    aligned_food["normalized_name"] = normalize_food_name(aligned_food["name"])
+
+    internal_reference = _get_internal_raw_reference(aligned_food)
+    if internal_reference is not None:
+        for field_name in RAW_INTERNAL_REFERENCE_FIELDS:
+            aligned_food[field_name] = internal_reference.get(field_name)
+        aligned_food["name"] = internal_reference["name"]
+        aligned_food["display_name"] = internal_reference["name"]
+        aligned_food["original_name"] = internal_reference["name"]
+        aligned_food["normalized_name"] = internal_reference["normalized_name"]
+        aligned_food["category"] = internal_reference["category"]
+        aligned_food["internal_code"] = internal_reference["code"]
+
+    aligned_food["aliases"] = build_food_aliases(
+        aligned_food.get("name", ""),
+        aligned_food.get("display_name", ""),
+        aligned_food.get("original_name", ""),
+        str(aligned_food.get("code") or "").replace("_", " "),
+        str(aligned_food.get("internal_code") or "").replace("_", " "),
+        *(food.get("aliases") or []),
+        *(internal_reference.get("aliases", []) if internal_reference else []),
+    )
+    return aligned_food
+
+
 def _build_internal_food_entry(food: dict[str, Any]) -> dict[str, Any]:
     normalized_name = normalize_food_name(food["name"])
     aliases = build_food_aliases(
@@ -154,10 +248,15 @@ def _build_internal_food_entry(food: dict[str, Any]) -> dict[str, Any]:
 
 
 def _serialize_cached_food(document: dict[str, Any]) -> dict[str, Any]:
-    serialized_food = serialize_food_catalog_item(document).model_dump()
+    aligned_document = _align_food_with_raw_reference({
+        **document,
+        "source": LOCAL_CACHE_FOOD_SOURCE,
+        "origin_source": document.get("origin_source", SPOONACULAR_FOOD_SOURCE),
+    })
+    serialized_food = serialize_food_catalog_item(aligned_document).model_dump()
     serialized_food["name"] = serialized_food["display_name"]
     serialized_food["source"] = LOCAL_CACHE_FOOD_SOURCE
-    serialized_food["aliases"] = document.get("aliases", [])
+    serialized_food["aliases"] = aligned_document.get("aliases", [])
     serialized_food["external_search_enabled"] = False
     return annotate_food_compatibility(serialized_food)
 
@@ -236,11 +335,13 @@ def _normalize_spoonacular_food(
     nutrients = _extract_nutrient_amounts(
         ingredient_information.get("nutrition", {}).get("nutrients", [])
     )
-    normalized_name = normalize_food_name(
+    resolved_name = normalize_food_to_raw_reference(
         ingredient_information.get("name")
         or ingredient_information.get("originalName")
-        or matched_query
+        or matched_query,
+        food_code=internal_food["code"] if internal_food else None,
     )
+    normalized_name = normalize_food_name(resolved_name)
     grams_per_reference = ingredient_information.get("nutrition", {}).get("weightPerServing", {}).get("amount")
     if not grams_per_reference:
         if unit == "g":
@@ -251,11 +352,7 @@ def _normalize_spoonacular_food(
             grams_per_reference = amount
 
     grams_per_reference = float(grams_per_reference)
-    display_name = internal_food["name"] if internal_food else str(
-        ingredient_information.get("name")
-        or ingredient_information.get("originalName")
-        or matched_query
-    )
+    display_name = internal_food["name"] if internal_food else resolved_name
     category = internal_food["category"] if internal_food else _infer_food_category(
         display_name,
         nutrients["protein_grams"],
@@ -267,15 +364,15 @@ def _normalize_spoonacular_food(
         ingredient_information.get("id"),
     )
 
-    return annotate_food_compatibility({
+    normalized_food = _align_food_with_raw_reference({
         "code": code,
         "internal_code": internal_food["code"] if internal_food else None,
         "normalized_name": normalized_name,
-        "original_name": str(
+        "original_name": normalize_food_to_raw_reference(str(
             ingredient_information.get("originalName")
             or ingredient_information.get("name")
             or matched_query
-        ),
+        )),
         "name": display_name,
         "display_name": display_name,
         "category": category,
@@ -303,6 +400,7 @@ def _normalize_spoonacular_food(
             *internal_aliases,
         ),
     })
+    return annotate_food_compatibility(normalized_food)
 
 
 def get_food_catalog() -> list[dict[str, Any]]:
@@ -350,15 +448,22 @@ def build_catalog_food_from_diet_food(food_document: dict[str, Any]) -> dict[str
             food_document.get("spoonacular_id"),
         )
     )
-    name = str(food_document.get("name") or food_code.replace("_", " "))
+    name = normalize_food_to_raw_reference(
+        str(food_document.get("name") or food_code.replace("_", " ")),
+        food_code=food_document.get("internal_code") or food_code,
+    )
     source = str(food_document.get("source") or INTERNAL_FOOD_SOURCE)
     origin_source = str(food_document.get("origin_source") or source)
+    original_name = normalize_food_to_raw_reference(
+        str(food_document.get("original_name") or name),
+        food_code=food_document.get("internal_code") or food_code,
+    )
 
     return annotate_food_compatibility({
         "code": food_code,
         "internal_code": food_document.get("internal_code"),
         "normalized_name": normalize_food_name(name),
-        "original_name": str(food_document.get("original_name") or name),
+        "original_name": original_name,
         "name": name,
         "display_name": name,
         "category": str(food_document.get("category") or "otros"),
@@ -381,7 +486,7 @@ def build_catalog_food_from_diet_food(food_document: dict[str, Any]) -> dict[str
         "aliases": build_food_aliases(
             name,
             str(food_document.get("display_name") or ""),
-            str(food_document.get("original_name") or ""),
+            original_name,
             food_code.replace("_", " "),
         ),
     })
@@ -440,12 +545,14 @@ def _score_food_match(food: dict[str, Any], normalized_query: str) -> tuple[int,
 
 def _build_query_variants(query: str) -> list[str]:
     normalized_query = normalize_food_name(query)
+    raw_reference_query = normalize_food_to_raw_reference(query)
+    normalized_raw_query = normalize_food_name(raw_reference_query)
     translated_query = translate_food_query_for_search(query)
     return [
         variant
         for variant in dict.fromkeys(
             variant
-            for variant in (query, normalized_query, translated_query)
+            for variant in (query, raw_reference_query, normalized_query, normalized_raw_query, translated_query)
             if str(variant or "").strip()
         )
     ]
@@ -463,7 +570,7 @@ def find_food_by_code_or_name(
         if matched_food:
             return matched_food
 
-    normalized_name = normalize_food_name(food_name or "")
+    normalized_name = normalize_food_name(normalize_food_to_raw_reference(food_name or "")) or normalize_food_name(food_name or "")
     if not normalized_name:
         return None
 
@@ -530,7 +637,7 @@ def cache_spoonacular_food(database, food: dict[str, Any]) -> dict[str, Any]:
     now = datetime.now(UTC)
     
     # AI Auto-Tagging
-    food_to_cache = deepcopy(food)
+    food_to_cache = _align_food_with_raw_reference(deepcopy(food))
     if not food_to_cache.get("suitable_meals"):
         food_to_cache["suitable_meals"] = predict_suitable_meals(food_to_cache)
         
@@ -550,7 +657,7 @@ def cache_spoonacular_food(database, food: dict[str, Any]) -> dict[str, Any]:
         existing_document = collection.find_one({"internal_code": food["internal_code"]})
 
     if existing_document is None:
-        existing_document = collection.find_one({"normalized_name": food["normalized_name"]})
+        existing_document = collection.find_one({"normalized_name": food_to_cache["normalized_name"]})
 
     if existing_document:
         document["created_at"] = existing_document.get("created_at", now)
@@ -599,7 +706,7 @@ def _fetch_spoonacular_food(
 
 
 def search_internal_food(query: str, limit: int = 10) -> list[dict[str, Any]]:
-    normalized_query = normalize_food_name(query)
+    normalized_query = normalize_food_name(normalize_food_to_raw_reference(query)) or normalize_food_name(query)
     if not normalized_query:
         return []
 
@@ -613,7 +720,7 @@ def search_internal_food(query: str, limit: int = 10) -> list[dict[str, Any]]:
 
 
 def search_cached_foods(database, query: str, limit: int = 10) -> list[dict[str, Any]]:
-    normalized_query = normalize_food_name(query)
+    normalized_query = normalize_food_name(normalize_food_to_raw_reference(query)) or normalize_food_name(query)
     if not normalized_query:
         return []
 

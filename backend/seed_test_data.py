@@ -67,7 +67,7 @@ DIET_MEALS_TEMPLATE = [
         "meal_number": 1,
         "meal_slot": "early",
         "foods": [
-            _food("oatmeal_cooked",      "Avena cocida",           "carbohidratos", 120,  83,  3.0,  1.7, 14.4),
+            _food("oats",                "Avena",                  "carbohidratos",  60, 233, 10.1,  4.1, 39.8),
             _food("greek_yogurt_plain",  "Yogur griego natural",   "lacteos",       200, 118, 10.0,  3.6,  9.2),
             _food("banana",              "Plátano",                 "frutas",        120, 107,  1.3,  0.4, 27.0),
             _food("almonds",             "Almendras",               "grasas",         30, 173,  6.3, 15.0,  5.7),
@@ -78,9 +78,9 @@ DIET_MEALS_TEMPLATE = [
         "meal_number": 2,
         "meal_slot": "main",
         "foods": [
-            _food("chicken_breast_cooked", "Pechuga de pollo cocida", "proteinas",    200, 330, 62.0,  7.2,  0.0),
-            _food("white_rice_cooked",     "Arroz blanco cocido",     "carbohidratos",250, 325,  6.0,  0.5, 71.8),
-            _food("broccoli_cooked",       "Brócoli cocido",          "vegetales",    150,  55,  4.7,  0.5, 10.0),
+            _food("chicken_breast",        "Pechuga de pollo",        "proteinas",    200, 240, 46.0,  4.0,  0.0),
+            _food("rice",                  "Arroz",                   "carbohidratos", 90, 328,  6.4,  0.6, 72.0),
+            _food("broccoli",              "Brócoli",                 "vegetales",    150,  51,  4.2,  0.6,  9.9),
             _food("olive_oil",             "Aceite de oliva",          "grasas",       10,  88,  0.0, 10.0,  0.0),
         ],
     },
@@ -97,9 +97,9 @@ DIET_MEALS_TEMPLATE = [
         "meal_number": 4,
         "meal_slot": "late",
         "foods": [
-            _food("salmon_fillet_baked",  "Salmón al horno",       "proteinas",    150, 265, 37.5, 13.0,  0.0),
-            _food("sweet_potato_cooked",  "Boniato cocido",        "carbohidratos",180, 162,  3.6,  0.2, 37.6),
-            _food("spinach_cooked",       "Espinacas cocidas",     "vegetales",    100,  29,  3.0,  0.4,  3.7),
+            _food("salmon",               "Salmón",                 "proteinas",    150, 300, 29.7, 20.1,  0.0),
+            _food("sweet_potato",         "Boniato",                "carbohidratos",180, 156,  2.9,  0.2, 36.2),
+            _food("spinach",              "Espinacas",              "vegetales",    100,  29,  2.9,  0.4,  3.6),
         ],
     },
 ]

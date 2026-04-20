@@ -1,0 +1,174 @@
+{
+  "version": "2.0",
+  "description": "Reglas de coherencia alimentaria para generacion de dietas. Diferencia entre generacion estricta y sustitucion flexible.",
+  "rules": [
+    {
+      "id": "toast_requires_topping",
+      "trigger_foods": ["pan", "pan tostado", "tostadas", "tostada", "pan de molde"],
+      "trigger_tags": ["bread", "toast"],
+      "food_role": "base",
+      "requires_companion": true,
+      "companion_strategy": "force_preferred_on_generation",
+      "preferred_meal_slots": ["breakfast", "snack"],
+      "preferred_companions": {
+        "foods": [
+          "aceite de oliva",
+          "tomate",
+          "pavo",
+          "crema de cacahuete",
+          "mermelada",
+          "mermelada de fresa",
+          "mermelada de melocoton",
+          "queso fresco",
+          "huevo"
+        ],
+        "tags": ["spread", "jam", "lean_protein", "healthy_fat"]
+      },
+      "allow_user_override": true,
+      "forbidden_if_alone": true,
+      "priority": 100,
+      "user_message_if_broken": "Las tostadas deben llevar algun acompanamiento."
+    },
+    {
+      "id": "breakfast_cereal_requires_dairy",
+      "trigger_foods": ["cornflakes", "cereales", "muesli", "granola"],
+      "trigger_tags": ["breakfast_cereal"],
+      "food_role": "base",
+      "requires_companion": true,
+      "companion_strategy": "force_preferred_on_generation",
+      "preferred_meal_slots": ["breakfast", "snack", "preworkout"],
+      "preferred_companions": {
+        "foods": [
+          "leche",
+          "leche semidesnatada",
+          "leche desnatada",
+          "bebida vegetal",
+          "yogur",
+          "yogur griego",
+          "queso fresco batido"
+        ],
+        "tags": ["milk", "dairy", "yogurt"]
+      },
+      "allow_user_override": true,
+      "forbidden_if_alone": true,
+      "priority": 100,
+      "user_message_if_broken": "Los cereales deben ir con leche o yogur."
+    },
+    {
+      "id": "oats_requires_base",
+      "trigger_foods": ["avena", "copos de avena"],
+      "trigger_tags": ["oats"],
+      "food_role": "base",
+      "requires_companion": true,
+      "companion_strategy": "force_preferred_on_generation",
+      "preferred_meal_slots": ["breakfast", "snack", "preworkout"],
+      "preferred_companions": {
+        "foods": [
+          "leche",
+          "bebida vegetal",
+          "yogur",
+          "queso fresco batido"
+        ],
+        "tags": ["milk", "dairy"]
+      },
+      "allow_user_override": true,
+      "forbidden_if_alone": true,
+      "priority": 95
+    },
+    {
+      "id": "rice_cakes_require_companion",
+      "trigger_foods": ["tortitas de arroz", "tortitas de maiz"],
+      "trigger_tags": ["rice_cake"],
+      "food_role": "base",
+      "requires_companion": true,
+      "companion_strategy": "force_preferred_on_generation",
+      "preferred_companions": {
+        "foods": [
+          "pavo",
+          "crema de cacahuete",
+          "queso fresco",
+          "atun",
+          "huevo"
+        ],
+        "tags": ["lean_protein", "spread"]
+      },
+      "allow_user_override": true,
+      "forbidden_if_alone": true,
+      "priority": 90
+    },
+    {
+      "id": "peanut_butter_not_alone",
+      "trigger_foods": ["crema de cacahuete", "mantequilla de cacahuete"],
+      "food_role": "complement",
+      "requires_companion": true,
+      "valid_base_tags": ["bread", "oats", "fruit", "yogurt"],
+      "forbidden_if_alone": true,
+      "priority": 100,
+      "user_message_if_broken": "La crema de cacahuete no debe aparecer sola."
+    },
+    {
+      "id": "pasta_requires_pairing",
+      "trigger_foods": ["pasta", "macarrones", "espaguetis"],
+      "food_role": "base",
+      "requires_companion": true,
+      "companion_strategy": "force_preferred_on_generation",
+      "preferred_companions": {
+        "foods": [
+          "carne picada magra",
+          "pollo",
+          "atun",
+          "tomate triturado",
+          "tomate frito"
+        ],
+        "tags": ["protein", "sauce"]
+      },
+      "allow_user_override": true,
+      "forbidden_if_alone": true,
+      "priority": 95
+    },
+    {
+      "id": "rice_requires_pairing",
+      "trigger_foods": ["arroz"],
+      "food_role": "base",
+      "requires_companion": true,
+      "companion_strategy": "force_preferred_on_generation",
+      "preferred_companions": {
+        "foods": ["pollo", "pavo", "atun", "carne picada", "huevo", "verduras"],
+        "tags": ["protein", "vegetables"]
+      },
+      "allow_user_override": true,
+      "forbidden_if_alone": true,
+      "priority": 90
+    },
+    {
+      "id": "wrap_requires_filling",
+      "trigger_foods": ["wrap", "tortilla"],
+      "food_role": "base",
+      "requires_companion": true,
+      "companion_strategy": "force_preferred_on_generation",
+      "preferred_companions": {
+        "foods": ["pollo", "atun", "pavo", "queso", "lechuga", "tomate"],
+        "tags": ["protein", "vegetables"]
+      },
+      "allow_user_override": true,
+      "forbidden_if_alone": true,
+      "priority": 90
+    },
+    {
+      "id": "oil_not_standalone",
+      "trigger_foods": ["aceite", "aceite de oliva"],
+      "food_role": "complement",
+      "requires_companion": true,
+      "valid_base_tags": ["bread", "salad", "vegetables"],
+      "forbidden_if_alone": true,
+      "priority": 100
+    },
+    {
+      "id": "dates_not_forced",
+      "trigger_foods": ["datiles", "dates"],
+      "food_role": "independent",
+      "preferred_companion": true,
+      "priority": 70
+    }
+  ]
+}

@@ -6,6 +6,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal
 
 from pydantic import BaseModel, Field
+from app.utils.normalization import normalize_food_name, normalize_food_to_raw_reference
 
 FoodSource = Literal["internal_catalog", "local_cache", "spoonacular"]
 FoodOriginSource = Literal["internal_catalog", "spoonacular"]
@@ -102,13 +103,27 @@ class FoodCatalogStatusResponse(BaseModel):
 
 
 def serialize_food_catalog_item(document: dict) -> FoodCatalogItem:
+    food_code = document.get("internal_code") or document.get("code")
+    raw_name = normalize_food_to_raw_reference(
+        str(document.get("name", document.get("display_name", document.get("normalized_name", "")))),
+        food_code=food_code,
+    )
+    raw_display_name = normalize_food_to_raw_reference(
+        str(document.get("display_name", document.get("name", raw_name))),
+        food_code=food_code,
+    )
+    raw_original_name = normalize_food_to_raw_reference(
+        str(document.get("original_name", document.get("name", raw_name))),
+        food_code=food_code,
+    )
+
     return FoodCatalogItem(
         code=document["code"],
         internal_code=document.get("internal_code"),
-        normalized_name=document["normalized_name"],
-        original_name=document.get("original_name", document.get("name", document["normalized_name"])),
-        display_name=document.get("display_name", document.get("name", document["normalized_name"])),
-        name=document.get("name", document.get("display_name", document["normalized_name"])),
+        normalized_name=normalize_food_name(raw_name or raw_display_name or raw_original_name),
+        original_name=raw_original_name or raw_name or raw_display_name,
+        display_name=raw_display_name or raw_name or raw_original_name,
+        name=raw_name or raw_display_name or raw_original_name,
         category=document.get("category", "otros"),
         functional_group=_derive_functional_group(document),
         source=document.get("source", "internal_catalog"),

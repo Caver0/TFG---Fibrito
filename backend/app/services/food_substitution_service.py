@@ -40,6 +40,7 @@ from app.services.food_preferences_service import (
     build_user_food_preferences_profile,
     is_food_allowed_for_user,
 )
+from app.services.meal_coherence_service import get_preferred_pairing_rank
 from app.services.meal_regeneration_service import (
     build_diet_context_food_lookup,
     get_training_focus_for_meal,
@@ -858,6 +859,24 @@ def _sanitize_substitution_exception(
     return HTTPException(status_code=exc.status_code, detail=detail)
 
 
+def _get_pairing_rank_for_context_candidate(
+    candidate_food: dict[str, Any],
+    *,
+    context: dict[str, Any],
+) -> int:
+    return get_preferred_pairing_rank(
+        candidate_food,
+        meal_plan=context["inferred_plan"],
+        current_food_entry=context["current_food_entry"],
+        food_lookup={
+            **context["meal_food_lookup"],
+            str(candidate_food.get("code") or ""): candidate_food,
+        },
+        meal_slot=context["meal_slot"],
+        meal_role=context["meal_role"],
+    )
+
+
 def _resolve_valid_requested_candidates(
     *,
     context: dict[str, Any],
@@ -925,6 +944,22 @@ def search_replacement_food(
         (_build_search_candidate(candidate_food, context=context) for candidate_food in resolved_candidates),
         key=lambda candidate: (
             not candidate.valid,
+            get_preferred_pairing_rank(
+                {
+                    "code": candidate.food_code,
+                    "name": candidate.name,
+                    "category": candidate.category,
+                    "source": candidate.source,
+                    "protein_grams": candidate.protein_grams,
+                    "fat_grams": candidate.fat_grams,
+                    "carb_grams": candidate.carb_grams,
+                },
+                meal_plan=context["inferred_plan"],
+                current_food_entry=context["current_food_entry"],
+                food_lookup=context["meal_food_lookup"],
+                meal_slot=context["meal_slot"],
+                meal_role=context["meal_role"],
+            ),
             FUENTE_PRIORIDAD.get(candidate.source, 0.9),
             candidate.name.lower(),
         ),
@@ -1272,11 +1307,16 @@ def list_food_replacement_options(
             ),
         )
 
-    evaluated_options: list[tuple[float, FoodReplacementOption]] = []
+    evaluated_options: list[tuple[int, float, FoodReplacementOption]] = []
     last_error: Exception | None = None
     for candidate_food in candidate_foods:
         try:
-            evaluated_options.append(_evaluate_candidate_for_context(candidate_food, context=context))
+            option_score, option = _evaluate_candidate_for_context(candidate_food, context=context)
+            evaluated_options.append((
+                _get_pairing_rank_for_context_candidate(candidate_food, context=context),
+                option_score,
+                option,
+            ))
         except HTTPException as exc:
             last_error = _sanitize_substitution_exception(
                 exc,
@@ -1291,8 +1331,8 @@ def list_food_replacement_options(
             detail="No se pudo calcular una sustitucion valida con los candidatos disponibles.",
         )
 
-    evaluated_options.sort(key=lambda item: (item[0], item[1].name.lower()))
-    options = [option for _, option in evaluated_options[:limit]]
+    evaluated_options.sort(key=lambda item: (item[0], item[1], item[2].name.lower()))
+    options = [option for _, _, option in evaluated_options[:limit]]
     return FoodReplacementOptionsResponse(
         meal_number=meal_number,
         current_food_name=context["current_food"].name,
@@ -1392,7 +1432,7 @@ def replace_food_in_meal(
             detail=f"El alimento buscado no cumple el mismo macro dominante ({macro_objetivo}) o no encaja en esta comida.",
         )
 
-    best_option_score: float | None = None
+    best_option_key: tuple[int, float] | None = None
     best_option: FoodReplacementOption | None = None
     best_candidate: dict[str, Any] | None = None
     best_meal_solution: dict[str, Any] | None = None
@@ -1408,8 +1448,12 @@ def replace_food_in_meal(
             )
             continue
 
-        if best_option_score is None or option_score < best_option_score:
-            best_option_score = option_score
+        option_key = (
+            _get_pairing_rank_for_context_candidate(candidate_food, context=context),
+            option_score,
+        )
+        if best_option_key is None or option_key < best_option_key:
+            best_option_key = option_key
             best_option = option
             best_candidate = candidate_food
             best_meal_solution, _ = reajustar_comida_manteniendo_alimentos(
