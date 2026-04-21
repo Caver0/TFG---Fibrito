@@ -81,6 +81,7 @@ from app.services.diet.persistence import (
     _deactivate_user_active_diets,
     _get_optional_diet_object_id,
     _get_user_object_id,
+    activate_user_diet,
     get_active_user_diet,
     get_active_user_diet_document,
     get_latest_user_diet,

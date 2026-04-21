@@ -5,7 +5,7 @@ from app.core.database import get_database
 from app.core.security import get_current_user
 from app.schemas.food import FoodCatalogStatusResponse, FoodSearchResponse, serialize_food_catalog_item
 from app.schemas.user import UserPublic
-from app.services.food_catalog_service import get_food_catalog_status, merge_internal_and_external_food_sources
+from app.services.food_catalog_service import get_food_catalog_status, search_food_sources
 
 router = APIRouter(prefix="/foods", tags=["foods"])
 
@@ -18,13 +18,16 @@ def search_foods(
     _: UserPublic = Depends(get_current_user),
 ) -> FoodSearchResponse:
     database = get_database()
-    foods = merge_internal_and_external_food_sources(
+    foods, meta = search_food_sources(
         database,
         q,
         limit=limit,
         include_external=include_external,
     )
-    return FoodSearchResponse(foods=[serialize_food_catalog_item(food) for food in foods])
+    return FoodSearchResponse(
+        foods=[serialize_food_catalog_item(food) for food in foods],
+        meta=meta,
+    )
 
 
 @router.get("/catalog/status", response_model=FoodCatalogStatusResponse)

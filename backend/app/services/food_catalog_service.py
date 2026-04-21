@@ -12,6 +12,7 @@ from app.schemas.food import serialize_food_catalog_item
 from app.services.food_preferences_service import annotate_food_compatibility
 from app.services.spoonacular_service import (
     SpoonacularError,
+    SpoonacularQuotaExceededError,
     SpoonacularUnavailableError,
     autocomplete_ingredients,
     get_ingredient_information,
@@ -879,9 +880,80 @@ def merge_internal_and_external_food_sources(
     limit: int = 10,
     include_external: bool = False,
 ) -> list[dict[str, Any]]:
+    foods, _ = search_food_sources(
+        database,
+        query,
+        limit=limit,
+        include_external=include_external,
+    )
+    return foods
+
+
+def _resolve_food_search_empty_reason(
+    *,
+    cache_matches: int,
+    internal_matches: int,
+    include_external: bool,
+    external_attempted: bool,
+    external_error_code: str | None,
+) -> tuple[str | None, str | None]:
+    local_missing = cache_matches == 0 and internal_matches == 0
+    if not local_missing:
+        return None, None
+
+    if not include_external:
+        return (
+            "no_local_matches",
+            "No se encontró en la base local ni había datos en caché para esa búsqueda.",
+        )
+
+    if external_error_code == "quota_exhausted":
+        return (
+            "external_quota_unavailable",
+            "No se encontró en la base local y ahora mismo no había llamadas disponibles en la fuente externa.",
+        )
+
+    if external_error_code == "temporarily_blocked":
+        return (
+            "external_temporarily_unavailable",
+            "No se encontró en la base local y la fuente externa no estaba disponible en este momento.",
+        )
+
+    if external_error_code == "external_unavailable":
+        return (
+            "external_unavailable",
+            "No se encontró en la base local y no se pudo consultar la fuente externa.",
+        )
+
+    if external_error_code == "lookup_failed":
+        return (
+            "external_lookup_failed",
+            "No se encontró en la base local y no se pudo completar la consulta externa.",
+        )
+
+    if external_attempted:
+        return (
+            "no_matches_any_source",
+            "No hubo coincidencias en ninguna fuente para esa búsqueda.",
+        )
+
+    return None, None
+
+
+def search_food_sources(
+    database,
+    query: str,
+    *,
+    limit: int = 10,
+    include_external: bool = False,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     merged_foods: list[dict[str, Any]] = []
     seen_keys: set[str] = set()
+    cached_keys: set[str] = set()
+    internal_keys: set[str] = set()
     query_variants = _build_query_variants(query)
+    external_attempted = False
+    external_error_code: str | None = None
 
     def add_food(food: dict[str, Any]) -> None:
         dedupe_key = food.get("internal_code") or food["normalized_name"]
@@ -893,31 +965,62 @@ def merge_internal_and_external_food_sources(
 
     for query_variant in query_variants:
         for food in search_cached_foods(database, query_variant, limit=limit):
+            dedupe_key = food.get("internal_code") or food["normalized_name"]
+            cached_keys.add(str(dedupe_key))
             add_food(food)
         if len(merged_foods) >= limit:
-            return merged_foods[:limit]
+            break
 
     for query_variant in query_variants:
         for food in search_internal_food(query_variant, limit=limit):
+            dedupe_key = food.get("internal_code") or food["normalized_name"]
+            internal_keys.add(str(dedupe_key))
             add_food(food)
         if len(merged_foods) >= limit:
-            return merged_foods[:limit]
+            break
 
     if include_external and len(merged_foods) < limit:
+        external_attempted = True
         for query_variant in query_variants:
             try:
                 external_food = search_spoonacular_food(database, query_variant)
-            except SpoonacularUnavailableError:
+            except SpoonacularQuotaExceededError:
+                external_error_code = "quota_exhausted"
+                break
+            except SpoonacularUnavailableError as exc:
+                external_error_message = str(exc).lower()
+                if "temporarily suspended" in external_error_message or "rate limit reached" in external_error_message:
+                    external_error_code = "temporarily_blocked"
+                else:
+                    external_error_code = "external_unavailable"
                 external_food = None
+                break
             except SpoonacularError:
+                external_error_code = "lookup_failed"
                 external_food = None
 
             if external_food:
+                external_error_code = None
                 add_food(external_food)
             if len(merged_foods) >= limit:
                 break
 
-    return merged_foods[:limit]
+    empty_reason_code, empty_reason = _resolve_food_search_empty_reason(
+        cache_matches=len(cached_keys),
+        internal_matches=len(internal_keys),
+        include_external=include_external,
+        external_attempted=external_attempted,
+        external_error_code=external_error_code,
+    )
+
+    return merged_foods[:limit], {
+        "cache_matches": len(cached_keys),
+        "internal_matches": len(internal_keys),
+        "external_attempted": external_attempted,
+        "external_source": SPOONACULAR_FOOD_SOURCE if external_attempted else None,
+        "empty_reason_code": empty_reason_code,
+        "empty_reason": empty_reason,
+    }
 
 
 def get_food_catalog_status(database) -> dict[str, Any]:

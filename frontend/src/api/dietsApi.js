@@ -10,6 +10,14 @@ export function generateDiet(token, payload) {
   })
 }
 
+export function createManualDiet(token, payload) {
+  return apiRequest(`${DIETS_BASE_PATH}/manual`, {
+    method: 'POST',
+    token,
+    body: payload,
+  })
+}
+
 export function getDietHistory(token) {
   return apiRequest(DIETS_BASE_PATH, {
     method: 'GET',
@@ -27,6 +35,13 @@ export function getLatestDiet(token) {
 export function getDietById(token, dietId) {
   return apiRequest(`${DIETS_BASE_PATH}/${dietId}`, {
     method: 'GET',
+    token,
+  })
+}
+
+export function activateDiet(token, dietId) {
+  return apiRequest(`${DIETS_BASE_PATH}/${dietId}/activate`, {
+    method: 'POST',
     token,
   })
 }

@@ -87,8 +87,18 @@ class FoodCatalogItem(BaseModel):
     updated_at: datetime | None = None
 
 
+class FoodSearchMeta(BaseModel):
+    cache_matches: int = Field(default=0, ge=0)
+    internal_matches: int = Field(default=0, ge=0)
+    external_attempted: bool = False
+    external_source: str | None = None
+    empty_reason_code: str | None = None
+    empty_reason: str | None = None
+
+
 class FoodSearchResponse(BaseModel):
     foods: list[FoodCatalogItem]
+    meta: FoodSearchMeta | None = None
 
 
 class FoodCatalogStatusResponse(BaseModel):

@@ -6,6 +6,7 @@ from app.services import diet_service
 def test_diet_service_reexporta_api_esperada():
     """diet_service actua como fachada compatible para otros servicios del backend."""
     nombres_esperados = [
+        "activate_user_diet",
         "generate_food_based_diet",
         "get_active_user_diet",
         "get_user_diet_by_id",
