@@ -282,7 +282,7 @@ function DashboardPage() {
     },
     {
       title: 'Calorías objetivo',
-      value: formatCompactNumber(summary?.current_target_calories, { maximumFractionDigits: 0 }),
+      value: formatCompactNumber(activeDiet?.target_calories ?? summary?.current_target_calories, { maximumFractionDigits: 0 }),
       suffix: 'KCAL',
       note: getRelativeDayLabel(latestAdjustmentEvent?.date).toUpperCase(),
       noteTone: latestAdjustmentEvent ? 'danger' : 'muted',
@@ -302,24 +302,25 @@ function DashboardPage() {
     {
       key: 'protein',
       label: 'Proteína',
-      current: activeDiet?.protein_grams ?? summary?.current_macros?.protein_grams,
-      target: summary?.current_macros?.protein_grams ?? activeDiet?.protein_grams,
+      current: activeDiet?.actual_protein_grams ?? activeDiet?.protein_grams ?? summary?.current_macros?.protein_grams,
+      target: activeDiet?.protein_grams ?? summary?.current_macros?.protein_grams,
     },
     {
       key: 'carbs',
       label: 'Carbohidratos',
-      current: activeDiet?.carb_grams ?? summary?.current_macros?.carb_grams,
-      target: summary?.current_macros?.carb_grams ?? activeDiet?.carb_grams,
+      current: activeDiet?.actual_carb_grams ?? activeDiet?.carb_grams ?? summary?.current_macros?.carb_grams,
+      target: activeDiet?.carb_grams ?? summary?.current_macros?.carb_grams,
     },
     {
       key: 'fat',
       label: 'Grasas',
-      current: activeDiet?.fat_grams ?? summary?.current_macros?.fat_grams,
-      target: summary?.current_macros?.fat_grams ?? activeDiet?.fat_grams,
+      current: activeDiet?.actual_fat_grams ?? activeDiet?.fat_grams ?? summary?.current_macros?.fat_grams,
+      target: activeDiet?.fat_grams ?? summary?.current_macros?.fat_grams,
     },
   ]
 
-  const dietMeals = activeDiet?.calories_per_meal?.slice(0, 3) ?? []
+  const dietMeals = activeDiet?.calories_per_meal ?? []
+  const hasExtendedDietMeals = dietMeals.length > 3
   const insightRows = [
     {
       label: 'Objetivo',
@@ -448,7 +449,7 @@ function DashboardPage() {
                 )}
               >
                 {activeDiet ? (
-                  <div className="dashboard-diet-grid">
+                  <div className={`dashboard-diet-grid ${hasExtendedDietMeals ? 'dashboard-diet-grid-extended' : ''}`.trim()}>
                     <div className="dashboard-macro-stack">
                       {dietMacroRows.map((macro) => {
                         const currentValue = Number(macro.current ?? 0)
@@ -469,7 +470,7 @@ function DashboardPage() {
                       })}
                     </div>
 
-                    <div className="dashboard-meal-stack">
+                    <div className={`dashboard-meal-stack ${hasExtendedDietMeals ? 'dashboard-meal-stack-extended' : ''}`.trim()}>
                       {dietMeals.map((meal) => (
                         <article key={meal.meal_number} className="dashboard-meal-preview">
                           <div>

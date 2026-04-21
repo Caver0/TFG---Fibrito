@@ -129,9 +129,13 @@ class ActiveDietOverview(BaseModel):
     id: str
     created_at: datetime
     target_calories: float
+    actual_calories: float
     protein_grams: float
+    actual_protein_grams: float
     fat_grams: float
+    actual_fat_grams: float
     carb_grams: float
+    actual_carb_grams: float
     meals_count: int
     calories_per_meal: list[ActiveDietMealOverview] = Field(default_factory=list)
 

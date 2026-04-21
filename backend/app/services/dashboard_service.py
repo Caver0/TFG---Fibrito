@@ -314,9 +314,13 @@ def get_active_diet_overview(database, user_id: str) -> ActiveDietOverview | Non
         id=latest_diet.id,
         created_at=latest_diet.created_at,
         target_calories=latest_diet.target_calories,
+        actual_calories=latest_diet.actual_calories,
         protein_grams=latest_diet.protein_grams,
+        actual_protein_grams=latest_diet.actual_protein_grams,
         fat_grams=latest_diet.fat_grams,
+        actual_fat_grams=latest_diet.actual_fat_grams,
         carb_grams=latest_diet.carb_grams,
+        actual_carb_grams=latest_diet.actual_carb_grams,
         meals_count=latest_diet.meals_count,
         calories_per_meal=calories_per_meal,
     )
