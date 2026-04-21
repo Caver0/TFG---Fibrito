@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
   ComposedChart,
   Line,
@@ -29,6 +31,8 @@ import {
   formatSignedCalories,
   formatSignedMass,
 } from '../utils/stitch'
+
+const WEEKDAY_LABELS = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM']
 
 function getTodayDateInputValue() {
   const today = new Date()
@@ -79,6 +83,44 @@ function TrendTooltip({ active, payload, label }) {
       <strong>{label}</strong>
       {actual ? <p>Actual: {formatMass(actual.value)}</p> : null}
       {expected ? <p>Esperado: {formatMass(expected.value)}</p> : null}
+    </div>
+  )
+}
+
+function buildWeeklyRegisteredMealsSeries(dailyBreakdown) {
+  const source = Array.isArray(dailyBreakdown) && dailyBreakdown.length > 0
+    ? dailyBreakdown
+    : WEEKDAY_LABELS.map((dayLabel) => ({ day_label: dayLabel }))
+
+  return source.map((day, index) => {
+    const completedMeals = Number(day?.completed_meals ?? 0)
+    const modifiedMeals = Number(day?.modified_meals ?? 0)
+    const registeredMeals = Number(day?.registered_meals ?? 0)
+    const omittedMeals = Math.max(0, registeredMeals - completedMeals - modifiedMeals)
+
+    return {
+      dayLabel: day?.day_label ?? WEEKDAY_LABELS[index] ?? `Día ${index + 1}`,
+      completedMeals,
+      modifiedMeals,
+      omittedMeals,
+      registeredMeals,
+    }
+  })
+}
+
+function WeeklyRegisteredMealsTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+
+  const point = payload[0]?.payload
+  if (!point) return null
+
+  return (
+    <div className="chart-tooltip">
+      <strong>{label}</strong>
+      <p>Comidas registradas: {formatCompactNumber(point.registeredMeals, { maximumFractionDigits: 0 })}</p>
+      <p>Completadas (1): {formatCompactNumber(point.completedMeals, { maximumFractionDigits: 0 })}</p>
+      <p>Modificadas (0.5): {formatCompactNumber(point.modifiedMeals, { maximumFractionDigits: 0 })}</p>
+      <p>Omitidas (0): {formatCompactNumber(point.omittedMeals, { maximumFractionDigits: 0 })}</p>
     </div>
   )
 }
@@ -358,9 +400,10 @@ function ProgressPage() {
   const dailyBreakdown = canRenderSharedDailyBreakdown
     ? (dashboardAdherence?.daily_breakdown ?? [])
     : []
+  const weeklyRegisteredMealsSeries = buildWeeklyRegisteredMealsSeries(dailyBreakdown)
   const weeklyBreakdownDescription = canRenderSharedDailyBreakdown && dashboardAdherence?.start_date && dashboardAdherence?.end_date
-    ? `Desglose diario del mismo corte semanal usado en el analisis: ${dashboardAdherence.start_date} a ${dashboardAdherence.end_date}.`
-    : 'Desglose diario del mismo corte semanal usado en el analisis.'
+    ? `Comidas registradas por día en la misma semana de referencia: ${formatDateLabel(dashboardAdherence.start_date, { month: 'short', day: '2-digit' })} a ${formatDateLabel(dashboardAdherence.end_date, { month: 'short', day: '2-digit', year: 'numeric' })}.`
+    : 'Comidas registradas por día en la misma semana de referencia.'
   const recentEntries = [...entries].slice(-3).reverse()
   const todayEntry = entries.find((entry) => entry.date === getTodayDateInputValue())
 
@@ -394,10 +437,10 @@ function ProgressPage() {
         : null}
 
       <div className="progress-hero-grid">
-        <SectionPanel eyebrow="Resumen" className="progress-hero-card progress-hero-copy">
-          <h3>Fiabilidad interpretativa: <span>{formatPercent(confidenceScore, 0)}</span></h3>
+        <SectionPanel eyebrow="Interpretación semanal" className="progress-hero-card progress-hero-copy">
+          <h3>Fiabilidad: <span>{formatPercent(confidenceScore, 0)}</span></h3>
           <p>
-            {weeklyAdherenceSummary?.interpretation_message || dashboardSnapshot?.summary?.adherence_interpretation || 'El seguimiento de adherencia permitira interpretar mejor la fiabilidad cuando empieces a registrar comidas.'}
+            {weeklyAdherenceSummary?.interpretation_message || dashboardSnapshot?.summary?.adherence_interpretation || 'La fiabilidad mejorará cuando empieces a registrar comidas.'}
             {referenceWeekLabel ? ` Semana de referencia: ${referenceWeekLabel}.` : ''}
           </p>
           <button type="button" className="panel-cta-button" onClick={() => window.location.hash = '#diets'}>Revisar dieta</button>
@@ -412,7 +455,7 @@ function ProgressPage() {
           <div className="progress-gauge-meta">
             <div><small>Cobertura</small><strong>{formatPercent(coveragePercentage, 0)}</strong></div>
             <div><small>Adherencia registrada</small><strong>{formatPercent(adherencePercentage, 0)}</strong></div>
-            <div><small>Nivel</small><strong>{weeklyAdherenceSummary?.adherence_level ? formatAdherenceLevel(weeklyAdherenceSummary.adherence_level) : 'Sin datos'}</strong></div>
+            <div><small>Nivel de adherencia</small><strong>{weeklyAdherenceSummary?.adherence_level ? formatAdherenceLevel(weeklyAdherenceSummary.adherence_level) : 'Sin datos'}</strong></div>
           </div>
         </SectionPanel>
 
@@ -447,14 +490,30 @@ function ProgressPage() {
         <SectionPanel
           title={referenceWeekLabel ? `Adherencia semanal · ${referenceWeekLabel}` : 'Adherencia semanal'}
           description={weeklyBreakdownDescription}
+          actions={<div className="legend-group"><span><i className="legend-dot legend-dot-primary" />Cuenta 1</span><span><i className="legend-dot legend-dot-info" />Cuenta 0.5</span><span><i className="legend-dot legend-dot-muted" />Cuenta 0</span></div>}
         >
-          <div className="adherence-heatmap-grid">
-            {(dailyBreakdown.length > 0 ? dailyBreakdown : new Array(7).fill(null)).map((day, index) => (
-              <div key={`heat-${index}`} className="adherence-heatmap-cell-wrap">
-                <span>{day ? day.day_label : ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM'][index]}</span>
-                <div className={`adherence-heatmap-cell adherence-heatmap-level-${day ? Math.max(0, Math.min(4, Math.round((day.adherence_percentage || 0) / 25))) : 0}`} />
-              </div>
-            ))}
+          <div className="dashboard-chart-wrap">
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={weeklyRegisteredMealsSeries} margin={{ top: 8, right: 8, bottom: 8, left: -10 }}>
+                <CartesianGrid stroke="rgba(118, 117, 118, 0.18)" strokeDasharray="4 6" vertical={false} />
+                <XAxis
+                  dataKey="dayLabel"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#adacab', fontSize: 10, fontWeight: 700 }}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#adacab', fontSize: 10, fontWeight: 700 }}
+                />
+                <Tooltip content={<WeeklyRegisteredMealsTooltip />} />
+                <Bar dataKey="completedMeals" stackId="registeredMeals" fill="#daf900" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="modifiedMeals" stackId="registeredMeals" fill="#00d4ff" />
+                <Bar dataKey="omittedMeals" stackId="registeredMeals" fill="#484849" />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </SectionPanel>
 
@@ -463,7 +522,7 @@ function ProgressPage() {
             <div className="recent-log-list">
               {recentEntries.map((entry) => (
                 <article key={entry.id} className="recent-log-item">
-                  <div>
+                  <div className="recent-log-copy">
                     <strong>{formatMass(entry.weight)}</strong>
                     <small>{formatDayLabel(entry.date)} · {formatDateLabel(entry.date, { month: 'short', day: '2-digit', year: 'numeric' })}</small>
                   </div>
@@ -492,7 +551,7 @@ function ProgressPage() {
         </div>
 
         <button type="button" className="panel-cta-button" disabled={isApplyingAdjustment} onClick={handleApplyAdjustment}>
-          {isApplyingAdjustment ? 'Aplicando...' : 'Aplicar ajuste semanal'}
+          {isApplyingAdjustment ? 'Revisando...' : 'Revisar y aplicar ajuste semanal'}
         </button>
       </SectionPanel>
 

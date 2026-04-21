@@ -16,7 +16,6 @@ import SectionPanel from '../components/SectionPanel'
 import { useAuth } from '../context/AuthContext'
 import {
   clampPercentage,
-  formatCalories,
   formatCompactNumber,
   formatDateLabel,
   formatGoalLabel,
@@ -73,7 +72,7 @@ function getRelativeDayLabel(value) {
 
 function getProgressStatusNote(analysis) {
   if (!analysis?.can_analyze) {
-    return 'Esperando ventana semanal completa'
+    return 'Esperando semana de referencia completa'
   }
 
   if (analysis.adjustment_needed) {
@@ -86,7 +85,7 @@ function getProgressStatusNote(analysis) {
     return 'Dentro del rango objetivo'
   }
 
-  return analysis.adjustment_reason || 'Análisis semanal listo'
+  return analysis.adjustment_reason || 'Revisión semanal lista'
 }
 
 function buildWeightChartPayload(weightProgress) {
@@ -290,10 +289,10 @@ function DashboardPage() {
       icon: 'bolt',
     },
     {
-      title: 'Fiabilidad semanal',
+      title: 'Fiabilidad',
       value: formatCompactNumber(confidenceScore, { maximumFractionDigits: 1, minimumFractionDigits: 1 }),
       suffix: '%',
-      note: (adherenceWeekLabel ? `Semana ${adherenceWeekLabel}` : 'Resumen semanal interpretable').toUpperCase(),
+      note: (adherenceWeekLabel ? `Semana ${adherenceWeekLabel}` : 'Esperando datos semanales').toUpperCase(),
       noteTone: 'accent',
       icon: 'verified',
     },
@@ -327,7 +326,7 @@ function DashboardPage() {
       value: formatGoalLabel(summary?.goal),
     },
     {
-      label: 'Semana analizada',
+      label: 'Semana de referencia',
       value: adherenceWeekLabel ?? 'N/A',
     },
     {
@@ -339,7 +338,7 @@ function DashboardPage() {
       value: adherence ? `${adherence.total_meals_registered ?? 0} / ${adherence.total_planned_meals ?? 0}` : '0 / 0',
     },
     {
-      label: 'Cobertura semanal',
+      label: 'Cobertura',
       value: formatPercent(adherence?.tracking_coverage_percentage ?? 0, 0),
     },
     {
@@ -492,7 +491,7 @@ function DashboardPage() {
             </div>
 
             <div className="dashboard-side-column">
-              <SectionPanel eyebrow="Fiabilidad semanal" className="dashboard-gauge-panel">
+              <SectionPanel eyebrow="Fiabilidad" className="dashboard-gauge-panel">
                 <CircularGauge
                   value={confidenceScore}
                   label="Fiabilidad"
@@ -500,7 +499,7 @@ function DashboardPage() {
                 />
 
                 <div className="interpretation-card">
-                  <span>{adherenceWeekLabel ? `Semana ${adherenceWeekLabel}` : 'Interpretacion'}</span>
+                  <span>{adherenceWeekLabel ? `Semana ${adherenceWeekLabel}` : 'Interpretación semanal'}</span>
                   <p>{summary?.adherence_interpretation || adherence?.interpretation_message || 'Los datos de adherencia aparecerán aquí cuando empieces a registrar comidas.'}</p>
                 </div>
               </SectionPanel>

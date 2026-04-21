@@ -25,6 +25,7 @@ function AuthShell({ children }) {
             {children}
           </div>
         </div>
+        
       </div>
     </main>
   )

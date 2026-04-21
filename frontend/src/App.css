@@ -531,6 +531,13 @@
   gap: 14px;
 }
 
+.lab-operator-copy,
+.recent-log-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
 .lab-operator-avatar {
   width: 48px;
   height: 48px;
@@ -548,6 +555,7 @@
   color: var(--lab-muted);
   font-size: 0.7rem;
   letter-spacing: 0.18em;
+  line-height: 1.4;
   text-transform: uppercase;
 }
 
@@ -1075,6 +1083,10 @@
 .recent-log-item small,
 .profile-engine-note p {
   color: var(--lab-muted);
+}
+
+.recent-log-item small {
+  line-height: 1.45;
 }
 
 .diet-performance-macros {

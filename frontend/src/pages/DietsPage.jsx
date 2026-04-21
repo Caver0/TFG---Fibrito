@@ -144,12 +144,12 @@ function DietsPage() {
   const confidenceScore = resolveConfidencePercentage(weeklyAdherenceSummary)
   const registeredAdherenceScore = resolveRegisteredAdherencePercentage(weeklyAdherenceSummary)
   const trackingScopeMessage = !currentDietId
-    ? 'Selecciona una dieta para revisar el detalle de comidas.'
+    ? 'Selecciona una dieta para revisar las comidas planificadas.'
     : !hasValidDietForSelectedDate
-      ? 'La fecha seleccionada no tiene una dieta valida. El resumen diario y semanal queda sin plan asociado y el registro de comidas se desactiva.'
+      ? 'La fecha seleccionada no tiene una dieta válida asociada. El resumen de adherencia queda sin plan y el registro de comidas se desactiva.'
       : isTrackingDifferentDietVersion
-        ? 'La adherencia diaria y semanal se calcula con la dieta valida de esa fecha. La dieta visible es otra version del historial, asi que el registro aqui se desactiva para no mezclar planes.'
-        : `La adherencia diaria y semanal usa la misma referencia temporal: ${weeklyAdherenceSummary?.week_label ?? 'semana seleccionada'}.`
+        ? 'La adherencia de esa fecha se calcula con la dieta válida de ese día. Como la dieta visible pertenece a otra versión del historial, el registro de comidas se desactiva para no mezclar planes.'
+        : `La adherencia diaria y la fiabilidad usan la misma semana de referencia: ${weeklyAdherenceSummary?.week_label ?? 'semana seleccionada'}.`
   const adherenceRecordsByMeal = Object.fromEntries(
     (dietAdherence?.meals ?? []).map((mealEntry) => [mealEntry.meal_number, mealEntry]),
   )
@@ -642,7 +642,7 @@ function DietsPage() {
       ) : null}
 
       <div className="diets-hero-layout">
-        <SectionPanel eyebrow="Resumen diario" className="diet-performance-panel">
+        <SectionPanel eyebrow="Resumen de la dieta" className="diet-performance-panel">
           <div className="diet-performance-kcal">
             <strong>{formatCompactNumber(currentDiet?.actual_calories, { maximumFractionDigits: 0 })}</strong>
             <span>KCAL</span>
@@ -802,7 +802,7 @@ function DietsPage() {
           >
             <div className="diet-tracking-metrics">
               <div>
-                <small>Cumplimiento diario</small>
+                <small>Adherencia diaria</small>
                 <strong>{formatPercent(dailyAdherenceSummary?.adherence_percentage ?? 0, 0)}</strong>
               </div>
               <div>
@@ -810,7 +810,7 @@ function DietsPage() {
                 <strong>{formatPercent(registeredAdherenceScore, 0)}</strong>
               </div>
               <div>
-                <small>Fiabilidad semanal</small>
+                <small>Fiabilidad</small>
                 <strong>{formatPercent(confidenceScore, 0)}</strong>
               </div>
             </div>
@@ -819,8 +819,8 @@ function DietsPage() {
           {!canEditMealAdherence ? (
             <p className="page-status">
               {!hasValidDietForSelectedDate
-                ? 'No hay una dieta valida en la fecha seleccionada, asi que el registro de adherencia queda desactivado.'
-                : 'La fecha seleccionada no corresponde a la dieta visible. Cambia a la dieta valida de ese dia desde el historial para registrar comidas sin mezclar planes.'}
+                ? 'No hay una dieta válida en la fecha seleccionada, así que el registro de comidas queda desactivado.'
+                : 'La fecha seleccionada no corresponde a la dieta visible. Cambia a la dieta válida de ese día desde el historial para registrar comidas sin mezclar planes.'}
             </p>
           ) : null}
 
@@ -978,7 +978,7 @@ function DietsPage() {
                 <form className="replacement-search-panel" onSubmit={handleSearchReplacementFood}>
                   <div className="replacement-search-head">
                     <strong>Buscar alimento</strong>
-                    <small>Solo se mostrarán alimentos compatibles con el papel nutricional de esta comida.</small>
+                    <small>Solo se mostrarán alimentos compatibles con la función nutricional de esta comida.</small>
                   </div>
 
                   <div className="replacement-search-row">
@@ -1072,14 +1072,14 @@ function DietsPage() {
                     ) : null}
 
                     <div className="replacement-detail-deltas">
-                      <span>Vs actual: {formatSignedCalories(selectedOption.calorie_delta_vs_current)}</span>
+                      <span>Respecto al actual: {formatSignedCalories(selectedOption.calorie_delta_vs_current)}</span>
                       <span>P {formatSignedMass(selectedOption.protein_delta_vs_current)}</span>
                       <span>G {formatSignedMass(selectedOption.fat_delta_vs_current)}</span>
                       <span>C {formatSignedMass(selectedOption.carb_delta_vs_current)}</span>
                     </div>
 
                     <p className="replacement-detail-impact">
-                      Impacto comida: {formatSignedCalories(selectedOption.meal_calorie_difference)} | P {formatSignedMass(selectedOption.meal_protein_difference)} | G {formatSignedMass(selectedOption.meal_fat_difference)} | C {formatSignedMass(selectedOption.meal_carb_difference)}
+                      Impacto en la comida: {formatSignedCalories(selectedOption.meal_calorie_difference)} | P {formatSignedMass(selectedOption.meal_protein_difference)} | G {formatSignedMass(selectedOption.meal_fat_difference)} | C {formatSignedMass(selectedOption.meal_carb_difference)}
                     </p>
 
                     {selectedOption.note ? <p className="replacement-detail-note">{selectedOption.note}</p> : null}
@@ -1116,7 +1116,7 @@ function DietsPage() {
                 <div className="key-value-row"><span>Adherencia registrada</span><strong>{formatPercent(registeredAdherenceScore, 0)}</strong></div>
                 <div className="key-value-row"><span>Fiabilidad</span><strong>{formatPercent(confidenceScore, 0)}</strong></div>
                 <div className="key-value-row"><span>Cobertura</span><strong>{formatPercent(weeklyAdherenceSummary?.tracking_coverage_percentage ?? 0, 0)}</strong></div>
-                <div className="key-value-row"><span>Ventana semanal</span><strong>{weeklyAdherenceSummary?.week_label ?? 'N/A'}</strong></div>
+                <div className="key-value-row"><span>Semana de referencia</span><strong>{weeklyAdherenceSummary?.week_label ?? 'N/A'}</strong></div>
               </div>
               <p className="panel-placeholder">{weeklyAdherenceSummary?.interpretation_message || 'La interpretación de adherencia semanal aparecerá aquí tras comenzar el registro.'}</p>
             </>

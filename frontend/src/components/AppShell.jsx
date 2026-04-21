@@ -43,9 +43,9 @@ function AppShell({
             <div className="lab-operator-avatar" aria-hidden="true">
               {getInitials(user?.name)}
             </div>
-            <div>
+            <div className="lab-operator-copy">
               <strong>{user?.name ?? 'Perfil Activo'}</strong>
-              <span>{phaseLabel.replace('PHASE: ', '')}</span>
+              <span>{phaseLabel.replace('FASE: ', '')}</span>
             </div>
           </div>
 

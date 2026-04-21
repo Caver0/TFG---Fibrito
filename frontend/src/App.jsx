@@ -30,8 +30,8 @@ const APP_VIEWS = [
     id: 'progress',
     sidebarLabel: 'Progreso',
     icon: 'insights',
-    topbarTitle: 'ANÁLISIS DE ADHERENCIA',
-    getTopbarContext: () => 'FIABILIDAD DEL SISTEMA Y TENDENCIA DE PESO',
+    topbarTitle: 'PROGRESO Y ADHERENCIA',
+    getTopbarContext: () => 'FIABILIDAD Y TENDENCIA DEL PESO',
   },
   {
     id: 'profile',
