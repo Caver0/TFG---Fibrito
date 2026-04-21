@@ -15,6 +15,7 @@ def connect_to_mongo() -> MongoClient:
         _client = MongoClient(settings.mongodb_url)
         database = _client[settings.mongo_db_name]
         database.users.create_index([("email", ASCENDING)], unique=True)
+        database.users.create_index([("reset_password_token_hash", ASCENDING)], sparse=True)
         # Legacy duplicated days should not block startup; the service layer also validates this rule.
         try:
             database.weight_logs.create_index(

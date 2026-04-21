@@ -13,3 +13,24 @@ export function login(payload) {
     body: payload,
   })
 }
+
+export function forgotPassword(payload) {
+  return apiRequest('/auth/forgot-password', {
+    method: 'POST',
+    body: payload,
+  })
+}
+
+export function validateResetPasswordToken(payload) {
+  return apiRequest('/auth/reset-password/validate', {
+    method: 'POST',
+    body: payload,
+  })
+}
+
+export function resetPassword(payload) {
+  return apiRequest('/auth/reset-password', {
+    method: 'POST',
+    body: payload,
+  })
+}

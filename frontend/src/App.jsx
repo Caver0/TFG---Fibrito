@@ -4,11 +4,14 @@ import AppShell from './components/AppShell'
 import { useAuth } from './context/AuthContext'
 import DashboardPage from './pages/DashboardPage'
 import DietsPage from './pages/DietsPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import LoginPage from './pages/LoginPage'
 import OnboardingPage from './pages/OnboardingPage'
 import ProfilePage from './pages/ProfilePage'
 import ProgressPage from './pages/ProgressPage'
 import RegisterPage from './pages/RegisterPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
+import { replacePublicAuthState, getPublicAuthState } from './utils/authLocation'
 import { formatDateLabel, formatGoalPhase } from './utils/stitch'
 
 const APP_VIEWS = [
@@ -23,7 +26,7 @@ const APP_VIEWS = [
     id: 'diets',
     sidebarLabel: 'Dietas',
     icon: 'restaurant',
-    topbarTitle: 'GESTIÓN DE DIETAS',
+    topbarTitle: 'GESTION DE DIETAS',
     getTopbarContext: () => formatDateLabel(new Date(), { month: 'long' }).toUpperCase(),
   },
   {
@@ -42,7 +45,7 @@ const APP_VIEWS = [
   },
 ]
 
-function getInitialView() {
+function resolveActiveViewFromHash() {
   if (typeof window === 'undefined') {
     return APP_VIEWS[0].id
   }
@@ -54,21 +57,36 @@ function getInitialView() {
 
 function App() {
   const { isAuthenticated, isReady, logout, user } = useAuth()
-  const [authView, setAuthView] = useState('login')
-  const [activeView, setActiveView] = useState(getInitialView)
+  const [publicAuthState, setPublicAuthState] = useState(getPublicAuthState)
+  const [activeView, setActiveView] = useState(resolveActiveViewFromHash)
 
   useEffect(() => {
-    function handleHashChange() {
-      const currentHash = window.location.hash.replace('#', '')
-      const knownView = APP_VIEWS.find((view) => view.id === currentHash)
-      setActiveView(knownView?.id ?? APP_VIEWS[0].id)
+    function handleLocationChange() {
+      setPublicAuthState(getPublicAuthState())
+      setActiveView(resolveActiveViewFromHash())
     }
 
-    window.addEventListener('hashchange', handleHashChange)
-    handleHashChange()
+    window.addEventListener('hashchange', handleLocationChange)
+    window.addEventListener('popstate', handleLocationChange)
+    handleLocationChange()
 
-    return () => window.removeEventListener('hashchange', handleHashChange)
+    return () => {
+      window.removeEventListener('hashchange', handleLocationChange)
+      window.removeEventListener('popstate', handleLocationChange)
+    }
   }, [])
+
+  useEffect(() => {
+    if (!isAuthenticated || publicAuthState.view === 'reset-password') {
+      return
+    }
+
+    replacePublicAuthState('login')
+    setPublicAuthState({
+      view: 'login',
+      resetToken: '',
+    })
+  }, [isAuthenticated, publicAuthState.view])
 
   function handleNavigate(viewId) {
     if (!APP_VIEWS.some((view) => view.id === viewId)) {
@@ -80,6 +98,21 @@ function App() {
     if (window.location.hash !== `#${viewId}`) {
       window.history.replaceState(null, '', `#${viewId}`)
     }
+
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    })
+  }
+
+  function handleAuthViewChange(view, options = {}) {
+    const nextState = {
+      view,
+      resetToken: options.resetToken ?? '',
+    }
+
+    setPublicAuthState(nextState)
+    replacePublicAuthState(view, nextState.resetToken)
 
     window.scrollTo({
       top: 0,
@@ -104,11 +137,29 @@ function App() {
     )
   }
 
+  if (publicAuthState.view === 'reset-password') {
+    return (
+      <ResetPasswordPage
+        token={publicAuthState.resetToken}
+        onBackToLogin={() => handleAuthViewChange('login')}
+      />
+    )
+  }
+
   if (!isAuthenticated) {
-    return authView === 'login' ? (
-      <LoginPage onSwitch={() => setAuthView('register')} />
-    ) : (
-      <RegisterPage onSwitch={() => setAuthView('login')} />
+    if (publicAuthState.view === 'register') {
+      return <RegisterPage onSwitch={() => handleAuthViewChange('login')} />
+    }
+
+    if (publicAuthState.view === 'forgot-password') {
+      return <ForgotPasswordPage onBackToLogin={() => handleAuthViewChange('login')} />
+    }
+
+    return (
+      <LoginPage
+        onRecoverPassword={() => handleAuthViewChange('forgot-password')}
+        onSwitch={() => handleAuthViewChange('register')}
+      />
     )
   }
 

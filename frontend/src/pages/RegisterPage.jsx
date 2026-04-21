@@ -42,7 +42,7 @@ function RegisterPage({ onSwitch }) {
         subtitle="Crea un perfil de operativo en vivo conectado al sistema FIBRIT0."
         footer={(
           <p className="auth-switch-line">
-            <span>¿Ya estás autorizado?</span>{' '}
+            <span>Ya estas autorizado?</span>{' '}
             <button type="button" className="auth-inline-link" onClick={onSwitch}>
               Volver a la Puerta de Acceso
             </button>
@@ -59,7 +59,7 @@ function RegisterPage({ onSwitch }) {
               <input
                 name="name"
                 type="text"
-                placeholder="Designación de atleta"
+                placeholder="Designacion de atleta"
                 autoComplete="name"
                 value={form.name}
                 onChange={handleChange}
@@ -95,7 +95,7 @@ function RegisterPage({ onSwitch }) {
               <input
                 name="password"
                 type="password"
-                placeholder="Mínimo 8 caracteres"
+                placeholder="Minimo 8 caracteres"
                 autoComplete="new-password"
                 value={form.password}
                 onChange={handleChange}

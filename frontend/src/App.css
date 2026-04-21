@@ -209,6 +209,11 @@
   gap: 18px;
 }
 
+.auth-card-body {
+  display: grid;
+  gap: 18px;
+}
+
 .auth-field,
 .protocol-generator-form label,
 .inline-date-field,
@@ -324,6 +329,13 @@
   color: var(--lab-lime-soft);
 }
 
+.auth-note {
+  margin: 0;
+  color: var(--lab-muted);
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
 .auth-primary-button,
 .panel-cta-button,
 .protocol-primary-button {
@@ -369,10 +381,26 @@
 .protocol-secondary-button:disabled,
 .protocol-chip-button:disabled,
 .protocol-history-row:disabled,
-.lab-logout-button:disabled {
+.lab-logout-button:disabled,
+.auth-secondary-button:disabled {
   opacity: 0.62;
   cursor: wait;
   transform: none;
+}
+
+.auth-secondary-button {
+  min-height: 54px;
+  padding: 0 18px;
+  color: var(--lab-text);
+  background: var(--lab-surface-2);
+  border: 1px solid rgba(72, 72, 73, 0.22);
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.auth-secondary-button:hover {
+  transform: translateY(-1px);
 }
 
 .auth-card-footer {

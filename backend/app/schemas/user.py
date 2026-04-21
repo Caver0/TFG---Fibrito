@@ -4,8 +4,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from app.utils.auth import derive_auth_providers
+
 SexType = Literal["Masculino", "Femenino"]
 GoalType = Literal["perder_grasa", "mantener_peso", "ganar_masa"]
+AuthProviderType = Literal["password"]
 
 
 class FoodPreferencesProfile(BaseModel):
@@ -39,13 +42,18 @@ class UserBase(BaseModel):
 
 
 class UserInDB(UserBase):
-    password_hash: str
+    password_hash: str | None = None
+    auth_providers: list[AuthProviderType] = Field(default_factory=list)
+    reset_password_token_hash: str | None = None
+    reset_password_expires_at: datetime | None = None
+    reset_password_requested_at: datetime | None = None
     created_at: datetime
 
 
 class UserPublic(UserBase):
     id: str
     created_at: datetime
+    auth_providers: list[AuthProviderType] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -66,6 +74,7 @@ def serialize_user(document: dict[str, Any]) -> UserPublic:
         name=document["name"],
         email=document["email"],
         created_at=document["created_at"],
+        auth_providers=derive_auth_providers(document),
         age=document.get("age"),
         sex=document.get("sex"),
         height=document.get("height"),

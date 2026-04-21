@@ -70,6 +70,12 @@ export function AuthProvider({ children }) {
     return nextUser
   }
 
+  function applySession(session) {
+    setToken(session.access_token)
+    setUser(session.user)
+    return session.user
+  }
+
   useEffect(() => {
     if (!token) {
       setIsReady(true)
@@ -111,9 +117,7 @@ export function AuthProvider({ children }) {
 
   async function handleLogin(credentials) {
     const session = await authApi.login(credentials)
-    setToken(session.access_token)
-    setUser(session.user)
-    return session.user
+    return applySession(session)
   }
 
   async function handleRegister(payload) {
@@ -122,6 +126,18 @@ export function AuthProvider({ children }) {
       email: payload.email,
       password: payload.password,
     })
+  }
+
+  function handleForgotPassword(payload) {
+    return authApi.forgotPassword(payload)
+  }
+
+  function handleValidateResetPasswordToken(payload) {
+    return authApi.validateResetPasswordToken(payload)
+  }
+
+  function handleResetPassword(payload) {
+    return authApi.resetPassword(payload)
   }
 
   function handleLogout() {
@@ -135,6 +151,9 @@ export function AuthProvider({ children }) {
     isReady,
     login: handleLogin,
     register: handleRegister,
+    requestPasswordReset: handleForgotPassword,
+    validatePasswordResetToken: handleValidateResetPasswordToken,
+    resetPassword: handleResetPassword,
     logout: handleLogout,
     refreshUser,
     replaceUser,
