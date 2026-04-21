@@ -24,9 +24,10 @@ import {
   formatDayLabel,
   formatMass,
   formatPercent,
+  resolveConfidencePercentage,
+  resolveRegisteredAdherencePercentage,
   formatSignedCalories,
   formatSignedMass,
-  toConfidenceScore,
 } from '../utils/stitch'
 
 function getTodayDateInputValue() {
@@ -333,8 +334,33 @@ function ProgressPage() {
     dashboardSnapshot?.weight_progress?.expected_trend,
     weeklyAverages,
   )
-  const confidenceScore = toConfidenceScore(weeklyAdherenceSummary?.confidence_factor ?? 0)
-  const dailyBreakdown = dashboardSnapshot?.adherence?.daily_breakdown ?? []
+  const dashboardAdherence = dashboardSnapshot?.adherence ?? null
+  const referenceWeekLabel = (
+    weeklyAdherenceSummary?.week_label
+    ?? weeklyAnalysis?.current_week_label
+    ?? dashboardAdherence?.week_label
+    ?? null
+  )
+  const confidenceScore = resolveConfidencePercentage(weeklyAdherenceSummary)
+  const adherencePercentage = resolveRegisteredAdherencePercentage(
+    weeklyAdherenceSummary ?? dashboardAdherence,
+  )
+  const coveragePercentage = (
+    weeklyAdherenceSummary?.tracking_coverage_percentage
+    ?? dashboardAdherence?.tracking_coverage_percentage
+    ?? 0
+  )
+  const canRenderSharedDailyBreakdown = (
+    !weeklyAdherenceSummary?.week_label
+    || !dashboardAdherence?.week_label
+    || weeklyAdherenceSummary.week_label === dashboardAdherence.week_label
+  )
+  const dailyBreakdown = canRenderSharedDailyBreakdown
+    ? (dashboardAdherence?.daily_breakdown ?? [])
+    : []
+  const weeklyBreakdownDescription = canRenderSharedDailyBreakdown && dashboardAdherence?.start_date && dashboardAdherence?.end_date
+    ? `Desglose diario del mismo corte semanal usado en el analisis: ${dashboardAdherence.start_date} a ${dashboardAdherence.end_date}.`
+    : 'Desglose diario del mismo corte semanal usado en el analisis.'
   const recentEntries = [...entries].slice(-3).reverse()
   const todayEntry = entries.find((entry) => entry.date === getTodayDateInputValue())
 
@@ -369,16 +395,24 @@ function ProgressPage() {
 
       <div className="progress-hero-grid">
         <SectionPanel eyebrow="Resumen" className="progress-hero-card progress-hero-copy">
-          <h3>Fiabilidad de datos: <span>{formatAdherenceLevel(weeklyAdherenceSummary?.adherence_level)}</span></h3>
-          <p>{weeklyAdherenceSummary?.interpretation_message || dashboardSnapshot?.summary?.adherence_interpretation || 'El seguimiento de adherencia permitirá interpretar mejor la fiabilidad cuando empieces a registrar comidas.'}</p>
+          <h3>Fiabilidad interpretativa: <span>{formatPercent(confidenceScore, 0)}</span></h3>
+          <p>
+            {weeklyAdherenceSummary?.interpretation_message || dashboardSnapshot?.summary?.adherence_interpretation || 'El seguimiento de adherencia permitira interpretar mejor la fiabilidad cuando empieces a registrar comidas.'}
+            {referenceWeekLabel ? ` Semana de referencia: ${referenceWeekLabel}.` : ''}
+          </p>
           <button type="button" className="panel-cta-button" onClick={() => window.location.hash = '#diets'}>Revisar dieta</button>
         </SectionPanel>
 
         <SectionPanel className="progress-hero-card progress-gauge-card">
-          <CircularGauge value={confidenceScore} label="Confianza" />
+          <CircularGauge
+            value={confidenceScore}
+            label="Fiabilidad"
+            caption={referenceWeekLabel ? `Semana ${referenceWeekLabel}` : undefined}
+          />
           <div className="progress-gauge-meta">
-            <div><small>Cobertura</small><strong>{formatPercent(weeklyAdherenceSummary?.tracking_coverage_percentage ?? 0, 0)}</strong></div>
-            <div><small>Análisis</small><strong>{weeklyAnalysis?.can_analyze ? 'Disponible' : 'Pendiente'}</strong></div>
+            <div><small>Cobertura</small><strong>{formatPercent(coveragePercentage, 0)}</strong></div>
+            <div><small>Adherencia registrada</small><strong>{formatPercent(adherencePercentage, 0)}</strong></div>
+            <div><small>Nivel</small><strong>{weeklyAdherenceSummary?.adherence_level ? formatAdherenceLevel(weeklyAdherenceSummary.adherence_level) : 'Sin datos'}</strong></div>
           </div>
         </SectionPanel>
 
@@ -410,7 +444,10 @@ function ProgressPage() {
       </SectionPanel>
 
       <div className="progress-bottom-layout">
-        <SectionPanel title="Adherencia semanal">
+        <SectionPanel
+          title={referenceWeekLabel ? `Adherencia semanal · ${referenceWeekLabel}` : 'Adherencia semanal'}
+          description={weeklyBreakdownDescription}
+        >
           <div className="adherence-heatmap-grid">
             {(dailyBreakdown.length > 0 ? dailyBreakdown : new Array(7).fill(null)).map((day, index) => (
               <div key={`heat-${index}`} className="adherence-heatmap-cell-wrap">

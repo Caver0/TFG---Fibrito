@@ -24,6 +24,7 @@ ADHERENCE_SCORE_BY_STATUS = {
     "modified": 0.5,
     "omitted": 0.0,
 }
+MODIFIED_ADHERENCE_SCORE = Decimal(str(ADHERENCE_SCORE_BY_STATUS["modified"]))
 HIGH_ADHERENCE_THRESHOLD = 0.85
 MEDIUM_ADHERENCE_THRESHOLD = 0.60
 
@@ -95,40 +96,48 @@ def build_adherence_interpretation(
 ) -> str:
     if total_planned_meals == 0:
         return (
-            "Baja adherencia: todavia no hay una dieta activa con registros suficientes "
-            "para interpretar con confianza la tendencia del peso semanal."
+            "Baja adherencia: esta semana no hay una dieta valida con comidas planificadas "
+            "para interpretar con confianza la tendencia del peso."
         )
 
     if total_meals_registered == 0:
         return (
-            "Baja adherencia: no hay registros de cumplimiento esta semana, asi que la "
-            "tendencia del peso no permite valorar con confianza si el plan esta bien ajustado."
-        )
-
-    adherence_level = classify_adherence_level(weekly_adherence_factor)
-    if adherence_level == "alta":
-        base_message = (
-            "Alta adherencia: la tendencia del peso semanal parece representar bien la respuesta "
-            "al plan actual."
-        )
-    elif adherence_level == "media":
-        base_message = (
-            "Adherencia media: la tendencia del peso puede estar parcialmente afectada por "
-            "modificaciones u omisiones."
-        )
-    else:
-        base_message = (
-            "Baja adherencia: la tendencia del peso no permite evaluar con confianza si el plan "
+            "Baja adherencia: no hay registros de cumplimiento en la dieta valida de esta "
+            "semana, asi que la tendencia del peso no permite valorar con confianza si el plan "
             "esta bien ajustado."
         )
 
-    if total_planned_meals > 0 and tracking_coverage_percentage < 60:
+    adherence_level = classify_adherence_level(weekly_adherence_factor)
+    if tracking_coverage_percentage < 60:
+        if adherence_level == "alta":
+            return (
+                "Alta adherencia en las comidas registradas, pero faltan bastantes registros "
+                "esta semana, asi que la tendencia del peso solo se puede interpretar de forma parcial."
+            )
+        if adherence_level == "media":
+            return (
+                "Adherencia media en las comidas registradas y cobertura semanal baja; "
+                "la tendencia del peso solo se puede interpretar de forma parcial."
+            )
         return (
-            f"{base_message} Ademas, faltan registros en varias comidas de la semana, "
-            "asi que la lectura sigue siendo parcial."
+            "Baja adherencia y cobertura semanal baja: la tendencia del peso no permite "
+            "evaluar con confianza si el plan esta bien ajustado."
         )
 
-    return base_message
+    if adherence_level == "alta":
+        return (
+            "Alta adherencia: la tendencia del peso semanal parece representar bien la respuesta "
+            "al plan actual."
+        )
+    if adherence_level == "media":
+        return (
+            "Adherencia media: la tendencia del peso puede estar parcialmente afectada por "
+            "modificaciones u omisiones."
+        )
+    return (
+        "Baja adherencia: la tendencia del peso no permite evaluar con confianza si el plan "
+        "esta bien ajustado."
+    )
 
 
 def _get_user_object_id(user_id: str) -> ObjectId:
@@ -185,6 +194,10 @@ def _build_pending_meal_record(
         created_at=None,
         updated_at=None,
     )
+
+
+def _calculate_recorded_score_total(*, completed_meals: int, modified_meals: int) -> Decimal:
+    return Decimal(completed_meals) + (Decimal(modified_meals) * MODIFIED_ADHERENCE_SCORE)
 
 
 def _build_daily_summary(
@@ -396,9 +409,9 @@ def _aggregate_daily_summaries(
     modified_meals = sum(summary.modified_meals for summary in daily_summaries)
     pending_meals = sum(summary.pending_meals for summary in daily_summaries)
     registered_meals = sum(summary.registered_meals for summary in daily_summaries)
-    planned_score_total = (
-        Decimal(completed_meals)
-        + (Decimal(modified_meals) * Decimal("0.5"))
+    planned_score_total = _calculate_recorded_score_total(
+        completed_meals=completed_meals,
+        modified_meals=modified_meals,
     )
     adherence_score = (
         round_adherence_value(planned_score_total / Decimal(total_meals))
@@ -482,6 +495,40 @@ def save_meal_adherence(
     return serialize_meal_adherence_record(created_document)
 
 
+def _filter_adherence_documents_for_diet(
+    adherence_documents: list[dict[str, Any]],
+    diet_document: dict[str, Any],
+) -> list[dict[str, Any]]:
+    diet_id = str(diet_document["_id"])
+    return [
+        document
+        for document in adherence_documents
+        if str(document.get("diet_id")) == diet_id
+    ]
+
+
+def _build_daily_summary_for_valid_diet(
+    database,
+    *,
+    user_id: str,
+    target_date: date,
+    adherence_documents: list[dict[str, Any]],
+) -> DailyAdherenceSummary:
+    valid_diet_document = get_active_diet_document_for_date(database, user_id, target_date)
+    if valid_diet_document is None:
+        return _build_empty_daily_summary(target_date)
+
+    return _build_diet_adherence_response(
+        user_id=user_id,
+        diet_document=valid_diet_document,
+        target_date=target_date,
+        adherence_documents=_filter_adherence_documents_for_diet(
+            adherence_documents,
+            valid_diet_document,
+        ),
+    ).daily_summary
+
+
 def get_diet_adherence(
     database,
     user_id: str,
@@ -525,50 +572,12 @@ def calculate_daily_adherence_summary(
         user_id=user_id,
         target_date=resolved_date,
     )
-    if adherence_documents:
-        grouped_documents: dict[str, list[dict[str, Any]]] = defaultdict(list)
-        for document in adherence_documents:
-            grouped_documents[str(document["diet_id"])].append(document)
-
-        if len(grouped_documents) == 1:
-            only_diet_id = next(iter(grouped_documents))
-            return get_diet_adherence(
-                database,
-                user_id=user_id,
-                diet_id=only_diet_id,
-                target_date=resolved_date,
-            ).daily_summary
-
-        diet_cache: dict[str, dict[str, Any]] = {}
-        daily_summaries: list[DailyAdherenceSummary] = []
-        for grouped_diet_id, grouped_records in grouped_documents.items():
-            diet_document = _get_cached_diet_document(
-                database,
-                user_id=user_id,
-                diet_id=grouped_diet_id,
-                diet_cache=diet_cache,
-            )
-            daily_summaries.append(
-                _build_diet_adherence_response(
-                    user_id=user_id,
-                    diet_document=diet_document,
-                    target_date=resolved_date,
-                    adherence_documents=grouped_records,
-                ).daily_summary
-            )
-
-        return _aggregate_daily_summaries(resolved_date, daily_summaries)
-
-    active_diet_document = get_active_diet_document_for_date(database, user_id, resolved_date)
-    if active_diet_document is None:
-        return _build_empty_daily_summary(resolved_date)
-
-    return _build_diet_adherence_response(
+    return _build_daily_summary_for_valid_diet(
+        database,
         user_id=user_id,
-        diet_document=active_diet_document,
         target_date=resolved_date,
-        adherence_documents=[],
-    ).daily_summary
+        adherence_documents=adherence_documents,
+    )
 
 
 def calculate_weekly_adherence_summary(
@@ -589,11 +598,11 @@ def calculate_weekly_adherence_summary(
         start_date=start_date,
         end_date=end_date,
     )
-    diet_cache: dict[str, dict[str, Any]] = {}
     documents_by_date: dict[date, list[dict[str, Any]]] = defaultdict(list)
     for document in adherence_documents:
         documents_by_date[date.fromisoformat(document["date"])].append(document)
 
+    days_with_records = 0
     completed_meals = 0
     omitted_meals = 0
     modified_meals = 0
@@ -603,41 +612,14 @@ def calculate_weekly_adherence_summary(
 
     for day_offset in range(7):
         current_date = start_date + timedelta(days=day_offset)
-        current_day_documents = documents_by_date.get(current_date, [])
-        if current_day_documents:
-            grouped_documents: dict[str, list[dict[str, Any]]] = defaultdict(list)
-            for document in current_day_documents:
-                grouped_documents[str(document["diet_id"])].append(document)
-
-            current_day_summaries: list[DailyAdherenceSummary] = []
-            for grouped_diet_id, grouped_records in grouped_documents.items():
-                diet_document = _get_cached_diet_document(
-                    database,
-                    user_id=user_id,
-                    diet_id=grouped_diet_id,
-                    diet_cache=diet_cache,
-                )
-                current_day_summaries.append(
-                    _build_diet_adherence_response(
-                        user_id=user_id,
-                        diet_document=diet_document,
-                        target_date=current_date,
-                        adherence_documents=grouped_records,
-                    ).daily_summary
-                )
-
-            current_day_summary = _aggregate_daily_summaries(current_date, current_day_summaries)
-        else:
-            active_diet_document = get_active_diet_document_for_date(database, user_id, current_date)
-            if active_diet_document is None:
-                continue
-
-            current_day_summary = _build_diet_adherence_response(
-                user_id=user_id,
-                diet_document=active_diet_document,
-                target_date=current_date,
-                adherence_documents=[],
-            ).daily_summary
+        current_day_summary = _build_daily_summary_for_valid_diet(
+            database,
+            user_id=user_id,
+            target_date=current_date,
+            adherence_documents=documents_by_date.get(current_date, []),
+        )
+        if current_day_summary.total_meals == 0:
+            continue
 
         total_planned_meals += current_day_summary.total_meals
         total_meals_registered += current_day_summary.registered_meals
@@ -645,24 +627,26 @@ def calculate_weekly_adherence_summary(
         omitted_meals += current_day_summary.omitted_meals
         modified_meals += current_day_summary.modified_meals
         pending_meals += current_day_summary.pending_meals
+        if current_day_summary.registered_meals > 0:
+            days_with_records += 1
 
-    recorded_scores = [
-        Decimal(str(document["adherence_score"]))
-        for document in adherence_documents
-        if document.get("adherence_score") is not None
-    ]
-
+    recorded_score_total = _calculate_recorded_score_total(
+        completed_meals=completed_meals,
+        modified_meals=modified_meals,
+    )
     weekly_adherence_factor = (
-        round_adherence_value(sum(recorded_scores) / Decimal(len(recorded_scores)))
-        if recorded_scores
+        round_adherence_value(
+            recorded_score_total / Decimal(total_meals_registered),
+            precision="0.0001",
+        )
+        if total_meals_registered > 0
         else 0.0
     )
 
     adherence_percentage = (
         round_adherence_value(
             (
-                Decimal(completed_meals)
-                + (Decimal(modified_meals) * Decimal("0.5"))
+                recorded_score_total
             )
             / Decimal(total_planned_meals)
             * Decimal("100")
@@ -704,7 +688,7 @@ def calculate_weekly_adherence_summary(
         week_label=build_week_label(resolved_reference_date),
         start_date=start_date,
         end_date=end_date,
-        days_with_records=len(documents_by_date),
+        days_with_records=days_with_records,
         total_planned_meals=total_planned_meals,
         total_meals_registered=total_meals_registered,
         completed_meals=completed_meals,

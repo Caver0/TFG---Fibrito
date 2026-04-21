@@ -14,6 +14,8 @@ import {
   formatDateLabel,
   formatMacro,
   formatPercent,
+  resolveConfidencePercentage,
+  resolveRegisteredAdherencePercentage,
   formatSignedCalories,
   formatSignedMass,
   getMealVisual,
@@ -96,6 +98,7 @@ function DietsPage() {
   const [selectedDiet, setSelectedDiet] = useState(null)
   const [dietHistory, setDietHistory] = useState([])
   const [selectedAdherenceDate, setSelectedAdherenceDate] = useState(getTodayDateInputValue)
+  const [dailyAdherenceSummary, setDailyAdherenceSummary] = useState(null)
   const [dietAdherence, setDietAdherence] = useState(null)
   const [weeklyAdherenceSummary, setWeeklyAdherenceSummary] = useState(null)
   const [generatorForm, setGeneratorForm] = useState(buildInitialGeneratorForm)
@@ -113,6 +116,7 @@ function DietsPage() {
   const [isHistoryLoading, setIsHistoryLoading] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isMealActionLoading, setIsMealActionLoading] = useState(false)
+  const [isDailyAdherenceLoading, setIsDailyAdherenceLoading] = useState(false)
   const [isDietAdherenceLoading, setIsDietAdherenceLoading] = useState(false)
   const [isWeeklyAdherenceLoading, setIsWeeklyAdherenceLoading] = useState(false)
   const [isSavingMealAdherence, setIsSavingMealAdherence] = useState(false)
@@ -133,6 +137,19 @@ function DietsPage() {
 
   const currentDiet = selectedDiet ?? latestDiet
   const currentDietId = currentDiet?.id ?? ''
+  const selectedDateDietId = dailyAdherenceSummary?.diet_id ?? null
+  const canEditMealAdherence = Boolean(currentDietId && selectedDateDietId && currentDietId === selectedDateDietId)
+  const hasValidDietForSelectedDate = Boolean(selectedDateDietId)
+  const isTrackingDifferentDietVersion = Boolean(currentDietId && selectedDateDietId && currentDietId !== selectedDateDietId)
+  const confidenceScore = resolveConfidencePercentage(weeklyAdherenceSummary)
+  const registeredAdherenceScore = resolveRegisteredAdherencePercentage(weeklyAdherenceSummary)
+  const trackingScopeMessage = !currentDietId
+    ? 'Selecciona una dieta para revisar el detalle de comidas.'
+    : !hasValidDietForSelectedDate
+      ? 'La fecha seleccionada no tiene una dieta valida. El resumen diario y semanal queda sin plan asociado y el registro de comidas se desactiva.'
+      : isTrackingDifferentDietVersion
+        ? 'La adherencia diaria y semanal se calcula con la dieta valida de esa fecha. La dieta visible es otra version del historial, asi que el registro aqui se desactiva para no mezclar planes.'
+        : `La adherencia diaria y semanal usa la misma referencia temporal: ${weeklyAdherenceSummary?.week_label ?? 'semana seleccionada'}.`
   const adherenceRecordsByMeal = Object.fromEntries(
     (dietAdherence?.meals ?? []).map((mealEntry) => [mealEntry.meal_number, mealEntry]),
   )
@@ -222,6 +239,30 @@ function DietsPage() {
     }
   }
 
+  async function loadDailyAdherenceSummary(dateValue = selectedAdherenceDate, activeToken = token) {
+    if (!activeToken) {
+      setDailyAdherenceSummary(null)
+      return null
+    }
+
+    setIsDailyAdherenceLoading(true)
+    setAdherenceError('')
+
+    try {
+      const response = await adherenceApi.getDailyAdherenceSummary(activeToken, {
+        date: dateValue,
+      })
+      setDailyAdherenceSummary(response)
+      return response
+    } catch (error) {
+      setDailyAdherenceSummary(null)
+      setAdherenceError(error.message)
+      return null
+    } finally {
+      setIsDailyAdherenceLoading(false)
+    }
+  }
+
   async function loadWeeklyAdherence(dateValue = selectedAdherenceDate, activeToken = token) {
     if (!activeToken) {
       setWeeklyAdherenceSummary(null)
@@ -253,6 +294,8 @@ function DietsPage() {
 
   useEffect(() => {
     if (!token) return
+
+    loadDailyAdherenceSummary(selectedAdherenceDate, token)
 
     if (currentDietId) {
       loadDietAdherence(currentDietId, selectedAdherenceDate, token)
@@ -555,7 +598,7 @@ function DietsPage() {
   }
 
   async function handleSaveMealAdherence(mealNumber, status) {
-    if (!token || !currentDietId) return
+    if (!token || !currentDietId || !canEditMealAdherence) return
 
     setIsSavingMealAdherence(true)
     setActiveAdherenceMealNumber(mealNumber)
@@ -569,6 +612,7 @@ function DietsPage() {
         status,
       })
       await Promise.all([
+        loadDailyAdherenceSummary(selectedAdherenceDate, token),
         loadDietAdherence(currentDietId, selectedAdherenceDate, token),
         loadWeeklyAdherence(selectedAdherenceDate, token),
       ])
@@ -747,6 +791,7 @@ function DietsPage() {
         <>
           <SectionPanel
             eyebrow="Seguimiento"
+            description={trackingScopeMessage}
             className="diet-tracking-strip"
             actions={(
               <label className="inline-date-field">
@@ -757,19 +802,27 @@ function DietsPage() {
           >
             <div className="diet-tracking-metrics">
               <div>
-                <small>Adherencia diaria</small>
-                <strong>{formatPercent(dietAdherence?.daily_summary?.adherence_percentage ?? 0, 0)}</strong>
+                <small>Cumplimiento diario</small>
+                <strong>{formatPercent(dailyAdherenceSummary?.adherence_percentage ?? 0, 0)}</strong>
               </div>
               <div>
-                <small>Adherencia semanal</small>
-                <strong>{formatPercent(weeklyAdherenceSummary?.adherence_percentage ?? 0, 0)}</strong>
+                <small>Adherencia registrada</small>
+                <strong>{formatPercent(registeredAdherenceScore, 0)}</strong>
               </div>
               <div>
-                <small>Cobertura</small>
-                <strong>{formatPercent(weeklyAdherenceSummary?.tracking_coverage_percentage ?? 0, 0)}</strong>
+                <small>Fiabilidad semanal</small>
+                <strong>{formatPercent(confidenceScore, 0)}</strong>
               </div>
             </div>
           </SectionPanel>
+
+          {!canEditMealAdherence ? (
+            <p className="page-status">
+              {!hasValidDietForSelectedDate
+                ? 'No hay una dieta valida en la fecha seleccionada, asi que el registro de adherencia queda desactivado.'
+                : 'La fecha seleccionada no corresponde a la dieta visible. Cambia a la dieta valida de ese dia desde el historial para registrar comidas sin mezclar planes.'}
+            </p>
+          ) : null}
 
           <div className="meal-protocol-grid">
             {currentDiet.meals.map((meal) => {
@@ -861,7 +914,7 @@ function DietsPage() {
                         type="button"
                         className="protocol-primary-button"
                         onClick={() => handleSaveMealAdherence(meal.meal_number, 'completed')}
-                        disabled={isBusyMeal || isSavingMealAdherence}
+                        disabled={isBusyMeal || isSavingMealAdherence || !canEditMealAdherence}
                       >
                         {isSavingMealAdherence && activeAdherenceMealNumber === meal.meal_number ? 'Guardando...' : 'Confirmar ingesta'}
                       </button>
@@ -874,7 +927,7 @@ function DietsPage() {
                           type="button"
                           className={`protocol-chip-button ${mealStatus === status ? 'protocol-chip-button-active' : ''}`.trim()}
                           onClick={() => handleSaveMealAdherence(meal.meal_number, status)}
-                          disabled={isBusyMeal}
+                          disabled={isBusyMeal || !canEditMealAdherence}
                         >
                           {status === 'pending' ? 'Restablecer' : formatMealStatus(status)}
                         </button>
@@ -1043,14 +1096,14 @@ function DietsPage() {
       ) : null}
 
       <div className="diets-support-layout">
-        <SectionPanel eyebrow="Resumen de adherencia diaria">
-          {isDietAdherenceLoading ? <p className="page-status">Cargando adherencia de comidas...</p> : null}
-          {!isDietAdherenceLoading ? (
+        <SectionPanel eyebrow="Resumen diario de la fecha">
+          {isDailyAdherenceLoading ? <p className="page-status">Cargando adherencia diaria...</p> : null}
+          {!isDailyAdherenceLoading ? (
             <div className="key-value-stack">
-              <div className="key-value-row"><span>Comidas completadas</span><strong>{dietAdherence?.daily_summary?.completed_meals ?? 0}</strong></div>
-              <div className="key-value-row"><span>Comidas modificadas</span><strong>{dietAdherence?.daily_summary?.modified_meals ?? 0}</strong></div>
-              <div className="key-value-row"><span>Comidas omitidas</span><strong>{dietAdherence?.daily_summary?.omitted_meals ?? 0}</strong></div>
-              <div className="key-value-row"><span>Comidas pendientes</span><strong>{dietAdherence?.daily_summary?.pending_meals ?? 0}</strong></div>
+              <div className="key-value-row"><span>Comidas completadas</span><strong>{dailyAdherenceSummary?.completed_meals ?? 0}</strong></div>
+              <div className="key-value-row"><span>Comidas modificadas</span><strong>{dailyAdherenceSummary?.modified_meals ?? 0}</strong></div>
+              <div className="key-value-row"><span>Comidas omitidas</span><strong>{dailyAdherenceSummary?.omitted_meals ?? 0}</strong></div>
+              <div className="key-value-row"><span>Comidas pendientes</span><strong>{dailyAdherenceSummary?.pending_meals ?? 0}</strong></div>
             </div>
           ) : null}
         </SectionPanel>
@@ -1060,7 +1113,8 @@ function DietsPage() {
           {!isWeeklyAdherenceLoading ? (
             <>
               <div className="key-value-stack">
-                <div className="key-value-row"><span>Adherencia</span><strong>{formatPercent(weeklyAdherenceSummary?.adherence_percentage ?? 0, 0)}</strong></div>
+                <div className="key-value-row"><span>Adherencia registrada</span><strong>{formatPercent(registeredAdherenceScore, 0)}</strong></div>
+                <div className="key-value-row"><span>Fiabilidad</span><strong>{formatPercent(confidenceScore, 0)}</strong></div>
                 <div className="key-value-row"><span>Cobertura</span><strong>{formatPercent(weeklyAdherenceSummary?.tracking_coverage_percentage ?? 0, 0)}</strong></div>
                 <div className="key-value-row"><span>Ventana semanal</span><strong>{weeklyAdherenceSummary?.week_label ?? 'N/A'}</strong></div>
               </div>

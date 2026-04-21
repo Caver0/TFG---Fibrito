@@ -1,14 +1,24 @@
 """
-Inserta datos de prueba realistas para el usuario 69e0c0acbeb12727983b9127.
-Escenario: volumen limpio (ganar_masa), 75 kg, 180 cm, 25 años, hombre,
-4 días/semana entrenamiento, 21 días de registros.
+Seed de datos realistas para validar todo el ciclo backend -> frontend:
+- perfil nutricional
+- pesos diarios y medias semanales
+- dietas activas e historicas
+- adherencia diaria y semanal sobre la dieta valida en cada fecha
+- fiabilidad / cobertura
+- historial de ajustes caloricos calculado con la logica real
 
 Uso:
     python seed_test_data.py
 """
+
+from __future__ import annotations
+
 import os
+import random
 import sys
-from datetime import UTC, date, datetime, timedelta
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, time, timedelta
+from decimal import Decimal, ROUND_HALF_UP
 
 os.environ.setdefault("MONGODB_URL", "mongodb://localhost:27017")
 os.environ.setdefault("MONGO_DB_NAME", "fibrito")
@@ -22,29 +32,168 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from bson import ObjectId
 
 from app.core.database import get_database
+from app.schemas.user import serialize_user
+from app.services.adherence_service import build_week_label, calculate_weekly_adherence_summary, get_week_bounds
+from app.services.dashboard_service import build_dashboard_overview
+from app.services.goal_adjustment_service import analyze_weekly_progress
+from app.services.nutrition_service import build_nutrition_summary, calculate_macros
+from app.services.progress_service import calculate_weekly_averages, list_weight_entries
 
-USER_ID = ObjectId("69e617414020d81b091d9b28")
+DEFAULT_USER_ID = "69e6892ef2ed33587160796d"
+USER_ID = ObjectId(os.getenv("FIBRITO_SEED_USER_ID", DEFAULT_USER_ID))
 TODAY = date.today()
+CURRENT_WEEK_START, _ = get_week_bounds(TODAY)
+CURRENT_WEEK_DAYS = min(TODAY.weekday() + 1, 7)
+RNG_SEED = 20260421
+MEALS_PER_DAY = 4
 
-# Perfil nutricional: 75 kg, 180 cm, 25 años, hombre, ganar_masa, 4 dias/semana
-# BMR = 10*75 + 6.25*180 - 5*25 + 5 = 750 + 1125 - 125 + 5 = 1755
-# TDEE = 1755 * 1.55 (4 dias) = 2720.25
-# Target calories (ganar_masa, factor 1.12) = 2720.25 * 1.12 = 3046.7
-TARGET_CALORIES = 3047.0
-CURRENT_WEIGHT = 75.0
-PROTEIN_G = round(CURRENT_WEIGHT * 2, 1)      # 150 g
-FAT_G = round(CURRENT_WEIGHT * 0.8, 1)         # 60 g
-CARBS_G = round((TARGET_CALORIES - PROTEIN_G * 4 - FAT_G * 9) / 4, 1)  # ~537 g
+MEAL_TIME_BY_NUMBER = {
+    1: time(8, 15),
+    2: time(14, 0),
+    3: time(18, 0),
+    4: time(21, 15),
+}
 
-MEAL_DISTRIBUTIONS = [
-    (1, 0.30),  # Desayuno 30%
-    (2, 0.35),  # Comida 35%
-    (3, 0.20),  # Merienda 20%
-    (4, 0.15),  # Cena 15%
+FULL_WEEK_WEIGHT_OFFSETS = (-0.18, -0.10, 0.03, -0.07, 0.00, 0.12, 0.20)
+PARTIAL_WEEK_WEIGHT_OFFSETS = (0.10, 0.00, -0.04, 0.02, 0.00, 0.08, 0.12)
+
+ADHERENCE_SCORE_BY_STATUS = {
+    "completed": 1.0,
+    "modified": 0.5,
+    "omitted": 0.0,
+}
+
+USER_PROFILE = {
+    "name": "Demo Frontend Fibrito",
+    "email": "demo.frontend.seed@fibrito.local",
+    "password_hash": "seed-demo-user-not-for-login",
+    "age": 31,
+    "sex": "Masculino",
+    "height": 178.0,
+    "training_days_per_week": 4,
+    "goal": "perder_grasa",
+    "food_preferences": {
+        "preferred_foods": ["avena", "pollo", "arroz", "salmon", "patata"],
+        "disliked_foods": ["refrescos azucarados"],
+        "dietary_restrictions": [],
+        "allergies": [],
+    },
+}
+
+
+@dataclass(frozen=True)
+class WeekBlueprint:
+    average_weight: float
+    adherence_counts: dict[str, int]
+    narrative: str
+    days_count: int = 7
+
+    @property
+    def total_planned_meals(self) -> int:
+        return self.days_count * MEALS_PER_DAY
+
+
+COMPLETE_WEEK_BLUEPRINTS: list[WeekBlueprint] = [
+    WeekBlueprint(
+        average_weight=84.60,
+        adherence_counts={"completed": 24, "modified": 2, "omitted": 1, "pending": 1},
+        narrative="Arranque ordenado, con buena estructura y un par de ajustes menores.",
+    ),
+    WeekBlueprint(
+        average_weight=84.05,
+        adherence_counts={"completed": 23, "modified": 2, "omitted": 2, "pending": 1},
+        narrative="Semana bastante solida, aunque con un par de comidas sociales.",
+    ),
+    WeekBlueprint(
+        average_weight=83.84,
+        adherence_counts={"completed": 21, "modified": 3, "omitted": 2, "pending": 2},
+        narrative="Cumple bastante, pero el ritmo de bajada ya se queda corto.",
+    ),
+    WeekBlueprint(
+        average_weight=83.34,
+        adherence_counts={"completed": 24, "modified": 2, "omitted": 1, "pending": 1},
+        narrative="Tras el ajuste, vuelve a una semana estable y consistente.",
+    ),
+    WeekBlueprint(
+        average_weight=83.38,
+        adherence_counts={"completed": 10, "modified": 4, "omitted": 9, "pending": 5},
+        narrative="Semana muy desordenada: viajes, comidas fuera y muchos huecos sin registrar.",
+    ),
+    WeekBlueprint(
+        average_weight=82.95,
+        adherence_counts={"completed": 23, "modified": 3, "omitted": 1, "pending": 1},
+        narrative="Retoma el plan y vuelve a ver una bajada clara.",
+    ),
+    WeekBlueprint(
+        average_weight=82.56,
+        adherence_counts={"completed": 22, "modified": 4, "omitted": 1, "pending": 1},
+        narrative="Semana buena con algun intercambio de alimentos, pero bien trazada.",
+    ),
+    WeekBlueprint(
+        average_weight=81.68,
+        adherence_counts={"completed": 25, "modified": 2, "omitted": 0, "pending": 1},
+        narrative="Semana muy estricta y con una bajada demasiado rapida para el objetivo.",
+    ),
+    WeekBlueprint(
+        average_weight=81.28,
+        adherence_counts={"completed": 24, "modified": 2, "omitted": 1, "pending": 1},
+        narrative="Tras subir calorias, la tendencia vuelve a la zona razonable.",
+    ),
 ]
 
-def _food(food_code, name, category, grams, calories, protein_grams, fat_grams, carb_grams):
-    """Helper que construye un documento de alimento con el formato exacto del sistema."""
+CURRENT_WEEK_BLUEPRINT = WeekBlueprint(
+    average_weight=81.10,
+    adherence_counts={"completed": 6, "modified": 1, "omitted": 0, "pending": 1},
+    narrative="Semana actual parcial: dos dias ya registrados con buen cumplimiento general.",
+    days_count=CURRENT_WEEK_DAYS,
+)
+
+
+def round_value(value: float | Decimal, precision: str = "0.01") -> float:
+    return float(Decimal(str(value)).quantize(Decimal(precision), rounding=ROUND_HALF_UP))
+
+
+def day_bounds(target_date: date) -> tuple[datetime, datetime]:
+    start = datetime.combine(target_date, time.min).replace(tzinfo=UTC)
+    end = datetime.combine(target_date, time.max).replace(tzinfo=UTC)
+    return start, end
+
+
+def shift_datetime(target_date: date, target_time: time) -> datetime:
+    return datetime.combine(target_date, target_time).replace(tzinfo=UTC)
+
+
+def sum_food_totals(foods: list[dict]) -> dict[str, float]:
+    return {
+        "calories": round_value(sum(food["calories"] for food in foods), "0.01"),
+        "protein_grams": round_value(sum(food["protein_grams"] for food in foods), "0.01"),
+        "fat_grams": round_value(sum(food["fat_grams"] for food in foods), "0.01"),
+        "carb_grams": round_value(sum(food["carb_grams"] for food in foods), "0.01"),
+    }
+
+
+def scale_food(food: dict, scale_ratio: float) -> dict:
+    return {
+        **food,
+        "quantity": round_value(food["quantity"] * scale_ratio, "0.01"),
+        "grams": round_value(food["grams"] * scale_ratio, "0.01"),
+        "calories": round_value(food["calories"] * scale_ratio, "0.01"),
+        "protein_grams": round_value(food["protein_grams"] * scale_ratio, "0.01"),
+        "fat_grams": round_value(food["fat_grams"] * scale_ratio, "0.01"),
+        "carb_grams": round_value(food["carb_grams"] * scale_ratio, "0.01"),
+    }
+
+
+def build_food(
+    food_code: str,
+    name: str,
+    category: str,
+    grams: float,
+    calories: float,
+    protein_grams: float,
+    fat_grams: float,
+    carb_grams: float,
+) -> dict:
     return {
         "food_code": food_code,
         "source": "internal_catalog",
@@ -61,305 +210,691 @@ def _food(food_code, name, category, grams, calories, protein_grams, fat_grams, 
     }
 
 
-# Alimentos por comida (realistas para ganar_masa)
-DIET_MEALS_TEMPLATE = [
+MEAL_TEMPLATES = [
     {
         "meal_number": 1,
         "meal_slot": "early",
+        "meal_role": "breakfast",
+        "meal_label": "Desayuno",
+        "distribution_percentage": 25.0,
         "foods": [
-            _food("oats",                "Avena",                  "carbohidratos",  60, 233, 10.1,  4.1, 39.8),
-            _food("greek_yogurt_plain",  "Yogur griego natural",   "lacteos",       200, 118, 10.0,  3.6,  9.2),
-            _food("banana",              "Plátano",                 "frutas",        120, 107,  1.3,  0.4, 27.0),
-            _food("almonds",             "Almendras",               "grasas",         30, 173,  6.3, 15.0,  5.7),
-            _food("whole_wheat_bread",   "Pan integral",            "carbohidratos",  80, 212,  7.6,  2.4, 40.4),
+            build_food("oats", "Avena", "carbohidratos", 70, 272, 11.8, 4.8, 46.4),
+            build_food("greek_yogurt_plain", "Yogur griego natural", "lacteos", 220, 130, 11.0, 4.0, 10.1),
+            build_food("banana", "Platano", "frutas", 120, 107, 1.3, 0.4, 27.0),
+            build_food("almonds", "Almendras", "grasas", 20, 115, 4.2, 10.0, 3.8),
         ],
     },
     {
         "meal_number": 2,
         "meal_slot": "main",
+        "meal_role": "meal",
+        "meal_label": "Comida principal",
+        "distribution_percentage": 35.0,
         "foods": [
-            _food("chicken_breast",        "Pechuga de pollo",        "proteinas",    200, 240, 46.0,  4.0,  0.0),
-            _food("rice",                  "Arroz",                   "carbohidratos", 90, 328,  6.4,  0.6, 72.0),
-            _food("broccoli",              "Brócoli",                 "vegetales",    150,  51,  4.2,  0.6,  9.9),
-            _food("olive_oil",             "Aceite de oliva",          "grasas",       10,  88,  0.0, 10.0,  0.0),
+            build_food("chicken_breast", "Pechuga de pollo", "proteinas", 190, 228, 43.7, 3.8, 0.0),
+            build_food("rice", "Arroz", "carbohidratos", 100, 364, 7.1, 0.8, 80.0),
+            build_food("broccoli", "Brocoli", "vegetales", 180, 61, 5.0, 0.7, 11.9),
+            build_food("olive_oil", "Aceite de oliva", "grasas", 10, 88, 0.0, 10.0, 0.0),
         ],
     },
     {
         "meal_number": 3,
-        "meal_slot": "snack",
+        "meal_slot": "main",
+        "meal_role": "training_focus",
+        "meal_label": "Comida de entreno",
+        "distribution_percentage": 15.0,
         "foods": [
-            _food("cottage_cheese", "Queso cottage",  "lacteos",  200, 206, 25.0,  9.0,  6.2),
-            _food("apple",          "Manzana",         "frutas",   150,  78,  0.4,  0.2, 20.6),
-            _food("walnuts",        "Nueces",          "grasas",    25, 164,  3.8, 16.4,  3.5),
+            build_food("cottage_cheese", "Queso cottage", "lacteos", 180, 185, 22.5, 8.1, 5.6),
+            build_food("apple", "Manzana", "frutas", 150, 78, 0.4, 0.2, 20.6),
+            build_food("walnuts", "Nueces", "grasas", 20, 131, 3.0, 13.1, 2.8),
         ],
     },
     {
         "meal_number": 4,
         "meal_slot": "late",
+        "meal_role": "dinner",
+        "meal_label": "Cena",
+        "distribution_percentage": 25.0,
         "foods": [
-            _food("salmon",               "Salmón",                 "proteinas",    150, 300, 29.7, 20.1,  0.0),
-            _food("sweet_potato",         "Boniato",                "carbohidratos",180, 156,  2.9,  0.2, 36.2),
-            _food("spinach",              "Espinacas",              "vegetales",    100,  29,  2.9,  0.4,  3.6),
+            build_food("salmon", "Salmon", "proteinas", 160, 320, 31.7, 21.4, 0.0),
+            build_food("sweet_potato", "Boniato", "carbohidratos", 200, 173, 3.2, 0.2, 40.2),
+            build_food("spinach", "Espinacas", "vegetales", 120, 35, 3.5, 0.5, 4.3),
         ],
     },
 ]
 
-
-def _meal_totals(foods):
-    return (
-        round(sum(f.get("calories") or 0 for f in foods), 1),
-        round(sum(f.get("protein_grams") or 0 for f in foods), 1),
-        round(sum(f.get("fat_grams") or 0 for f in foods), 1),
-        round(sum(f.get("carb_grams") or 0 for f in foods), 1),
-    )
+BASE_MEAL_CALORIES = {
+    template["meal_number"]: sum(food["calories"] for food in template["foods"])
+    for template in MEAL_TEMPLATES
+}
 
 
-def _build_meal(template, target_cal, target_p, target_f, target_c):
-    actual_cal, actual_p, actual_f, actual_c = _meal_totals(template["foods"])
+def build_meal_payload(template: dict, target_calories: float, target_macros: dict[str, float]) -> dict:
+    distribution_ratio = template["distribution_percentage"] / 100.0
+    meal_target_calories = round_value(target_calories * distribution_ratio, "0.1")
+    base_calories = BASE_MEAL_CALORIES[template["meal_number"]]
+    scale_ratio = meal_target_calories / base_calories if base_calories else 1.0
+    foods = [scale_food(food, scale_ratio) for food in template["foods"]]
+    actuals = sum_food_totals(foods)
+
+    meal_target_protein = round_value(target_macros["protein_grams"] * distribution_ratio, "0.1")
+    meal_target_fat = round_value(target_macros["fat_grams"] * distribution_ratio, "0.1")
+    meal_target_carb = round_value(target_macros["carb_grams"] * distribution_ratio, "0.1")
+
     return {
         "meal_number": template["meal_number"],
         "meal_slot": template["meal_slot"],
-        "distribution_percentage": None,
-        "target_calories": round(target_cal, 1),
-        "actual_calories": actual_cal,
-        "calorie_difference": round(actual_cal - target_cal, 1),
-        "target_protein_grams": round(target_p, 1),
-        "actual_protein_grams": actual_p,
-        "protein_difference": round(actual_p - target_p, 1),
-        "target_fat_grams": round(target_f, 1),
-        "actual_fat_grams": actual_f,
-        "fat_difference": round(actual_f - target_f, 1),
-        "target_carb_grams": round(target_c, 1),
-        "actual_carb_grams": actual_c,
-        "carb_difference": round(actual_c - target_c, 1),
-        "foods": template["foods"],
-        "suitable_meal_types": [template["meal_slot"]],
+        "meal_role": template["meal_role"],
+        "meal_label": template["meal_label"],
+        "distribution_percentage": template["distribution_percentage"],
+        "target_calories": meal_target_calories,
+        "target_protein_grams": meal_target_protein,
+        "target_fat_grams": meal_target_fat,
+        "target_carb_grams": meal_target_carb,
+        "actual_calories": round_value(actuals["calories"], "0.1"),
+        "actual_protein_grams": round_value(actuals["protein_grams"], "0.1"),
+        "actual_fat_grams": round_value(actuals["fat_grams"], "0.1"),
+        "actual_carb_grams": round_value(actuals["carb_grams"], "0.1"),
+        "calorie_difference": round_value(actuals["calories"] - meal_target_calories, "0.1"),
+        "protein_difference": round_value(actuals["protein_grams"] - meal_target_protein, "0.1"),
+        "fat_difference": round_value(actuals["fat_grams"] - meal_target_fat, "0.1"),
+        "carb_difference": round_value(actuals["carb_grams"] - meal_target_carb, "0.1"),
+        "foods": foods,
     }
 
 
-def _build_diet(created_days_ago, target_cal, weight_at_creation):
-    meals = []
-    for template, (_, pct) in zip(DIET_MEALS_TEMPLATE, MEAL_DISTRIBUTIONS):
-        pct_val = pct
-        t_cal = target_cal * pct_val
-        local_p = weight_at_creation * 2
-        local_f = weight_at_creation * 0.8
-        local_c = (target_cal - local_p * 4 - local_f * 9) / 4
-        meals.append(_build_meal(template, t_cal, local_p * pct_val, local_f * pct_val, local_c * pct_val))
+def build_diet_document(
+    *,
+    target_calories: float,
+    reference_weight: float,
+    valid_from_date: date,
+    adjusted_from_diet_id: ObjectId | None = None,
+    is_active: bool = True,
+) -> dict:
+    macros = calculate_macros(reference_weight, target_calories)
+    meals = [
+        build_meal_payload(template, target_calories, macros)
+        for template in MEAL_TEMPLATES
+    ]
+    actual_calories = round_value(sum(meal["actual_calories"] for meal in meals), "0.1")
+    actual_protein = round_value(sum(meal["actual_protein_grams"] for meal in meals), "0.1")
+    actual_fat = round_value(sum(meal["actual_fat_grams"] for meal in meals), "0.1")
+    actual_carb = round_value(sum(meal["actual_carb_grams"] for meal in meals), "0.1")
+    created_at = shift_datetime(valid_from_date, time(6, 30))
+    valid_from = shift_datetime(valid_from_date, time.min)
 
-    created_at = datetime.now(UTC) - timedelta(days=created_days_ago)
-    local_p = round(weight_at_creation * 2, 1)
-    local_f = round(weight_at_creation * 0.8, 1)
-    local_c = round((target_cal - local_p * 4 - local_f * 9) / 4, 1)
     return {
         "user_id": USER_ID,
         "created_at": created_at,
-        "target_calories": round(target_cal, 1),
-        "protein_grams": local_p,
-        "fat_grams": local_f,
-        "carb_grams": local_c,
+        "is_active": is_active,
+        "valid_from": valid_from,
+        "valid_to": None,
+        "adjusted_from_diet_id": adjusted_from_diet_id,
         "meals_count": len(meals),
+        "target_calories": round_value(target_calories, "0.1"),
+        "protein_grams": round_value(macros["protein_grams"], "0.1"),
+        "fat_grams": round_value(macros["fat_grams"], "0.1"),
+        "carb_grams": round_value(macros["carb_grams"], "0.1"),
+        "actual_calories": actual_calories,
+        "actual_protein_grams": actual_protein,
+        "actual_fat_grams": actual_fat,
+        "actual_carb_grams": actual_carb,
+        "calorie_difference": round_value(actual_calories - target_calories, "0.1"),
+        "protein_difference": round_value(actual_protein - macros["protein_grams"], "0.1"),
+        "fat_difference": round_value(actual_fat - macros["fat_grams"], "0.1"),
+        "carb_difference": round_value(actual_carb - macros["carb_grams"], "0.1"),
+        "distribution_percentages": [template["distribution_percentage"] for template in MEAL_TEMPLATES],
+        "training_time_of_day": "tarde",
+        "training_optimization_applied": True,
+        "food_data_source": "internal",
+        "food_data_sources": ["internal"],
+        "food_catalog_version": "seed-demo",
+        "food_preferences_applied": False,
+        "applied_dietary_restrictions": [],
+        "applied_allergies": [],
+        "preferred_food_matches": 0,
+        "diversity_strategy_applied": False,
+        "food_usage_summary": {},
+        "food_filter_warnings": [],
+        "catalog_source_strategy": "seed_realistic_timeline",
+        "spoonacular_attempted": False,
+        "spoonacular_attempts": 0,
+        "spoonacular_hits": 0,
+        "cache_hits": 0,
+        "internal_fallbacks": sum(len(meal["foods"]) for meal in meals),
+        "resolved_foods_count": sum(len(meal["foods"]) for meal in meals),
         "meals": meals,
     }
 
 
-def seed(db):
-    print("Limpiando datos anteriores del usuario...")
-    db.diets.delete_many({"user_id": USER_ID})
-    db.diet_adherence.delete_many({"user_id": USER_ID})
-    db.weight_logs.delete_many({"user_id": USER_ID})
-    db.calorie_adjustments.delete_many({"user_id": USER_ID})
+def build_macro_snapshot(reference_weight: float | None, target_calories: float | None) -> dict | None:
+    if reference_weight is None or target_calories is None:
+        return None
 
-    # ── Actualizar perfil del usuario ──────────────────────────────────────────
-    print("Actualizando perfil del usuario...")
-    db.users.update_one(
+    macros = calculate_macros(reference_weight, target_calories)
+    return {
+        "protein_grams": round_value(macros["protein_grams"], "0.1"),
+        "fat_grams": round_value(macros["fat_grams"], "0.1"),
+        "carb_grams": round_value(macros["carb_grams"], "0.1"),
+    }
+
+
+def ensure_demo_user(database, initial_weight: float, initial_target_calories: float) -> None:
+    existing_user = database.users.find_one({"_id": USER_ID})
+    profile_updates = {
+        "age": USER_PROFILE["age"],
+        "sex": USER_PROFILE["sex"],
+        "height": USER_PROFILE["height"],
+        "current_weight": round_value(initial_weight, "0.1"),
+        "training_days_per_week": USER_PROFILE["training_days_per_week"],
+        "goal": USER_PROFILE["goal"],
+        "target_calories": round_value(initial_target_calories, "0.1"),
+        "food_preferences": USER_PROFILE["food_preferences"],
+    }
+
+    if existing_user is None:
+        database.users.insert_one({
+            "_id": USER_ID,
+            "name": USER_PROFILE["name"],
+            "email": USER_PROFILE["email"],
+            "password_hash": USER_PROFILE["password_hash"],
+            "created_at": datetime.now(UTC),
+            **profile_updates,
+        })
+        return
+
+    database.users.update_one(
         {"_id": USER_ID},
-        {"$set": {
-            "age": 25,
-            "sex": "Masculino",
-            "height": 180.0,
-            "current_weight": CURRENT_WEIGHT,
-            "training_days_per_week": 4,
-            "goal": "ganar_masa",
-            "target_calories": TARGET_CALORIES,
-        }},
-        upsert=False,
+        {"$set": profile_updates},
     )
 
-    # ── Dietas ─────────────────────────────────────────────────────────────────
-    print("Insertando dietas...")
-    diet1 = _build_diet(21, TARGET_CALORIES, 75.0)
-    diet2 = _build_diet(14, TARGET_CALORIES + 50, 75.3)
-    diet3 = _build_diet(7, TARGET_CALORIES + 100, 75.6)
 
-    res1 = db.diets.insert_one(diet1)
-    res2 = db.diets.insert_one(diet2)
-    res3 = db.diets.insert_one(diet3)
-    diet_ids = [res1.inserted_id, res2.inserted_id, res3.inserted_id]
-    print(f"  Dietas insertadas: {[str(d) for d in diet_ids]}")
+def reset_user_timeline(database) -> None:
+    database.diets.delete_many({"user_id": USER_ID})
+    database.diet_adherence.delete_many({"user_id": USER_ID})
+    database.weight_logs.delete_many({"user_id": USER_ID})
+    database.calorie_adjustments.delete_many({"user_id": USER_ID})
 
-    # ── Pesos en ayunas (21 días, tendencia +0.08 kg/sem ≈ +0.011 kg/día) ──────
-    print("Insertando registros de peso...")
-    weight_logs = []
-    base_weight = 74.8
-    for day_offset in range(21, -1, -1):
-        entry_date = TODAY - timedelta(days=day_offset)
-        # Tendencia base + ruido aleatorio determinista
-        trend = base_weight + (21 - day_offset) * 0.012
-        # Ruido pseudo-aleatorio usando paridad de día
-        noise_vals = [0.0, 0.08, -0.05, 0.12, -0.03, 0.07, -0.08, 0.04,
-                      0.10, -0.06, 0.05, -0.04, 0.09, -0.02, 0.06, -0.07,
-                      0.11, 0.03, -0.05, 0.08, -0.01, 0.06]
-        noise = noise_vals[21 - day_offset]
-        weight = round(trend + noise, 2)
+
+def validate_blueprints() -> None:
+    for blueprint in [*COMPLETE_WEEK_BLUEPRINTS, CURRENT_WEEK_BLUEPRINT]:
+        total_assigned = sum(blueprint.adherence_counts.values())
+        if total_assigned != blueprint.total_planned_meals:
+            raise ValueError(
+                f"Blueprint invalido: {blueprint.narrative}. "
+                f"Asignadas {total_assigned} comidas y esperadas {blueprint.total_planned_meals}."
+            )
+
+
+def choose_slots(
+    available_slots: set[tuple[int, int]],
+    count: int,
+    *,
+    meal_priority: tuple[int, ...],
+    day_priority: tuple[int, ...],
+    rng: random.Random,
+) -> set[tuple[int, int]]:
+    if count <= 0:
+        return set()
+
+    meal_rank = {meal_number: index for index, meal_number in enumerate(meal_priority)}
+    day_rank = {day_index: index for index, day_index in enumerate(day_priority)}
+
+    decorated = []
+    for slot in available_slots:
+        day_index, meal_number = slot
+        decorated.append((
+            (
+                meal_rank.get(meal_number, 99),
+                day_rank.get(day_index, 99),
+                rng.random(),
+            ),
+            slot,
+        ))
+
+    decorated.sort(key=lambda item: item[0])
+    return {slot for _, slot in decorated[:count]}
+
+
+def build_status_schedule(week_start: date, blueprint: WeekBlueprint) -> dict[tuple[int, int], str | None]:
+    rng = random.Random(f"{RNG_SEED}-{week_start.isoformat()}-{blueprint.narrative}")
+    all_slots = {
+        (day_index, meal_number)
+        for day_index in range(blueprint.days_count)
+        for meal_number in range(1, MEALS_PER_DAY + 1)
+    }
+    status_by_slot: dict[tuple[int, int], str | None] = {
+        slot: "completed"
+        for slot in all_slots
+    }
+
+    pending_slots = choose_slots(
+        all_slots,
+        blueprint.adherence_counts.get("pending", 0),
+        meal_priority=(3, 4, 1, 2),
+        day_priority=(4, 5, 6, 0, 1, 2, 3),
+        rng=rng,
+    )
+    for slot in pending_slots:
+        status_by_slot[slot] = None
+
+    remaining_slots = {slot for slot in all_slots if slot not in pending_slots}
+    omitted_slots = choose_slots(
+        remaining_slots,
+        blueprint.adherence_counts.get("omitted", 0),
+        meal_priority=(3, 4, 1, 2),
+        day_priority=(5, 6, 4, 2, 3, 1, 0),
+        rng=rng,
+    )
+    for slot in omitted_slots:
+        status_by_slot[slot] = "omitted"
+
+    remaining_slots = {
+        slot
+        for slot in remaining_slots
+        if slot not in omitted_slots
+    }
+    modified_slots = choose_slots(
+        remaining_slots,
+        blueprint.adherence_counts.get("modified", 0),
+        meal_priority=(2, 4, 1, 3),
+        day_priority=(4, 5, 2, 1, 3, 0, 6),
+        rng=rng,
+    )
+    for slot in modified_slots:
+        status_by_slot[slot] = "modified"
+
+    return status_by_slot
+
+
+def build_status_note(status: str, meal_number: int, day_index: int) -> str | None:
+    if status == "completed":
+        return None
+
+    if status == "modified":
+        options = {
+            1: [
+                "Cambio el desayuno por una opcion equivalente y mas rapida.",
+                "Ajusto cantidades del desayuno para cuadrarlo con el dia.",
+            ],
+            2: [
+                "Comio fuera y ajusto la racion de hidratos.",
+                "Modifico la comida principal manteniendo una estructura similar.",
+            ],
+            3: [
+                "Cambio la comida de entreno por una alternativa similar.",
+                "Ajusto la merienda preentreno por horarios.",
+            ],
+            4: [
+                "La cena se adapto a una opcion casera similar.",
+                "Hizo una cena mas flexible pero intentando respetar el plan.",
+            ],
+        }
+        pool = options.get(meal_number, ["Modifico la comida respetando aproximadamente el objetivo."])
+        return pool[day_index % len(pool)]
+
+    omitted_options = {
+        1: "Se salto el desayuno por falta de tiempo.",
+        2: "No pudo hacer la comida principal segun lo previsto.",
+        3: "Se salto la merienda por horario o falta de hambre.",
+        4: "La cena quedo fuera del plan ese dia.",
+    }
+    return omitted_options.get(meal_number, "Comida omitida.")
+
+
+def generate_adherence_documents(
+    *,
+    diet_id: ObjectId,
+    week_start: date,
+    blueprint: WeekBlueprint,
+) -> list[dict]:
+    schedule = build_status_schedule(week_start, blueprint)
+    adherence_documents: list[dict] = []
+
+    for day_index in range(blueprint.days_count):
+        target_date = week_start + timedelta(days=day_index)
+        for meal_number in range(1, MEALS_PER_DAY + 1):
+            status = schedule[(day_index, meal_number)]
+            if status is None:
+                continue
+
+            created_at = shift_datetime(target_date, MEAL_TIME_BY_NUMBER[meal_number])
+            adherence_documents.append({
+                "user_id": USER_ID,
+                "diet_id": diet_id,
+                "meal_number": meal_number,
+                "date": target_date.isoformat(),
+                "status": status,
+                "note": build_status_note(status, meal_number, day_index),
+                "adherence_score": ADHERENCE_SCORE_BY_STATUS[status],
+                "created_at": created_at,
+                "updated_at": created_at + timedelta(minutes=25),
+            })
+
+    return adherence_documents
+
+
+def generate_weight_logs(
+    *,
+    week_start: date,
+    blueprint: WeekBlueprint,
+) -> list[dict]:
+    offsets = (
+        FULL_WEEK_WEIGHT_OFFSETS
+        if blueprint.days_count == 7
+        else PARTIAL_WEEK_WEIGHT_OFFSETS
+    )
+    weight_logs: list[dict] = []
+
+    for day_index in range(blueprint.days_count):
+        target_date = week_start + timedelta(days=day_index)
+        weight = round_value(blueprint.average_weight + offsets[day_index], "0.01")
         weight_logs.append({
             "user_id": USER_ID,
             "weight": weight,
-            "date": entry_date.isoformat(),
-            "created_at": datetime.combine(entry_date, datetime.min.time()).replace(tzinfo=UTC),
+            "date": target_date.isoformat(),
+            "created_at": shift_datetime(target_date, time(7, 10)),
         })
-    db.weight_logs.insert_many(weight_logs)
-    print(f"  {len(weight_logs)} registros de peso ({weight_logs[0]['weight']} -> {weight_logs[-1]['weight']} kg)")
 
-    # ── Adherencia ─────────────────────────────────────────────────────────────
-    print("Insertando adherencia...")
-    adherence_docs = []
-    diet_id_by_range = [
-        (21, 14, diet_ids[0]),
-        (14, 7, diet_ids[1]),
-        (7, 0, diet_ids[2]),
+    return weight_logs
+
+
+def update_user_state(database, *, current_weight: float, target_calories: float | None = None) -> None:
+    updates = {
+        "current_weight": round_value(current_weight, "0.1"),
+    }
+    if target_calories is not None:
+        updates["target_calories"] = round_value(target_calories, "0.1")
+
+    database.users.update_one(
+        {"_id": USER_ID},
+        {"$set": updates},
+    )
+
+
+def close_diet_version(database, diet_id: ObjectId, valid_to_date: date) -> None:
+    _, valid_to = day_bounds(valid_to_date)
+    database.diets.update_one(
+        {"_id": diet_id, "user_id": USER_ID},
+        {
+            "$set": {
+                "is_active": False,
+                "valid_to": valid_to,
+            }
+        },
+    )
+
+
+def create_diet_version(
+    database,
+    *,
+    target_calories: float,
+    reference_weight: float,
+    valid_from_date: date,
+    previous_diet_id: ObjectId | None = None,
+) -> ObjectId:
+    if previous_diet_id is not None:
+        close_diet_version(database, previous_diet_id, valid_from_date - timedelta(days=1))
+
+    diet_document = build_diet_document(
+        target_calories=target_calories,
+        reference_weight=reference_weight,
+        valid_from_date=valid_from_date,
+        adjusted_from_diet_id=previous_diet_id,
+        is_active=True,
+    )
+    inserted = database.diets.insert_one(diet_document)
+    return inserted.inserted_id
+
+
+def fetch_current_user(database):
+    document = database.users.find_one({"_id": USER_ID})
+    if document is None:
+        raise RuntimeError("No se pudo cargar el usuario demo despues del seed.")
+
+    return serialize_user(document)
+
+
+def persist_adjustment_history_entry(
+    database,
+    *,
+    analysis,
+    created_at: datetime,
+    adjustment_applied: bool,
+    note_lines: list[str],
+    macro_reference_weight: float | None,
+) -> None:
+    adjustment_document = {
+        "user_id": USER_ID,
+        "created_at": created_at,
+        "previous_week_label": analysis.previous_week_label,
+        "current_week_label": analysis.current_week_label,
+        "previous_week_avg": analysis.previous_week_avg,
+        "current_week_avg": analysis.current_week_avg,
+        "weekly_change": analysis.weekly_change,
+        "goal": analysis.goal,
+        "progress_status": analysis.progress_status,
+        "progress_direction_ok": analysis.progress_direction_ok,
+        "progress_rate_ok": analysis.progress_rate_ok,
+        "adjustment_applied": adjustment_applied,
+        "max_weekly_loss": analysis.max_weekly_loss,
+        "calorie_change": analysis.calorie_change,
+        "previous_target_calories": analysis.previous_target_calories,
+        "new_target_calories": analysis.new_target_calories,
+        "macro_reference_weight": macro_reference_weight,
+        "previous_target_macros": build_macro_snapshot(
+            macro_reference_weight,
+            analysis.previous_target_calories,
+        ),
+        "new_target_macros": build_macro_snapshot(
+            macro_reference_weight,
+            analysis.new_target_calories,
+        ),
+        "diet_adjustment_notes": note_lines,
+        "adjustment_reason": analysis.adjustment_reason,
+        "reason": analysis.adjustment_reason,
+    }
+    database.calorie_adjustments.insert_one(adjustment_document)
+
+
+def seed_timeline(database) -> None:
+    validate_blueprints()
+
+    first_complete_week_start = CURRENT_WEEK_START - timedelta(days=7 * len(COMPLETE_WEEK_BLUEPRINTS))
+    first_weight = COMPLETE_WEEK_BLUEPRINTS[0].average_weight
+
+    initial_summary = build_nutrition_summary({
+        "age": USER_PROFILE["age"],
+        "sex": USER_PROFILE["sex"],
+        "height": USER_PROFILE["height"],
+        "current_weight": first_weight,
+        "training_days_per_week": USER_PROFILE["training_days_per_week"],
+        "goal": USER_PROFILE["goal"],
+    })
+    initial_target_calories = round_value(initial_summary.target_calories, "0.1")
+
+    reset_user_timeline(database)
+    ensure_demo_user(database, first_weight, initial_target_calories)
+
+    active_target_calories = initial_target_calories
+    active_diet_id = create_diet_version(
+        database,
+        target_calories=active_target_calories,
+        reference_weight=first_weight,
+        valid_from_date=first_complete_week_start,
+    )
+
+    complete_week_starts = [
+        CURRENT_WEEK_START - timedelta(days=7 * weeks_ago)
+        for weeks_ago in range(len(COMPLETE_WEEK_BLUEPRINTS), 0, -1)
     ]
 
-    for start_days_ago, end_days_ago, diet_id in diet_id_by_range:
-        for day_offset in range(start_days_ago - 1, end_days_ago - 1, -1):
-            entry_date = TODAY - timedelta(days=day_offset)
-            for meal_template, (_, pct) in zip(DIET_MEALS_TEMPLATE, MEAL_DISTRIBUTIONS):
-                # Omit snacks occasionally (slot 3), otherwise complete
-                if meal_template["meal_number"] == 3 and day_offset % 7 == 0:
-                    status = "omitted"
-                    adherence_score = 0.0
-                elif meal_template["meal_number"] == 2 and day_offset % 11 == 0:
-                    status = "modified"
-                    adherence_score = 0.6
-                else:
-                    status = "completed"
-                    adherence_score = 1.0
+    for week_start, blueprint in zip(complete_week_starts, COMPLETE_WEEK_BLUEPRINTS, strict=True):
+        weight_logs = generate_weight_logs(
+            week_start=week_start,
+            blueprint=blueprint,
+        )
+        adherence_documents = generate_adherence_documents(
+            diet_id=active_diet_id,
+            week_start=week_start,
+            blueprint=blueprint,
+        )
 
-                adherence_docs.append({
-                    "user_id": USER_ID,
-                    "diet_id": diet_id,
-                    "date": entry_date.isoformat(),
-                    "meal_number": meal_template["meal_number"],
-                    "meal_slot": meal_template["meal_slot"],
-                    "status": status,
-                    "adherence_score": adherence_score,
-                    "created_at": datetime.combine(entry_date, datetime.min.time()).replace(tzinfo=UTC),
-                })
+        database.weight_logs.insert_many(weight_logs)
+        database.diet_adherence.insert_many(adherence_documents)
 
-    db.diet_adherence.insert_many(adherence_docs)
-    completed = sum(1 for a in adherence_docs if a["status"] == "completed")
-    print(f"  {len(adherence_docs)} registros de adherencia ({completed} completados)")
+        latest_week_weight = weight_logs[-1]["weight"]
+        update_user_state(
+            database,
+            current_weight=latest_week_weight,
+            target_calories=active_target_calories,
+        )
 
-    # ── Ajustes calóricos ──────────────────────────────────────────────────────
-    print("Insertando ajustes calóricos...")
+        weekly_weights = list_weight_entries(database, str(USER_ID))
+        weekly_averages = calculate_weekly_averages(
+            weekly_weights,
+            reference_date=week_start + timedelta(days=7),
+        )
+        weekly_summary = calculate_weekly_adherence_summary(
+            database,
+            str(USER_ID),
+            week_label=build_week_label(week_start),
+        )
+        analysis = analyze_weekly_progress(
+            fetch_current_user(database),
+            weekly_averages,
+            adherence_level=weekly_summary.adherence_level,
+            confidence_factor=weekly_summary.confidence_factor,
+            tracking_coverage_percentage=weekly_summary.tracking_coverage_percentage,
+        )
 
-    # Semana 1: en ruta (0 kcal de cambio)
-    week1_start = TODAY - timedelta(days=21)
-    iso1 = week1_start.isocalendar()
-    week1_label = f"{iso1.year}-W{iso1.week:02d}"
+        if not analysis.can_analyze:
+            continue
 
-    week2_start = TODAY - timedelta(days=14)
-    iso2 = week2_start.isocalendar()
-    week2_label = f"{iso2.year}-W{iso2.week:02d}"
+        adjustment_created_at = shift_datetime(week_start + timedelta(days=6), time(21, 30))
+        notes: list[str] = []
+        adjustment_applied = bool(analysis.adjustment_needed)
 
-    week3_start = TODAY - timedelta(days=7)
-    iso3 = week3_start.isocalendar()
-    week3_label = f"{iso3.year}-W{iso3.week:02d}"
+        if adjustment_applied:
+            next_week_start = week_start + timedelta(days=7)
+            notes = [
+                "Se genero una nueva version historica de la dieta para la semana siguiente.",
+                "Las comidas se reescalaron manteniendo la misma estructura y los mismos alimentos base.",
+            ]
+            active_diet_id = create_diet_version(
+                database,
+                target_calories=analysis.new_target_calories,
+                reference_weight=analysis.current_week_avg or latest_week_weight,
+                valid_from_date=next_week_start,
+                previous_diet_id=active_diet_id,
+            )
+            active_target_calories = round_value(analysis.new_target_calories, "0.1")
+            update_user_state(
+                database,
+                current_weight=latest_week_weight,
+                target_calories=active_target_calories,
+            )
+        elif analysis.progress_status == "needs_attention":
+            notes = [
+                "No se aplico ajuste automatico porque la adherencia de la semana no permite interpretar el peso con suficiente confianza.",
+                "Se mantiene la dieta activa hasta recuperar una semana mas representativa.",
+            ]
+        else:
+            notes = [
+                "Se mantiene la misma dieta porque el progreso semanal esta dentro del rango esperado.",
+            ]
 
-    week4_iso = TODAY.isocalendar()
-    week4_label = f"{week4_iso.year}-W{week4_iso.week:02d}"
+        persist_adjustment_history_entry(
+            database,
+            analysis=analysis,
+            created_at=adjustment_created_at,
+            adjustment_applied=adjustment_applied,
+            note_lines=notes,
+            macro_reference_weight=analysis.current_week_avg or latest_week_weight,
+        )
 
-    adj1 = {
-        "user_id": USER_ID,
-        "previous_week_label": week1_label,
-        "current_week_label": week2_label,
-        "previous_week_avg": 74.95,
-        "current_week_avg": 75.06,
-        "weekly_change": 0.11,
-        "goal": "ganar_masa",
-        "progress_status": "on_track",
-        "adjustment_needed": False,
-        "adjustment_applied": True,
-        "calorie_change": 0,
-        "previous_target_calories": TARGET_CALORIES,
-        "new_target_calories": TARGET_CALORIES,
-        "current_weight": 75.0,
-        "adjustment_reason": "Progreso dentro del rango objetivo.",
-        "reason": "Ganando 0.11 kg/semana (objetivo: ~0.10). Plan en ruta.",
-        "created_at": datetime.now(UTC) - timedelta(days=14),
-    }
-
-    adj2 = {
-        "user_id": USER_ID,
-        "previous_week_label": week2_label,
-        "current_week_label": week3_label,
-        "previous_week_avg": 75.06,
-        "current_week_avg": 75.14,
-        "weekly_change": 0.08,
-        "goal": "ganar_masa",
-        "progress_status": "on_track",
-        "adjustment_needed": False,
-        "adjustment_applied": True,
-        "calorie_change": 50,
-        "previous_target_calories": TARGET_CALORIES,
-        "new_target_calories": TARGET_CALORIES + 50,
-        "current_weight": 75.2,
-        "adjustment_reason": "Ganancia ligeramente por debajo del objetivo. Incremento moderado.",
-        "reason": "Ganando 0.08 kg/semana (objetivo: ~0.10). Ajuste +50 kcal.",
-        "created_at": datetime.now(UTC) - timedelta(days=7),
-    }
-
-    adj3 = {
-        "user_id": USER_ID,
-        "previous_week_label": week3_label,
-        "current_week_label": week4_label,
-        "previous_week_avg": 75.14,
-        "current_week_avg": 75.28,
-        "weekly_change": 0.14,
-        "goal": "ganar_masa",
-        "progress_status": "on_track",
-        "adjustment_needed": False,
-        "adjustment_applied": True,
-        "calorie_change": 0,
-        "previous_target_calories": TARGET_CALORIES + 50,
-        "new_target_calories": TARGET_CALORIES + 50,
-        "current_weight": 75.4,
-        "adjustment_reason": "Progreso dentro del rango objetivo.",
-        "reason": "Ganando 0.14 kg/semana (objetivo: ~0.10). Ligero exceso, pero dentro del margen.",
-        "created_at": datetime.now(UTC) - timedelta(days=1),
-    }
-
-    db.calorie_adjustments.insert_many([adj1, adj2, adj3])
-    print("  3 ajustes calóricos insertados")
-
-    # Actualizar target_calories al valor más reciente
-    db.users.update_one(
-        {"_id": USER_ID},
-        {"$set": {"target_calories": TARGET_CALORIES + 50}},
+    current_week_weights = generate_weight_logs(
+        week_start=CURRENT_WEEK_START,
+        blueprint=CURRENT_WEEK_BLUEPRINT,
     )
-    print(f"  target_calories actualizado a {TARGET_CALORIES + 50} kcal")
+    current_week_adherence = generate_adherence_documents(
+        diet_id=active_diet_id,
+        week_start=CURRENT_WEEK_START,
+        blueprint=CURRENT_WEEK_BLUEPRINT,
+    )
+    database.weight_logs.insert_many(current_week_weights)
+    database.diet_adherence.insert_many(current_week_adherence)
 
-    print("\nResumen final:")
-    print(f"  Dietas:     {db.diets.count_documents({'user_id': USER_ID})}")
-    print(f"  Adherencia: {db.diet_adherence.count_documents({'user_id': USER_ID})}")
-    print(f"  Pesos:      {db.weight_logs.count_documents({'user_id': USER_ID})}")
-    print(f"  Ajustes:    {db.calorie_adjustments.count_documents({'user_id': USER_ID})}")
+    update_user_state(
+        database,
+        current_weight=current_week_weights[-1]["weight"],
+        target_calories=active_target_calories,
+    )
+
+
+def print_summary(database) -> None:
+    current_user = fetch_current_user(database)
+    dashboard = build_dashboard_overview(database, current_user)
+    current_week_summary = calculate_weekly_adherence_summary(
+        database,
+        str(USER_ID),
+        reference_date=TODAY,
+    )
+    reference_week_label = dashboard.weight_progress.latest_analysis.current_week_label
+    reference_week_summary = calculate_weekly_adherence_summary(
+        database,
+        str(USER_ID),
+        week_label=reference_week_label,
+    ) if reference_week_label else None
+    reference_registered_adherence = (
+        round_value(reference_week_summary.weekly_adherence_factor * 100, "0.01")
+        if reference_week_summary is not None
+        else None
+    )
+    current_registered_adherence = round_value(
+        current_week_summary.weekly_adherence_factor * 100,
+        "0.01",
+    )
+
+    print(
+        "Seed completado para "
+        f"{str(USER_ID)} | "
+        f"dietas={database.diets.count_documents({'user_id': USER_ID})} | "
+        f"pesos={database.weight_logs.count_documents({'user_id': USER_ID})} | "
+        f"adherencia={database.diet_adherence.count_documents({'user_id': USER_ID})} | "
+        f"ajustes={database.calorie_adjustments.count_documents({'user_id': USER_ID})}"
+    )
+    print(
+        "Analisis vigente: "
+        f"{dashboard.weight_progress.latest_analysis.previous_week_label} -> "
+        f"{dashboard.weight_progress.latest_analysis.current_week_label} | "
+        f"estado={dashboard.weight_progress.latest_analysis.progress_status} | "
+        f"cambio={dashboard.weight_progress.latest_analysis.weekly_change} kg/sem | "
+        f"kcal objetivo={dashboard.summary.current_target_calories}"
+    )
+    if reference_week_summary is not None:
+        print(
+            "Semana de referencia dashboard/progreso: "
+            f"{reference_week_summary.week_label} | "
+            f"adherencia_registrada={reference_registered_adherence}% | "
+            f"cobertura={reference_week_summary.tracking_coverage_percentage}% | "
+            f"fiabilidad={reference_week_summary.confidence_percentage}%"
+        )
+    print(
+        "Semana actual parcial dietas: "
+        f"{current_week_summary.week_label} | "
+        f"adherencia_registrada={current_registered_adherence}% | "
+        f"cobertura={current_week_summary.tracking_coverage_percentage}% | "
+        f"fiabilidad={current_week_summary.confidence_percentage}%"
+    )
+
+
+def main() -> None:
+    database = get_database()
+    database.command("ping")
+    seed_timeline(database)
+    print_summary(database)
 
 
 if __name__ == "__main__":
-    print("Conectando a MongoDB...")
-    db = get_database()
-    db.command("ping")
-    print("Conexion OK.\n")
-    seed(db)
-    print("\nSeed completado.")
+    main()

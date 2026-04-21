@@ -847,15 +847,21 @@
 .circular-gauge-center {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
-  gap: 6px;
+  gap: 1px;
+  line-height: 1;
+  padding-top: 2px;
 }
 
 .circular-gauge-center strong {
   font-family: 'Space Grotesk', sans-serif;
   font-size: clamp(2.8rem, 3vw, 3.4rem);
+  line-height: 0.92;
+  margin: 0;
 }
 
 .circular-gauge-center span {
@@ -863,6 +869,16 @@
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.18em;
+  line-height: 1;
+  margin: 0;
+}
+
+.circular-gauge-center small {
+  color: var(--lab-soft);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  line-height: 1.05;
+  margin: 0;
 }
 
 .dashboard-gauge-panel .section-panel-header {

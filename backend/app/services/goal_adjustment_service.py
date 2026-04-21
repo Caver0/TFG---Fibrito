@@ -46,6 +46,8 @@ MISSING_CURRENT_WEIGHT_REASON = (
     "Completa tu peso actual en el perfil nutricional para analizar correctamente una perdida de grasa."
 )
 EXISTING_ANALYSIS_PREFIX = "Ya existe un analisis guardado para estas semanas. "
+MIN_CONFIDENCE_FOR_ADJUSTMENT = 0.60
+MIN_TRACKING_COVERAGE_PERCENTAGE_FOR_ADJUSTMENT = 60.0
 
 
 def get_current_target_calories(user: UserPublic) -> float | None:
@@ -56,6 +58,16 @@ def get_current_target_calories(user: UserPublic) -> float | None:
         return build_nutrition_summary(user).target_calories
     except NutritionProfileIncompleteError:
         return None
+
+
+def _get_reference_week_for_display(
+    weekly_averages: list[WeeklyAverage],
+) -> WeeklyAverage | None:
+    for week in reversed(weekly_averages):
+        if week.is_complete:
+            return week
+
+    return weekly_averages[-1] if weekly_averages else None
 
 
 def _build_macro_snapshot(
@@ -256,15 +268,41 @@ def _build_adjustment_decision(
     }
 
 
+def _has_reliable_weekly_signal(
+    *,
+    adherence_level: str,
+    confidence_factor: float | None = None,
+    tracking_coverage_percentage: float | None = None,
+) -> bool:
+    if confidence_factor is not None:
+        return confidence_factor >= MIN_CONFIDENCE_FOR_ADJUSTMENT
+
+    if (
+        tracking_coverage_percentage is not None
+        and tracking_coverage_percentage < MIN_TRACKING_COVERAGE_PERCENTAGE_FOR_ADJUSTMENT
+    ):
+        return False
+
+    return adherence_level != "baja"
+
+
 def calculate_calorie_adjustment(
     goal: str,
     weekly_change: float,
     current_weight: float | None = None,
-    adherence_level: str = "alta"
+    adherence_level: str = "alta",
+    confidence_factor: float | None = None,
+    tracking_coverage_percentage: float | None = None,
 ) -> dict[str, Any]:
+    reliable_signal = _has_reliable_weekly_signal(
+        adherence_level=adherence_level,
+        confidence_factor=confidence_factor,
+        tracking_coverage_percentage=tracking_coverage_percentage,
+    )
+
     if goal == "ganar_masa":
         if weekly_change <= 0:
-            status = "needs_adjustment" if adherence_level != "baja" else "needs_attention"
+            status = "needs_adjustment" if reliable_signal else "needs_attention"
             return _build_adjustment_decision(
                 progress_status=status,
                 adjustment_needed=(status == "needs_adjustment"),
@@ -273,12 +311,12 @@ def calculate_calorie_adjustment(
                 progress_rate_ok=False,
                 adjustment_reason=(
                     "No estás subiendo de peso. " + 
-                    ("El plan requiere más energía." if adherence_level != "baja" else 
-                     "Con baja adherencia es normal; intenta cumplir el plan antes de subir calorías.")
+                    ("El plan requiere más energía." if reliable_signal else 
+                     "La fiabilidad semanal es baja; mejora la cobertura y el registro antes de subir calorías.")
                 ),
             )
         if weekly_change > 0.2:
-            status = "needs_adjustment" if adherence_level != "baja" else "needs_attention"
+            status = "needs_adjustment" if reliable_signal else "needs_attention"
             return _build_adjustment_decision(
                 progress_status=status,
                 adjustment_needed=(status == "needs_adjustment"),
@@ -287,8 +325,8 @@ def calculate_calorie_adjustment(
                 progress_rate_ok=False,
                 adjustment_reason=(
                     "Subida demasiado rápida. " +
-                    ("Ajustamos para minimizar ganancia de grasa." if adherence_level != "baja" else 
-                     "Es posible que se deba a excesos puntuales. ¿Quieres ajustar o ser más estricto?")
+                    ("Ajustamos para minimizar ganancia de grasa." if reliable_signal else 
+                     "La fiabilidad semanal es baja; conviene registrar mejor la semana antes de corregir calorías.")
                 ),
             )
         return _build_adjustment_decision(
@@ -308,7 +346,7 @@ def calculate_calorie_adjustment(
         weekly_loss = abs(weekly_change)
 
         if weekly_change >= 0:
-            status = "needs_adjustment" if adherence_level != "baja" else "needs_attention"
+            status = "needs_adjustment" if reliable_signal else "needs_attention"
             return _build_adjustment_decision(
                 progress_status=status,
                 adjustment_needed=(status == "needs_adjustment"),
@@ -317,13 +355,13 @@ def calculate_calorie_adjustment(
                 progress_rate_ok=False,
                 adjustment_reason=(
                     "No hay pérdida de peso. " +
-                    ("Es necesario recortar calorías." if adherence_level != "baja" else 
-                     "La baja adherencia explica el estancamiento. Cumple el plan antes de recortar más.")
+                    ("Es necesario recortar calorías." if reliable_signal else 
+                     "La fiabilidad semanal es baja; mejora cobertura y registros antes de recortar más.")
                 ),
                 max_weekly_loss=max_weekly_loss,
             )
         if weekly_loss > max_weekly_loss:
-            status = "needs_adjustment" if adherence_level != "baja" else "needs_attention"
+            status = "needs_adjustment" if reliable_signal else "needs_attention"
             return _build_adjustment_decision(
                 progress_status=status,
                 adjustment_needed=(status == "needs_adjustment"),
@@ -332,13 +370,13 @@ def calculate_calorie_adjustment(
                 progress_rate_ok=False,
                 adjustment_reason=(
                     "Pérdida excesivamente rápida. " +
-                    ("Subimos calorías para proteger tu masa muscular." if adherence_level != "baja" else 
-                     "Baja adherencia: puede ser pérdida de líquidos o error de medición por falta de registros.")
+                    ("Subimos calorías para proteger tu masa muscular." if reliable_signal else 
+                     "La fiabilidad semanal es baja; la bajada puede reflejar registros incompletos o ruido de medición.")
                 ),
                 max_weekly_loss=max_weekly_loss,
             )
         if weekly_loss < 0.3:
-            status = "needs_adjustment" if adherence_level != "baja" else "needs_attention"
+            status = "needs_adjustment" if reliable_signal else "needs_attention"
             return _build_adjustment_decision(
                 progress_status=status,
                 adjustment_needed=(status == "needs_adjustment"),
@@ -347,8 +385,8 @@ def calculate_calorie_adjustment(
                 progress_rate_ok=False,
                 adjustment_reason=(
                     "Ritmo de pérdida muy lento. " +
-                    ("Ajuste necesario para mantener la tendencia." if adherence_level != "baja" else 
-                     "Probablemente los excesos registrados impiden la bajada. ¡Mejora tu adherencia!")
+                    ("Ajuste necesario para mantener la tendencia." if reliable_signal else 
+                     "La fiabilidad semanal es baja; mejora cobertura y registros antes de aplicar un nuevo recorte.")
                 ),
                 max_weekly_loss=max_weekly_loss,
             )
@@ -373,23 +411,33 @@ def calculate_calorie_adjustment(
         )
     if weekly_change > 0.15:
         return _build_adjustment_decision(
-            progress_status="needs_adjustment",
-            adjustment_needed=True,
+            progress_status="needs_adjustment" if reliable_signal else "needs_attention",
+            adjustment_needed=reliable_signal,
             calorie_change=-100,
             progress_direction_ok=True,
             progress_rate_ok=False,
             adjustment_reason=(
-                "El usuario esta subiendo demasiado de peso para un objetivo de mantenimiento."
+                "El peso esta subiendo demasiado para un objetivo de mantenimiento."
+                if reliable_signal
+                else (
+                    "La fiabilidad semanal es baja; no conviene reajustar calorías de "
+                    "mantenimiento hasta tener mejor cobertura."
+                )
             ),
         )
     return _build_adjustment_decision(
-        progress_status="needs_adjustment",
-        adjustment_needed=True,
+        progress_status="needs_adjustment" if reliable_signal else "needs_attention",
+        adjustment_needed=reliable_signal,
         calorie_change=100,
         progress_direction_ok=True,
         progress_rate_ok=False,
         adjustment_reason=(
-            "El usuario esta bajando demasiado de peso para un objetivo de mantenimiento."
+            "El peso esta bajando demasiado para un objetivo de mantenimiento."
+            if reliable_signal
+            else (
+                "La fiabilidad semanal es baja; no conviene reajustar calorías de "
+                "mantenimiento hasta tener mejor cobertura."
+            )
         ),
     )
 
@@ -399,7 +447,17 @@ def analyze_weekly_progress(
     weekly_averages: list[WeeklyAverage],
     *,
     adherence_level: str = "alta",
+    confidence_factor: float | None = None,
+    tracking_coverage_percentage: float | None = None,
 ) -> WeeklyAnalysisResponse:
+    reference_week = _get_reference_week_for_display(weekly_averages)
+    reference_week_label = reference_week.week_label if reference_week is not None else None
+    reference_week_avg = (
+        round_progress_value(reference_week.average_weight)
+        if reference_week is not None
+        else None
+    )
+
     if user.goal is None:
         adjustment_reason = MISSING_GOAL_REASON
         return WeeklyAnalysisResponse(
@@ -410,9 +468,9 @@ def analyze_weekly_progress(
             progress_direction_ok=None,
             progress_rate_ok=None,
             previous_week_label=None,
-            current_week_label=None,
+            current_week_label=reference_week_label,
             previous_week_avg=None,
-            current_week_avg=None,
+            current_week_avg=reference_week_avg,
             weekly_change=None,
             max_weekly_loss=None,
             calorie_change=0,
@@ -433,9 +491,9 @@ def analyze_weekly_progress(
             progress_direction_ok=None,
             progress_rate_ok=None,
             previous_week_label=None,
-            current_week_label=None,
+            current_week_label=reference_week_label,
             previous_week_avg=None,
-            current_week_avg=None,
+            current_week_avg=reference_week_avg,
             weekly_change=None,
             max_weekly_loss=None,
             calorie_change=0,
@@ -455,9 +513,9 @@ def analyze_weekly_progress(
             progress_direction_ok=None,
             progress_rate_ok=None,
             previous_week_label=None,
-            current_week_label=None,
+            current_week_label=reference_week_label,
             previous_week_avg=None,
-            current_week_avg=None,
+            current_week_avg=reference_week_avg,
             weekly_change=None,
             max_weekly_loss=None,
             calorie_change=0,
@@ -478,9 +536,9 @@ def analyze_weekly_progress(
             progress_direction_ok=None,
             progress_rate_ok=None,
             previous_week_label=None,
-            current_week_label=None,
+            current_week_label=reference_week_label,
             previous_week_avg=None,
-            current_week_avg=None,
+            current_week_avg=reference_week_avg,
             weekly_change=None,
             max_weekly_loss=None,
             calorie_change=0,
@@ -499,6 +557,8 @@ def analyze_weekly_progress(
         weekly_change,
         current_weight=user.current_weight,
         adherence_level=adherence_level,
+        confidence_factor=confidence_factor,
+        tracking_coverage_percentage=tracking_coverage_percentage,
     )
     new_target_calories = current_target_calories + adjustment_decision["calorie_change"]
     adjustment_reason = adjustment_decision["adjustment_reason"]

@@ -36,7 +36,7 @@ function AdherencePanel({
         <>
           <div className="adherence-summary-grid">
             <article className="metric-card">
-              <span>Adherencia del dia</span>
+              <span>Cumplimiento del dia</span>
               <strong>{formatPercentage(summary.adherence_percentage)}</strong>
             </article>
             <article className="metric-card">

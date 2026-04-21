@@ -3,6 +3,7 @@ import {
   formatProgressMetric,
   formatRateStatus,
 } from '../utils/progressFormat'
+import { resolveConfidencePercentage } from '../utils/stitch'
 
 function getStatusLabel(status) {
   if (status === 'on_track') {
@@ -43,6 +44,7 @@ function WeeklyAnalysisCard({
 }) {
   // Identificamos si es un caso de baja adherencia para cambiar el comportamiento del botón
   const isOptionalAdjustment = analysis?.progress_status === 'needs_attention'
+  const confidenceScore = resolveConfidencePercentage(adherenceSummary)
 
   return (
     <section className="profile-section">
@@ -124,7 +126,7 @@ function WeeklyAnalysisCard({
                 </span>
               </div>
               <p>
-                Factor semanal {Number(adherenceSummary.weekly_adherence_factor ?? 0).toFixed(2)}. {adherenceSummary.interpretation_message}
+                Fiabilidad semanal {Number(confidenceScore).toFixed(0)}%. Cobertura {Number(adherenceSummary.tracking_coverage_percentage ?? 0).toFixed(0)}%. {adherenceSummary.interpretation_message}
               </p>
             </article>
           ) : null}

@@ -1,9 +1,7 @@
+import { resolveConfidencePercentage, resolveRegisteredAdherencePercentage } from '../utils/stitch'
+
 function formatPercentage(value) {
   return `${Number(value ?? 0).toFixed(1)}%`
-}
-
-function formatFactor(value) {
-  return Number(value ?? 0).toFixed(2)
 }
 
 function formatAdherenceLevel(level) {
@@ -23,6 +21,9 @@ function WeeklyAdherenceSummary({
   summary,
   title = 'Adherencia semanal',
 }) {
+  const confidenceScore = resolveConfidencePercentage(summary)
+  const registeredAdherenceScore = resolveRegisteredAdherencePercentage(summary)
+
   return (
     <section className="profile-section">
       <div className="section-heading">
@@ -48,15 +49,15 @@ function WeeklyAdherenceSummary({
             </div>
 
             <div className="weekly-adherence-hero-copy">
-              <strong>Factor interpretable: {formatFactor(summary.weekly_adherence_factor)}</strong>
+              <strong>Fiabilidad interpretativa: {formatPercentage(confidenceScore)}</strong>
               <p>{summary.interpretation_message}</p>
             </div>
           </article>
 
           <div className="weekly-adherence-grid">
             <article className="metric-card">
-              <span>Adherencia agregada</span>
-              <strong>{formatPercentage(summary.adherence_percentage)}</strong>
+              <span>Adherencia registrada</span>
+              <strong>{formatPercentage(registeredAdherenceScore)}</strong>
             </article>
             <article className="metric-card">
               <span>Cobertura de registro</span>

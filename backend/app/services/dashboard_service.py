@@ -276,6 +276,9 @@ def get_adherence_overview(
         weekly_adherence_factor=weekly_summary.weekly_adherence_factor,
         adherence_level=weekly_summary.adherence_level,
         tracking_coverage_percentage=weekly_summary.tracking_coverage_percentage,
+        tracking_coverage_factor=weekly_summary.tracking_coverage_factor,
+        confidence_factor=weekly_summary.confidence_factor,
+        confidence_percentage=weekly_summary.confidence_percentage,
         total_planned_meals=weekly_summary.total_planned_meals,
         total_meals_registered=weekly_summary.total_meals_registered,
         completed_meals=weekly_summary.completed_meals,
@@ -393,6 +396,8 @@ def build_dashboard_overview(
             current_user,
             weekly_averages_for_analysis,
             adherence_level=adherence_overview.adherence_level,
+            confidence_factor=adherence_overview.confidence_factor,
+            tracking_coverage_percentage=adherence_overview.tracking_coverage_percentage,
         )
     active_diet_overview = get_active_diet_overview(database, current_user.id)
     adjustment_events = get_calorie_adjustment_events(database, current_user.id)
@@ -451,6 +456,10 @@ def build_dashboard_overview(
         weekly_adherence_percentage=adherence_overview.adherence_percentage,
         weekly_adherence_factor=adherence_overview.weekly_adherence_factor,
         adherence_level=adherence_overview.adherence_level,
+        tracking_coverage_percentage=adherence_overview.tracking_coverage_percentage,
+        tracking_coverage_factor=adherence_overview.tracking_coverage_factor,
+        confidence_factor=adherence_overview.confidence_factor,
+        confidence_percentage=adherence_overview.confidence_percentage,
         adherence_interpretation=adherence_overview.interpretation_message,
         goal=current_user.goal,
     )

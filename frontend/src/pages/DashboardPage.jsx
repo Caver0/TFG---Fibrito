@@ -22,6 +22,8 @@ import {
   formatGoalLabel,
   formatMass,
   formatPercent,
+  resolveConfidencePercentage,
+  resolveRegisteredAdherencePercentage,
   formatSignedMass,
 } from '../utils/stitch'
 
@@ -255,6 +257,9 @@ function DashboardPage() {
   const latestAdjustmentEvent = weightProgress?.adjustment_events?.[weightProgress.adjustment_events.length - 1] ?? null
   const lastEntryDelta = getLatestDelta(weightProgress?.entries ?? [])
   const chartPayload = buildWeightChartPayload(weightProgress)
+  const adherenceWeekLabel = adherence?.week_label ?? latestAnalysis?.current_week_label ?? null
+  const confidenceScore = resolveConfidencePercentage(adherence)
+  const registeredAdherenceScore = resolveRegisteredAdherencePercentage(adherence)
 
   const metricCards = [
     {
@@ -285,10 +290,10 @@ function DashboardPage() {
       icon: 'bolt',
     },
     {
-      title: 'Adherencia',
-      value: formatCompactNumber(summary?.weekly_adherence_percentage, { maximumFractionDigits: 1, minimumFractionDigits: 1 }),
+      title: 'Fiabilidad semanal',
+      value: formatCompactNumber(confidenceScore, { maximumFractionDigits: 1, minimumFractionDigits: 1 }),
       suffix: '%',
-      note: (summary?.adherence_interpretation || 'Resumen de cumplimiento semanal').toUpperCase(),
+      note: (adherenceWeekLabel ? `Semana ${adherenceWeekLabel}` : 'Resumen semanal interpretable').toUpperCase(),
       noteTone: 'accent',
       icon: 'verified',
     },
@@ -322,16 +327,24 @@ function DashboardPage() {
       value: formatGoalLabel(summary?.goal),
     },
     {
+      label: 'Semana analizada',
+      value: adherenceWeekLabel ?? 'N/A',
+    },
+    {
       label: 'Comidas planificadas',
       value: activeDiet?.meals_count ? `${activeDiet.meals_count}` : 'N/A',
     },
     {
       label: 'Comidas registradas',
-      value: adherence?.total_meals_registered ? `${adherence.total_meals_registered}` : '0',
+      value: adherence ? `${adherence.total_meals_registered ?? 0} / ${adherence.total_planned_meals ?? 0}` : '0 / 0',
     },
     {
-      label: 'Cobertura',
+      label: 'Cobertura semanal',
       value: formatPercent(adherence?.tracking_coverage_percentage ?? 0, 0),
+    },
+    {
+      label: 'Adherencia registrada',
+      value: formatPercent(registeredAdherenceScore, 0),
     },
   ]
 
@@ -479,14 +492,15 @@ function DashboardPage() {
             </div>
 
             <div className="dashboard-side-column">
-              <SectionPanel eyebrow="Cumplimiento semanal" className="dashboard-gauge-panel">
+              <SectionPanel eyebrow="Fiabilidad semanal" className="dashboard-gauge-panel">
                 <CircularGauge
-                  value={adherence?.adherence_percentage ?? 0}
-                  label="Consistencia"
+                  value={confidenceScore}
+                  label="Fiabilidad"
+                  caption={adherenceWeekLabel ? `Semana ${adherenceWeekLabel}` : undefined}
                 />
 
                 <div className="interpretation-card">
-                  <span>Interpretación</span>
+                  <span>{adherenceWeekLabel ? `Semana ${adherenceWeekLabel}` : 'Interpretacion'}</span>
                   <p>{summary?.adherence_interpretation || adherence?.interpretation_message || 'Los datos de adherencia aparecerán aquí cuando empieces a registrar comidas.'}</p>
                 </div>
               </SectionPanel>

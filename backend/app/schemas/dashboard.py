@@ -24,6 +24,10 @@ class DashboardSummaryMetrics(BaseModel):
     weekly_adherence_percentage: float = 0.0
     weekly_adherence_factor: float = 0.0
     adherence_level: AdherenceLevel = "baja"
+    tracking_coverage_percentage: float = 0.0
+    tracking_coverage_factor: float = 0.0
+    confidence_factor: float = 0.0
+    confidence_percentage: float = 0.0
     adherence_interpretation: str = ""
     goal: GoalType | None = None
 
@@ -96,6 +100,9 @@ class AdherenceOverview(BaseModel):
     weekly_adherence_factor: float = 0.0
     adherence_level: AdherenceLevel = "baja"
     tracking_coverage_percentage: float = 0.0
+    tracking_coverage_factor: float = 0.0
+    confidence_factor: float = 0.0
+    confidence_percentage: float = 0.0
     total_planned_meals: int = 0
     total_meals_registered: int = 0
     completed_meals: int = 0

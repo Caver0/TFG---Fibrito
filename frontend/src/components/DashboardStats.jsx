@@ -1,6 +1,5 @@
 import {
   formatCalories,
-  formatFactor,
   formatGoal,
   formatMacro,
   formatPercentage,
@@ -10,6 +9,8 @@ import {
 
 function DashboardStats({ summary }) {
   const macros = summary?.current_macros ?? {}
+  const confidencePercentage = Number(summary?.confidence_percentage ?? summary?.weekly_adherence_percentage ?? 0)
+  const coveragePercentage = Number(summary?.tracking_coverage_percentage ?? 0)
 
   return (
     <section className="profile-section">
@@ -54,14 +55,14 @@ function DashboardStats({ summary }) {
           </article>
 
           <article className="metric-card dashboard-stat-card">
-            <span>Adherencia semanal</span>
-            <strong>{formatPercentage(summary.weekly_adherence_percentage)}</strong>
-            <small>{summary.adherence_level ? `Nivel ${summary.adherence_level}` : 'Sin nivel calculado'}</small>
+            <span>Fiabilidad semanal</span>
+            <strong>{formatPercentage(confidencePercentage)}</strong>
+            <small>{coveragePercentage > 0 ? `Cobertura ${formatPercentage(coveragePercentage)}` : (summary.adherence_level ? `Nivel ${summary.adherence_level}` : 'Sin nivel calculado')}</small>
           </article>
 
           <article className="metric-card dashboard-stat-card">
-            <span>Factor interpretativo</span>
-            <strong>{formatFactor(summary.weekly_adherence_factor)}</strong>
+            <span>Adherencia registrada</span>
+            <strong>{formatPercentage(Number(summary.weekly_adherence_factor ?? 0) * 100)}</strong>
             <small>{summary.adherence_interpretation || 'Sin mensaje interpretativo disponible.'}</small>
           </article>
         </div>

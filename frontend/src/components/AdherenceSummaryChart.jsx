@@ -7,7 +7,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { formatFactor, formatPercentage } from '../utils/dashboardFormat'
+import { formatPercentage } from '../utils/dashboardFormat'
+import { resolveConfidencePercentage, resolveRegisteredAdherencePercentage } from '../utils/stitch'
 
 function buildTooltipContent({ active, payload, label }) {
   if (!active || !payload?.length) {
@@ -22,13 +23,15 @@ function buildTooltipContent({ active, payload, label }) {
       <p>Modificadas: {point.modified_meals}</p>
       <p>Omitidas: {point.omitted_meals}</p>
       <p>Pendientes: {point.pending_meals}</p>
-      <p>Adherencia del dia: {formatPercentage(point.adherence_percentage)}</p>
+      <p>Cumplimiento del dia: {formatPercentage(point.adherence_percentage)}</p>
     </div>
   )
 }
 
 function AdherenceSummaryChart({ adherence }) {
   const dailyBreakdown = adherence?.daily_breakdown ?? []
+  const confidenceScore = resolveConfidencePercentage(adherence)
+  const registeredAdherencePercentage = resolveRegisteredAdherencePercentage(adherence)
 
   return (
     <section className="profile-section">
@@ -44,15 +47,15 @@ function AdherenceSummaryChart({ adherence }) {
         <>
           <div className="dashboard-adherence-summary">
             <article className="dashboard-adherence-hero">
-              <strong>{formatPercentage(adherence.adherence_percentage)}</strong>
-              <span>Adherencia semanal</span>
+              <strong>{formatPercentage(confidenceScore)}</strong>
+              <span>Fiabilidad semanal</span>
               <p>{adherence.interpretation_message}</p>
             </article>
 
             <div className="dashboard-adherence-metrics">
               <article className="metric-card">
-                <span>Factor interpretativo</span>
-                <strong>{formatFactor(adherence.weekly_adherence_factor)}</strong>
+                <span>Adherencia registrada</span>
+                <strong>{formatPercentage(registeredAdherencePercentage)}</strong>
               </article>
               <article className="metric-card">
                 <span>Cobertura</span>

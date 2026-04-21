@@ -282,3 +282,60 @@ export function toConfidenceScore(value) {
 
   return clampPercentage(numericValue)
 }
+
+export function resolveRegisteredAdherencePercentage(summary) {
+  if (!summary || typeof summary !== 'object') {
+    return 0
+  }
+
+  const weeklyAdherenceFactor = toFiniteNumber(summary.weekly_adherence_factor)
+  if (weeklyAdherenceFactor !== null) {
+    return toConfidenceScore(weeklyAdherenceFactor)
+  }
+
+  const adherencePercentage = toFiniteNumber(summary.adherence_percentage)
+  if (adherencePercentage === null) {
+    return 0
+  }
+
+  const trackingCoverageFactor = toFiniteNumber(summary.tracking_coverage_factor)
+  if (trackingCoverageFactor !== null && trackingCoverageFactor > 0) {
+    return clampPercentage(adherencePercentage / trackingCoverageFactor)
+  }
+
+  const trackingCoveragePercentage = toFiniteNumber(summary.tracking_coverage_percentage)
+  if (trackingCoveragePercentage !== null && trackingCoveragePercentage > 0) {
+    return clampPercentage(adherencePercentage / (trackingCoveragePercentage / 100))
+  }
+
+  return clampPercentage(adherencePercentage)
+}
+
+export function resolveConfidencePercentage(summary) {
+  if (!summary || typeof summary !== 'object') {
+    return 0
+  }
+
+  const confidenceFactor = toFiniteNumber(summary.confidence_factor)
+  if (confidenceFactor !== null) {
+    return toConfidenceScore(confidenceFactor)
+  }
+
+  const weeklyAdherenceFactor = toFiniteNumber(summary.weekly_adherence_factor)
+  const trackingCoverageFactor = toFiniteNumber(summary.tracking_coverage_factor)
+  if (weeklyAdherenceFactor !== null && trackingCoverageFactor !== null) {
+    return toConfidenceScore(weeklyAdherenceFactor * trackingCoverageFactor)
+  }
+
+  const confidencePercentage = toFiniteNumber(summary.confidence_percentage)
+  if (confidencePercentage !== null) {
+    return clampPercentage(confidencePercentage)
+  }
+
+  const adherencePercentage = toFiniteNumber(summary.adherence_percentage)
+  if (adherencePercentage !== null) {
+    return clampPercentage(adherencePercentage)
+  }
+
+  return 0
+}

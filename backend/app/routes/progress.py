@@ -44,6 +44,8 @@ def _build_weekly_analysis_with_adherence(
         current_user,
         weekly_averages,
         adherence_level=weekly_adherence_summary.adherence_level,
+        confidence_factor=weekly_adherence_summary.confidence_factor,
+        tracking_coverage_percentage=weekly_adherence_summary.tracking_coverage_percentage,
     )
 
 
