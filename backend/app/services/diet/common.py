@@ -1,5 +1,8 @@
 """Utilidades comunes de redondeo y contexto para dietas."""
 
+import hashlib
+import json
+
 from app.schemas.diet import DietMeal
 from app.services.meal_distribution_service import round_distribution_value
 from app.utils.meal_roles import get_meal_slot as _resolve_meal_slot
@@ -117,3 +120,34 @@ def rotate_codes(codes: list[str], rotation_seed: int) -> list[str]:
 
     shift = rotation_seed % len(codes)
     return codes[shift:] + codes[:shift]
+
+
+def _normalize_seed_part(value: object) -> object:
+    if isinstance(value, dict):
+        return {
+            str(key): _normalize_seed_part(item)
+            for key, item in sorted(value.items(), key=lambda item: str(item[0]))
+        }
+    if isinstance(value, (list, tuple)):
+        return [_normalize_seed_part(item) for item in value]
+    if isinstance(value, set):
+        return [_normalize_seed_part(item) for item in sorted(value, key=lambda item: str(item))]
+    if value is None:
+        return ""
+    if isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
+
+
+def build_variety_seed(*parts: object) -> int:
+    serialized_parts = json.dumps(
+        [_normalize_seed_part(part) for part in parts],
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    digest = hashlib.blake2b(
+        serialized_parts.encode("utf-8"),
+        digest_size=8,
+    ).digest()
+    return int.from_bytes(digest, "big") % 1_000_000_000

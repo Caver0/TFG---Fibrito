@@ -1,5 +1,8 @@
 """Solver exacto y ajuste cuantitativo de comidas."""
 
+import hashlib
+import logging
+import time
 from itertools import product
 from typing import Any
 
@@ -13,7 +16,10 @@ from app.utils.normalization import normalize_food_name
 from app.services.diet.candidates import (
     _food_has_any_token,
     apply_daily_usage_candidate_limits,
+    apply_family_repeat_penalty,
+    apply_main_family_pair_repeat_penalty,
     apply_main_pair_repeat_penalty,
+    apply_meal_structure_repeat_penalty,
     apply_meal_candidate_constraints,
     apply_preference_priority,
     apply_repeat_penalty,
@@ -21,6 +27,8 @@ from app.services.diet.candidates import (
     apply_user_food_preferences_to_meal_candidates,
     apply_weekly_repeat_penalty,
     get_role_candidate_codes,
+    get_food_family_signature,
+    get_meal_structure_signature,
     get_support_option_specs,
     is_breakfast_fat,
     is_breakfast_only_protein,
@@ -60,6 +68,7 @@ from app.services.diet.constants import (
     FRUIT_CARB_TARGET_MULTIPLIER,
     LOW_FAT_MEAL_ROLES,
     MAX_ROLE_CANDIDATES_PER_MEAL,
+    NEAR_BEST_SELECTION_WINDOW_BY_SLOT,
     ROLE_DISPLAY_ORDER,
     ROLE_FALLBACK_CODE_POOLS,
     ROLE_QUANTITY_SAFETY_CEILING_G,
@@ -68,6 +77,8 @@ from app.services.diet.constants import (
     SOFT_ROLE_MINIMUMS,
     VALID_MEAL_ROLES,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def get_food_macro_density(food: dict) -> dict[str, float]:
@@ -313,6 +324,37 @@ def build_culinary_pairing_adjustment(
     return score
 
 
+def build_breakfast_support_redundancy_penalty(
+    *,
+    role_foods: dict[str, dict[str, Any]],
+    support_foods: list[dict[str, Any]],
+    meal_slot: str,
+) -> float:
+    if meal_slot != "early":
+        return 0.0
+
+    protein_food = role_foods["protein"]
+    if not is_breakfast_only_protein(protein_food):
+        return 0.0
+
+    penalty = 0.0
+    for support_food in support_foods:
+        if str(support_food.get("role") or "").strip().lower() != "dairy":
+            continue
+
+        support_family = get_food_family_signature(support_food, role="dairy")
+        if support_family.endswith("milk"):
+            penalty += 0.35
+        elif support_family.endswith("fresh_cheese"):
+            penalty += 1.05
+        elif support_family.endswith("greek_yogurt") or support_family.endswith("yogurt"):
+            penalty += 0.95
+        else:
+            penalty += 0.75
+
+    return penalty
+
+
 def solve_linear_system(matrix: list[list[float]], values: list[float]) -> list[float] | None:
     size = len(values)
     augmented = [row[:] + [values[index]] for index, row in enumerate(matrix)]
@@ -383,6 +425,11 @@ def build_solution_score(
             role=role,
             daily_food_usage=daily_food_usage,
         )
+        score += apply_family_repeat_penalty(
+            food,
+            role=role,
+            daily_food_usage=daily_food_usage,
+        )
         score += apply_weekly_repeat_penalty(
             food["code"],
             role=role,
@@ -432,6 +479,10 @@ def build_solution_score(
         role_foods,
         daily_food_usage=daily_food_usage,
     )
+    score += apply_main_family_pair_repeat_penalty(
+        role_foods,
+        daily_food_usage=daily_food_usage,
+    )
 
     if support_foods:
         for support_food in support_foods:
@@ -451,12 +502,27 @@ def build_solution_score(
                 role=support_food["role"],
                 daily_food_usage=daily_food_usage,
             )
+            score += apply_family_repeat_penalty(
+                support_food,
+                role=support_food["role"],
+                daily_food_usage=daily_food_usage,
+            )
 
     score += build_culinary_pairing_adjustment(
         role_foods=role_foods,
         support_foods=support_foods,
         meal_slot=meal_slot,
         meal_role=meal_role,
+    )
+    score += build_breakfast_support_redundancy_penalty(
+        role_foods=role_foods,
+        support_foods=support_foods,
+        meal_slot=meal_slot,
+    )
+    score += apply_meal_structure_repeat_penalty(
+        role_foods=role_foods,
+        support_foods=support_foods,
+        daily_food_usage=daily_food_usage,
     )
 
     return score
@@ -521,11 +587,16 @@ def build_exact_meal_solution(
         if sf["food_code"] in food_lookup
     ]
     seen_fingerprints: set[str] = set()
+    seen_family_signatures: set[str] = set()
     for food_item in all_foods_for_dedup:
         fps = _get_food_semantic_fingerprints(food_item)
         if fps & seen_fingerprints:
             return None
         seen_fingerprints.update(fps)
+        family_signature = get_food_family_signature(food_item)
+        if family_signature in seen_family_signatures:
+            return None
+        seen_family_signatures.add(family_signature)
 
     if not is_role_combination_coherent(role_foods, meal_slot=meal_slot):
         return None
@@ -711,6 +782,8 @@ def find_exact_solution_for_meal(
     excluded_food_codes: set[str] | None = None,
     variety_seed: int | None = None,
     preferred_support_candidates: list[dict] | None = None,
+    expand_candidate_pool: bool = False,
+    regeneration_context: dict[str, Any] | None = None,
 ) -> dict:
     # Calcular contexto de comida al inicio para reutilizarlo en toda la función
     meal_slot, meal_role = resolve_meal_context(
@@ -719,6 +792,22 @@ def find_exact_solution_for_meal(
         meals_count=meals_count,
         training_focus=training_focus,
     )
+
+    regeneration_context = dict(regeneration_context or {})
+    original_food_codes = {
+        str(code).strip()
+        for code in regeneration_context.get("original_food_codes", set())
+        if str(code).strip()
+    }
+    original_selected_role_codes = {
+        role: str(food_code).strip()
+        for role, food_code in regeneration_context.get("original_selected_role_codes", {}).items()
+        if str(food_code).strip()
+    }
+    prefer_visible_difference = bool(regeneration_context.get("prefer_visible_difference"))
+    min_visual_difference = max(int(regeneration_context.get("min_visual_difference", 2) or 0), 1)
+    target_distinct_calorie_ratio = float(regeneration_context.get("min_distinct_calorie_ratio", 0.45) or 0.0)
+    actual_expand_candidate_pool = expand_candidate_pool or bool(regeneration_context.get("expand_candidate_pool"))
 
     candidate_codes = get_role_candidate_codes(
         meal=meal,
@@ -733,6 +822,7 @@ def find_exact_solution_for_meal(
         meals_count=meals_count,
         training_focus=training_focus,
         food_lookup=food_lookup,
+        expand_candidate_pool=actual_expand_candidate_pool,
     )
 
     # Inyectar alimentos de soporte preferidos como opciones adicionales.
@@ -791,10 +881,182 @@ def find_exact_solution_for_meal(
             for idx, (role, codes) in enumerate(candidate_codes.items())
         }
 
+    solver_started_at = time.perf_counter()
+    near_best_window = NEAR_BEST_SELECTION_WINDOW_BY_SLOT.get(meal_slot, 0.9)
     best_solution: dict | None = None
+    best_selection_score: float | None = None
+    best_base_score: float | None = None
+    near_best_candidates: list[tuple[float, dict[str, Any]]] = []
+    evaluated_combinations = 0
+    valid_combinations = 0
+
+    def build_candidate_fingerprint(candidate_solution: dict[str, Any]) -> str:
+        fingerprint_parts = [
+            str(candidate_solution.get("selected_role_codes", {}).get(role) or "").strip()
+            for role in ("protein", "carb", "fat")
+        ]
+        fingerprint_parts.extend(
+            sorted(
+                str(support_food.get("food_code") or "").strip()
+                for support_food in candidate_solution.get("support_food_specs", [])
+                if str(support_food.get("food_code") or "").strip()
+            )
+        )
+        return "|".join(part for part in fingerprint_parts if part)
+
+    def build_variety_selection_adjustment(candidate_solution: dict[str, Any]) -> float:
+        if variety_seed is None:
+            return 0.0
+
+        fingerprint = build_candidate_fingerprint(candidate_solution)
+        if not fingerprint:
+            return 0.0
+
+        digest = hashlib.blake2b(
+            f"{variety_seed}:{fingerprint}".encode("utf-8"),
+            digest_size=8,
+        ).digest()
+        normalized_value = int.from_bytes(digest, "big") / float(2**64 - 1)
+        max_adjustment = 0.18 if prefer_visible_difference else 0.12
+        return normalized_value * max_adjustment
+
+    def build_regeneration_selection_penalty(candidate_solution: dict[str, Any]) -> float:
+        if not prefer_visible_difference or not original_food_codes:
+            return 0.0
+
+        candidate_codes = {
+            str(food.get("food_code") or "").strip()
+            for food in candidate_solution.get("foods", [])
+            if str(food.get("food_code") or "").strip()
+        }
+        changed_visible_food_count = max(
+            len(original_food_codes - candidate_codes),
+            len(candidate_codes - original_food_codes),
+        )
+        penalty = 0.0
+
+        if changed_visible_food_count < min_visual_difference:
+            penalty += (min_visual_difference - changed_visible_food_count) * 4.5
+
+        candidate_role_codes = {
+            role: str(food_code).strip()
+            for role, food_code in candidate_solution.get("selected_role_codes", {}).items()
+            if str(food_code).strip()
+        }
+        if original_selected_role_codes:
+            same_carb = original_selected_role_codes.get("carb") == candidate_role_codes.get("carb")
+            same_protein = original_selected_role_codes.get("protein") == candidate_role_codes.get("protein")
+            same_fat = original_selected_role_codes.get("fat") == candidate_role_codes.get("fat")
+
+            if same_carb:
+                penalty += 2.4
+            if same_protein:
+                penalty += 1.8
+            if same_fat:
+                penalty += 0.6
+            if same_carb and same_protein:
+                penalty += 4.0
+
+        total_calories = max(float(candidate_solution.get("actual_calories") or 0.0), 1.0)
+        distinct_calories = sum(
+            float(food.get("calories") or 0.0)
+            for food in candidate_solution.get("foods", [])
+            if str(food.get("food_code") or "").strip() not in original_food_codes
+        )
+        distinct_calorie_ratio = distinct_calories / total_calories
+        if distinct_calorie_ratio < target_distinct_calorie_ratio:
+            penalty += (target_distinct_calorie_ratio - distinct_calorie_ratio) * 5.0
+
+        return penalty
+
+    def register_candidate_solution(candidate_solution: dict[str, Any]) -> None:
+        nonlocal best_base_score, best_selection_score, best_solution, valid_combinations, near_best_candidates
+
+        valid_combinations += 1
+        base_selection_score = (
+            float(candidate_solution["score"])
+            + build_regeneration_selection_penalty(candidate_solution)
+        )
+        if best_base_score is None or base_selection_score < best_base_score:
+            best_base_score = base_selection_score
+            near_best_candidates = [
+                (score, solution)
+                for score, solution in near_best_candidates
+                if score <= best_base_score + near_best_window
+            ]
+
+        if best_base_score is None or base_selection_score <= best_base_score + near_best_window:
+            near_best_candidates.append((base_selection_score, candidate_solution))
+            near_best_candidates.sort(key=lambda item: item[0])
+            near_best_candidates = near_best_candidates[:48]
+
+        selection_score = base_selection_score + build_variety_selection_adjustment(candidate_solution)
+        if best_solution is None or best_selection_score is None or selection_score < best_selection_score:
+            best_solution = candidate_solution
+            best_selection_score = selection_score
+
+    def select_best_solution() -> dict[str, Any] | None:
+        if not near_best_candidates:
+            return best_solution
+        if variety_seed is None:
+            return min(near_best_candidates, key=lambda item: item[0])[1]
+
+        best_by_structure: dict[str, tuple[float, dict[str, Any]]] = {}
+        for base_score, candidate_solution in near_best_candidates:
+            structure_signature = get_meal_structure_signature(
+                selected_role_codes={
+                    role: str(food_code).strip()
+                    for role, food_code in candidate_solution.get("selected_role_codes", {}).items()
+                },
+                support_food_specs=candidate_solution.get("support_food_specs", []),
+            )
+            existing_candidate = best_by_structure.get(structure_signature)
+            if existing_candidate is None or base_score < existing_candidate[0]:
+                best_by_structure[structure_signature] = (base_score, candidate_solution)
+
+        ranked_candidates: list[tuple[tuple[float, float, str], dict[str, Any]]] = []
+        for structure_signature, (base_score, candidate_solution) in best_by_structure.items():
+            fingerprint = build_candidate_fingerprint(candidate_solution) or structure_signature
+            digest = hashlib.blake2b(
+                f"{variety_seed}:{structure_signature}:{fingerprint}".encode("utf-8"),
+                digest_size=8,
+            ).digest()
+            normalized_value = int.from_bytes(digest, "big") / float(2**64 - 1)
+            ranked_candidates.append(((normalized_value, base_score, fingerprint), candidate_solution))
+
+        return min(ranked_candidates, key=lambda item: item[0])[1]
+
+    def finalize_solution(solution: dict[str, Any] | None, *, strategy: str) -> dict[str, Any] | None:
+        if solution is None:
+            return None
+
+        logger.debug(
+            "Diet solver solved meal=%s slot=%s role=%s strategy=%s elapsed=%.4fs evaluated=%s valid=%s role_pool=%s support_options=%s structure=%s",
+            getattr(meal, "meal_number", None),
+            meal_slot,
+            meal_role,
+            strategy,
+            time.perf_counter() - solver_started_at,
+            evaluated_combinations,
+            valid_combinations,
+            {role: len(codes) for role, codes in candidate_codes.items()},
+            len(support_options),
+            get_meal_structure_signature(
+                selected_role_codes=solution.get("selected_role_codes", {}),
+                support_food_specs=solution.get("support_food_specs", []),
+            ),
+        )
+        return solution
 
     def evaluate_candidate_sets(role_codes: dict[str, list[str]], extra_support_options: list[list[dict]]) -> None:
-        nonlocal best_solution
+        nonlocal evaluated_combinations
+
+        evaluated_combinations += (
+            len(role_codes["protein"])
+            * len(role_codes["carb"])
+            * len(role_codes["fat"])
+            * len(extra_support_options)
+        )
 
         for support_food_specs in extra_support_options:
             for protein_index, carb_index, fat_index in product(
@@ -827,12 +1089,65 @@ def find_exact_solution_for_meal(
                 if not candidate_solution:
                     continue
 
-                if best_solution is None or candidate_solution["score"] < best_solution["score"]:
-                    best_solution = candidate_solution
+                register_candidate_solution(candidate_solution)
+
+    def build_expanded_role_codes() -> dict[str, list[str]]:
+        excluded = excluded_food_codes or set()
+        expanded_codes: dict[str, list[str]] = {}
+
+        for role in ("protein", "carb", "fat"):
+            compatible_codes = [
+                code
+                for code, food in food_lookup.items()
+                if code not in excluded
+                and is_food_allowed_for_role_and_slot(food, role=role, meal_slot=meal_slot)
+            ]
+            sorted_codes = sort_codes_by_meal_fit(
+                compatible_codes,
+                role=role,
+                meal_slot=meal_slot,
+                meal_role=meal_role,
+                training_focus=training_focus,
+                food_lookup=food_lookup,
+            )
+            expansion_multiplier = 3 if meal_slot == "early" else 2
+            expanded_limit = max(
+                len(candidate_codes[role]),
+                MAX_ROLE_CANDIDATES_PER_MEAL[role] * expansion_multiplier,
+            )
+            expanded_codes[role] = sorted_codes[:expanded_limit]
+
+        expanded_codes = apply_daily_usage_candidate_limits(
+            expanded_codes,
+            daily_food_usage=daily_food_usage,
+        )
+        expanded_codes = apply_meal_candidate_constraints(
+            expanded_codes,
+            food_lookup=food_lookup,
+            forced_role_codes=forced_role_codes,
+            excluded_food_codes=excluded_food_codes,
+        )
+
+        if variety_seed is not None and not forced_role_codes:
+            expanded_codes = {
+                role: rotate_codes(codes, variety_seed + idx)
+                for idx, (role, codes) in enumerate(expanded_codes.items())
+            }
+
+        return expanded_codes
 
     evaluate_candidate_sets(candidate_codes, support_options)
-    if best_solution:
-        return best_solution
+    selected_solution = finalize_solution(select_best_solution(), strategy="base_pool")
+    if selected_solution:
+        return selected_solution
+
+    if actual_expand_candidate_pool:
+        expanded_role_codes = build_expanded_role_codes()
+        if expanded_role_codes != candidate_codes:
+            evaluate_candidate_sets(expanded_role_codes, support_options)
+            selected_solution = finalize_solution(select_best_solution(), strategy="expanded_pool")
+            if selected_solution:
+                return selected_solution
 
     # ── Estrategia A: pool ampliado para alimentos forzados por el usuario vía API ────────
     # Cuando forced_role_codes está presente, el alimento forzado queda al frente de su rol
@@ -866,8 +1181,9 @@ def find_exact_solution_for_meal(
             excluded_food_codes=excluded_food_codes,
         )
         evaluate_candidate_sets(expanded_forced, [[]])
-        if best_solution:
-            return best_solution
+        selected_solution = finalize_solution(select_best_solution(), strategy="forced_pool")
+        if selected_solution:
+            return selected_solution
 
     # ── Estrategia B: alimentos preferidos como ancla de la comida ────────────────────────
     # Solo se activa cuando el usuario indicó alimentos que QUIERE ver (preferencias positivas).
@@ -920,8 +1236,9 @@ def find_exact_solution_for_meal(
                     ]
             evaluate_candidate_sets(anchor_candidate_codes, [[]])
 
-    if best_solution:
-        return best_solution
+    selected_solution = finalize_solution(select_best_solution(), strategy="preferred_anchor")
+    if selected_solution:
+        return selected_solution
 
     # ── Estrategia C: pool de seguridad con alimentos básicos garantizados ────────────────
     # Se ejecuta para TODOS los usuarios, incluidos los que tienen preferencias.
@@ -969,8 +1286,9 @@ def find_exact_solution_for_meal(
     )
     evaluate_candidate_sets(fallback_role_codes, fallback_support_options)
 
-    if best_solution:
-        return best_solution
+    selected_solution = finalize_solution(select_best_solution(), strategy="fallback_pool")
+    if selected_solution:
+        return selected_solution
 
     # ── Estrategia D: relajación completa de preferencias positivas ──────────────────────────
     # Preferencias positivas = prioridad blanda. Si todas las estrategias anteriores
@@ -998,6 +1316,7 @@ def find_exact_solution_for_meal(
             meals_count=meals_count,
             training_focus=training_focus,
             food_lookup=food_lookup,
+            expand_candidate_pool=actual_expand_candidate_pool,
         )
         if relaxed_profile.get("has_preferences"):
             # Solo restricciones duras: si esto falla, el error sí es real
@@ -1024,8 +1343,9 @@ def find_exact_solution_for_meal(
             excluded_food_codes=excluded_food_codes,
         )
         evaluate_candidate_sets(relaxed_candidate_codes, relaxed_support_options)
-        if best_solution:
-            return best_solution
+        selected_solution = finalize_solution(select_best_solution(), strategy="relaxed_preferences")
+        if selected_solution:
+            return selected_solution
 
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -1,7 +1,8 @@
 """Services to regenerate a single meal while preserving the rest of the diet."""
 from __future__ import annotations
 
-import random
+import logging
+import time
 from itertools import product
 from typing import Any
 
@@ -9,6 +10,7 @@ from fastapi import HTTPException, status
 
 from app.schemas.diet import DailyDiet, DietMeal, DietMutationResponse, DietMutationSummary
 from app.schemas.user import UserPublic
+from app.services.diet_runtime_audit import emit_runtime_audit
 from app.services.diet_service import (
     build_exact_meal_solution,
     build_updated_diet_payload,
@@ -23,16 +25,27 @@ from app.services.diet_service import (
     save_diet,
     track_food_usage_across_day,
 )
+from app.services.diet.common import build_variety_seed
 from app.services.food_catalog_service import (
     build_catalog_food_from_diet_food,
     get_food_by_code,
     get_internal_food_lookup,
     resolve_foods_by_codes,
 )
+from app.services.diet.candidates import build_weekly_food_usage
 from app.services.food_group_service import derive_functional_group
 from app.services.food_preferences_service import FoodPreferenceConflictError, build_user_food_preferences_profile
-from app.services.meal_coherence_service import apply_generation_coherence, build_generation_food_lookup
+from app.services.diet_v2 import regenerate_meal_plan_v2
+from app.services.diet_v2.telemetry import get_last_regeneration_diagnostics, set_last_regeneration_diagnostics
+from app.services.meal_coherence_service import (
+    apply_generation_coherence,
+    build_generation_food_lookup,
+    build_regeneration_candidate_ranking,
+    evaluate_regeneration_candidate,
+)
 from app.services.meal_distribution_service import get_training_focus_indexes
+
+logger = logging.getLogger(__name__)
 
 
 def get_training_focus_for_meal(diet: DailyDiet, meal_index: int) -> bool:
@@ -469,6 +482,298 @@ def persist_updated_meal_in_diet(
         adjusted_from_diet_id=diet_id,
     )
 
+
+def _rank_food_codes_for_partial_regeneration(
+    current_food_codes: set[str],
+    *,
+    current_meal_plan: dict[str, Any] | None,
+    food_lookup: dict[str, dict[str, Any]],
+) -> list[str]:
+    ranked_codes: list[str] = []
+    seen_codes: set[str] = set()
+
+    def add_code(food_code: str) -> None:
+        normalized_code = str(food_code or "").strip()
+        if not normalized_code or normalized_code not in current_food_codes or normalized_code in seen_codes:
+            return
+        seen_codes.add(normalized_code)
+        ranked_codes.append(normalized_code)
+
+    if current_meal_plan:
+        for support_food in current_meal_plan.get("support_food_specs", []):
+            add_code(str(support_food.get("food_code") or ""))
+
+        selected_role_codes = current_meal_plan.get("selected_role_codes", {})
+        for role in ("fat", "carb", "protein"):
+            add_code(str(selected_role_codes.get(role) or ""))
+
+    group_priority = {
+        "vegetable": 0,
+        "fruit": 1,
+        "dairy": 2,
+        "fat": 3,
+        "carb": 4,
+        "protein": 5,
+    }
+    for food_code in sorted(
+        current_food_codes - seen_codes,
+        key=lambda code: (
+            group_priority.get(derive_functional_group(food_lookup.get(code, {})), 99),
+            code,
+        ),
+    ):
+        add_code(food_code)
+
+    return ranked_codes
+
+
+def _build_partial_regeneration_exclusion_sets(
+    current_food_codes: set[str],
+    *,
+    current_meal_plan: dict[str, Any] | None,
+    food_lookup: dict[str, dict[str, Any]],
+) -> list[set[str]]:
+    if len(current_food_codes) <= 1:
+        return []
+
+    partial_exclusion_sets: list[set[str]] = []
+    seen_keys: set[frozenset[str]] = set()
+
+    def add_exclusion_set(excluded_codes: set[str]) -> None:
+        normalized_codes = {
+            str(code).strip()
+            for code in excluded_codes
+            if str(code).strip()
+        }
+        if not normalized_codes or normalized_codes == current_food_codes:
+            return
+        frozen_codes = frozenset(normalized_codes)
+        if frozen_codes in seen_keys:
+            return
+        seen_keys.add(frozen_codes)
+        partial_exclusion_sets.append(normalized_codes)
+
+    if current_meal_plan:
+        core_codes = {
+            str(food_code).strip()
+            for food_code in current_meal_plan.get("selected_role_codes", {}).values()
+            if str(food_code).strip() in current_food_codes
+        }
+        add_exclusion_set(core_codes)
+
+    for preserved_code in _rank_food_codes_for_partial_regeneration(
+        current_food_codes,
+        current_meal_plan=current_meal_plan,
+        food_lookup=food_lookup,
+    ):
+        add_exclusion_set(current_food_codes - {preserved_code})
+
+    return partial_exclusion_sets
+
+
+def _build_regeneration_context(
+    *,
+    current_food_codes: set[str],
+    current_meal_plan: dict[str, Any] | None,
+    strict_exclusions: bool,
+    expand_candidate_pool: bool,
+) -> dict[str, Any]:
+    return {
+        "original_food_codes": set(current_food_codes),
+        "original_selected_role_codes": dict((current_meal_plan or {}).get("selected_role_codes", {})),
+        "original_support_food_specs": list((current_meal_plan or {}).get("support_food_specs", [])),
+        "strict_exclusions": strict_exclusions,
+        "prefer_visible_difference": True,
+        "min_visual_difference": 2,
+        "avoid_same_template": True,
+        "expand_candidate_pool": expand_candidate_pool,
+        "min_distinct_calorie_ratio": 0.45,
+    }
+
+
+def _solve_regenerated_meal_plan(
+    *,
+    meal: DietMeal,
+    meal_index: int,
+    meals_count: int,
+    training_focus: bool,
+    full_food_lookup: dict[str, dict[str, Any]],
+    current_meal_food_lookup: dict[str, dict[str, Any]],
+    preference_profile: dict[str, Any] | None,
+    daily_food_usage: dict[str, dict[str, Any]] | None,
+    current_food_codes: set[str],
+    variety_seed: int,
+) -> dict[str, Any]:
+    current_meal_plan: dict[str, Any] | None = None
+    if current_food_codes:
+        try:
+            inferred_current_plan = infer_existing_meal_plan(
+                meal,
+                meal_index=meal_index,
+                meals_count=meals_count,
+                training_focus=training_focus,
+                food_lookup=current_meal_food_lookup,
+            )
+            current_meal_plan = {
+                "selected_role_codes": {
+                    role: food_code
+                    for role, food_code in inferred_current_plan.get("selected_role_codes", {}).items()
+                    if str(food_code).strip() in current_food_codes
+                },
+                "support_food_specs": [
+                    support_food
+                    for support_food in inferred_current_plan.get("support_food_specs", [])
+                    if str(support_food.get("food_code") or "").strip() in current_food_codes
+                ],
+            }
+        except Exception:
+            current_meal_plan = None
+
+    def attempt_regeneration(
+        *,
+        excluded_food_codes: set[str] | None,
+        strict_exclusions: bool,
+        expand_candidate_pool: bool,
+        seed_offset: int,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        regeneration_context = _build_regeneration_context(
+            current_food_codes=current_food_codes,
+            current_meal_plan=current_meal_plan,
+            strict_exclusions=strict_exclusions,
+            expand_candidate_pool=expand_candidate_pool,
+        )
+        meal_plan = find_exact_solution_for_meal(
+            meal=meal,
+            meal_index=meal_index,
+            meals_count=meals_count,
+            training_focus=training_focus,
+            food_lookup=full_food_lookup,
+            preference_profile=preference_profile,
+            daily_food_usage=daily_food_usage,
+            excluded_food_codes=excluded_food_codes,
+            variety_seed=variety_seed + seed_offset,
+            expand_candidate_pool=expand_candidate_pool,
+            regeneration_context=regeneration_context,
+        )
+        coherent_plan = apply_generation_coherence(
+            meal=meal,
+            meal_index=meal_index,
+            meals_count=meals_count,
+            training_focus=training_focus,
+            meal_plan=meal_plan,
+            food_lookup=full_food_lookup,
+            preference_profile=preference_profile,
+            daily_diversity_context=daily_food_usage,
+            excluded_food_codes=excluded_food_codes,
+            strict_exclusions=strict_exclusions,
+            regeneration_context=regeneration_context,
+            variety_seed=variety_seed + seed_offset,
+        )
+        return coherent_plan, regeneration_context
+
+    def register_candidate(
+        candidate_plan: dict[str, Any],
+        *,
+        regeneration_context: dict[str, Any],
+        best_candidate: dict[str, Any] | None,
+        best_candidate_ranking: tuple[Any, ...] | None,
+    ) -> tuple[dict[str, Any], tuple[Any, ...], dict[str, Any]]:
+        candidate_ranking = build_regeneration_candidate_ranking(
+            meal=meal,
+            meal_plan=candidate_plan,
+            food_lookup=full_food_lookup,
+            regeneration_context=regeneration_context,
+        )
+        difference_summary = evaluate_regeneration_candidate(
+            meal=meal,
+            meal_plan=candidate_plan,
+            food_lookup=full_food_lookup,
+            regeneration_context=regeneration_context,
+        )
+        if best_candidate is None or best_candidate_ranking is None or candidate_ranking < best_candidate_ranking:
+            return candidate_plan, candidate_ranking, difference_summary
+        return best_candidate, best_candidate_ranking, difference_summary
+
+    best_candidate: dict[str, Any] | None = None
+    best_candidate_ranking: tuple[Any, ...] | None = None
+    last_error: Exception | None = None
+
+    if current_food_codes:
+        for attempt_index, expand_candidate_pool in enumerate((False, True)):
+            try:
+                candidate_plan, regeneration_context = attempt_regeneration(
+                    excluded_food_codes=current_food_codes,
+                    strict_exclusions=True,
+                    expand_candidate_pool=expand_candidate_pool,
+                    seed_offset=attempt_index,
+                )
+            except (FoodPreferenceConflictError, HTTPException) as exc:
+                last_error = exc
+                continue
+
+            best_candidate, best_candidate_ranking, difference_summary = register_candidate(
+                candidate_plan,
+                regeneration_context=regeneration_context,
+                best_candidate=best_candidate,
+                best_candidate_ranking=best_candidate_ranking,
+            )
+            if difference_summary["passes_threshold"] and not difference_summary["same_visible_structure"]:
+                return candidate_plan
+
+        partial_exclusion_sets = _build_partial_regeneration_exclusion_sets(
+            current_food_codes,
+            current_meal_plan=current_meal_plan,
+            food_lookup=current_meal_food_lookup,
+        )
+        for attempt_index, excluded_codes in enumerate(partial_exclusion_sets, start=10):
+            try:
+                candidate_plan, regeneration_context = attempt_regeneration(
+                    excluded_food_codes=excluded_codes,
+                    strict_exclusions=True,
+                    expand_candidate_pool=True,
+                    seed_offset=attempt_index,
+                )
+            except (FoodPreferenceConflictError, HTTPException) as exc:
+                last_error = exc
+                continue
+
+            best_candidate, best_candidate_ranking, difference_summary = register_candidate(
+                candidate_plan,
+                regeneration_context=regeneration_context,
+                best_candidate=best_candidate,
+                best_candidate_ranking=best_candidate_ranking,
+            )
+            if difference_summary["passes_threshold"] and not difference_summary["same_visible_structure"]:
+                return candidate_plan
+
+    try:
+        candidate_plan, regeneration_context = attempt_regeneration(
+            excluded_food_codes=None,
+            strict_exclusions=False,
+            expand_candidate_pool=True,
+            seed_offset=100,
+        )
+    except (FoodPreferenceConflictError, HTTPException) as exc:
+        last_error = exc
+    else:
+        best_candidate, best_candidate_ranking, _difference_summary = register_candidate(
+            candidate_plan,
+            regeneration_context=regeneration_context,
+            best_candidate=best_candidate,
+            best_candidate_ranking=best_candidate_ranking,
+        )
+        return candidate_plan if best_candidate is candidate_plan else best_candidate
+
+    if best_candidate is not None:
+        return best_candidate
+    if last_error is not None:
+        raise last_error
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Unable to regenerate meal with current food catalog",
+    )
+
+
 def regenerate_meal(
     database,
     *,
@@ -476,6 +781,7 @@ def regenerate_meal(
     diet_id: str,
     meal_number: int,
 ) -> DietMutationResponse:
+    regeneration_started_at = time.perf_counter()
     diet = get_user_diet_by_id(database, user.id, diet_id)
     meal_index = meal_number - 1
     if meal_index < 0 or meal_index >= len(diet.meals):
@@ -485,13 +791,26 @@ def regenerate_meal(
         )
 
     meal = diet.meals[meal_index]
+    emit_runtime_audit(
+        "meal_regeneration_service_started",
+        {
+            "diet_id": diet_id,
+            "meal_number": meal_number,
+            "original_meal": meal.model_dump(mode="json"),
+            "active_diet_id_before_regeneration": diet.id,
+        },
+    )
     preference_profile = build_user_food_preferences_profile(user)
     internal_food_lookup = get_internal_food_lookup()
-    full_food_lookup = build_generation_food_lookup(database)
+    full_food_lookup = build_generation_food_lookup(
+        database,
+        internal_food_lookup=internal_food_lookup,
+    )
+    current_meal_food_lookup = build_diet_context_food_lookup(database, diet)
     daily_food_usage = track_daily_food_usage_excluding_current_meal(
         diet,
         meal_index_to_exclude=meal_index,
-        food_lookup=build_diet_context_food_lookup(database, diet),
+        food_lookup=current_meal_food_lookup,
     )
     current_food_codes = {
         str(food.food_code)
@@ -499,43 +818,87 @@ def regenerate_meal(
         if food.food_code
     }
     training_focus = get_training_focus_for_meal(diet, meal_index)
+    weekly_food_usage = build_weekly_food_usage(database, user.id)
 
-    # Semilla de variedad: garantiza que cada regeneración explore combinaciones distintas
-    variety_seed = random.randint(0, 9999)
+    variety_seed = build_variety_seed(
+        user.id,
+        diet_id,
+        meal_number,
+        meal.meal_slot,
+        meal.meal_role,
+        sorted(current_food_codes),
+    )
+    current_meal_plan: dict[str, Any] | None = None
+    if current_food_codes:
+        try:
+            current_meal_plan = infer_existing_meal_plan(
+                meal,
+                meal_index=meal_index,
+                meals_count=diet.meals_count,
+                training_focus=training_focus,
+                food_lookup=current_meal_food_lookup,
+            )
+        except Exception:
+            current_meal_plan = None
 
-    try:
-        regenerated_meal_plan = find_exact_solution_for_meal(
-            meal=meal,
-            meal_index=meal_index,
-            meals_count=diet.meals_count,
-            training_focus=training_focus,
-            food_lookup=full_food_lookup,
-            preference_profile=preference_profile,
-            daily_food_usage=daily_food_usage,
-            excluded_food_codes=current_food_codes,
-            variety_seed=variety_seed,
-        )
-    except (FoodPreferenceConflictError, HTTPException):
-        regenerated_meal_plan = find_exact_solution_for_meal(
-            meal=meal,
-            meal_index=meal_index,
-            meals_count=diet.meals_count,
-            training_focus=training_focus,
-            food_lookup=full_food_lookup,
-            preference_profile=preference_profile,
-            daily_food_usage=daily_food_usage,
-            variety_seed=variety_seed,
-        )
-
-    regenerated_meal_plan = apply_generation_coherence(
-        meal=meal,
+    meal_slot, meal_role = resolve_meal_context(
+        meal,
         meal_index=meal_index,
         meals_count=diet.meals_count,
         training_focus=training_focus,
-        meal_plan=regenerated_meal_plan,
-        food_lookup=full_food_lookup,
-        preference_profile=preference_profile,
     )
+    regeneration_engine = "v2"
+    try:
+        regenerated_meal_plan = regenerate_meal_plan_v2(
+            meal=meal,
+            meal_index=meal_index,
+            meals_count=diet.meals_count,
+            training_focus=training_focus,
+            meal_slot=meal_slot,
+            meal_role=meal_role,
+            food_lookup=full_food_lookup,
+            preference_profile=preference_profile,
+            daily_food_usage=daily_food_usage,
+            weekly_food_usage=weekly_food_usage,
+            current_food_codes=current_food_codes,
+            current_meal_plan=current_meal_plan,
+            variety_seed=variety_seed,
+        )
+        if regenerated_meal_plan is None:
+            raise RuntimeError("diet_v2 regenerator returned no candidate")
+    except Exception as exc:
+        regeneration_engine = "legacy_fallback"
+        regeneration_diagnostics = get_last_regeneration_diagnostics() or {}
+        logger.warning(
+            "Meal regeneration v2 failed for user=%s diet=%s meal=%s, falling back to legacy solver: %s diagnostics=%s",
+            user.id,
+            diet_id,
+            meal_number,
+            exc,
+            regeneration_diagnostics,
+        )
+        emit_runtime_audit(
+            "meal_regeneration_v2_failed",
+            {
+                "diet_id": diet_id,
+                "meal_number": meal_number,
+                "error_type": type(exc).__name__,
+                "error_detail": str(exc),
+                "regeneration_diagnostics": regeneration_diagnostics,
+            },
+        )
+        regenerated_meal_plan = _solve_regenerated_meal_plan(
+            meal=meal,
+            meal_index=meal_index,
+            meals_count=diet.meals_count,
+            training_focus=training_focus,
+            full_food_lookup=full_food_lookup,
+            current_meal_food_lookup=current_meal_food_lookup,
+            preference_profile=preference_profile,
+            daily_food_usage=daily_food_usage,
+            current_food_codes=current_food_codes,
+            variety_seed=variety_seed,
+        )
 
     selected_food_codes = collect_selected_food_codes([regenerated_meal_plan])
     internal_codes_to_resolve = [code for code in selected_food_codes if code in internal_food_lookup]
@@ -543,6 +906,7 @@ def regenerate_meal(
         resolved_food_lookup, lookup_metadata = resolve_foods_by_codes(
             database,
             internal_codes_to_resolve,
+            allow_external_enrichment=False,
         )
     else:
         resolved_food_lookup = {}
@@ -587,6 +951,48 @@ def regenerate_meal(
     ]
     if not current_food_codes.isdisjoint({food.get("food_code") for food in generated_meal.get("foods", [])}):
         strategy_notes[1] = "Se mantuvo la coherencia diaria usando variedad razonable dentro de las restricciones disponibles."
+
+    logger.info(
+        "Meal regeneration timings user=%s diet=%s meal=%s total=%.4fs selected_foods=%s",
+        user.id,
+        diet_id,
+        meal_number,
+        time.perf_counter() - regeneration_started_at,
+        len(selected_food_codes),
+    )
+    logger.info(
+        "Meal regeneration engine user=%s diet=%s meal=%s engine=%s",
+        user.id,
+        diet_id,
+        meal_number,
+        regeneration_engine,
+    )
+    regeneration_diagnostics = get_last_regeneration_diagnostics() or {}
+    regeneration_diagnostics.update({
+        "service_engine": regeneration_engine,
+        "service_elapsed_seconds": time.perf_counter() - regeneration_started_at,
+        "meal_number": meal_number,
+        "diet_id": diet_id,
+    })
+    set_last_regeneration_diagnostics(regeneration_diagnostics)
+    emit_runtime_audit(
+        "meal_regeneration_service_completed",
+        {
+            "diet_id": diet_id,
+            "meal_number": meal_number,
+            "service_engine": regeneration_engine,
+            "regeneration_diagnostics": regeneration_diagnostics,
+            "regenerated_meal_plan": regenerated_meal_plan,
+            "generated_meal": generated_meal,
+            "persisted_diet_payload": updated_diet.model_dump(mode="json"),
+            "summary": {
+                "action": "meal_regenerated",
+                "meal_number": meal_number,
+                "changed_food_names": changed_food_names,
+                "strategy_notes": strategy_notes,
+            },
+        },
+    )
 
     return DietMutationResponse(
         diet=updated_diet,

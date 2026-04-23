@@ -259,6 +259,81 @@ def test_ancla_forzada_con_preferencias_positivas():
     )
 
 
+def test_variety_seed_desempata_soluciones_casi_equivalentes(monkeypatch):
+    meal = _breakfast_meal()
+
+    controlled_lookup = {
+        "protein_a": _food("protein_a", "lacteos", protein=10.0, fat=0.4, carb=4.0, suitable_meals=["early"]),
+        "protein_b": _food("protein_b", "lacteos", protein=10.0, fat=0.4, carb=4.0, suitable_meals=["early"]),
+        "carb_a": _food("carb_a", "cereales", protein=7.0, fat=1.0, carb=84.0, suitable_meals=["early"]),
+        "fat_a": _food("fat_a", "grasas", protein=2.0, fat=15.0, carb=9.0, suitable_meals=["early"]),
+    }
+
+    monkeypatch.setattr(
+        "app.services.diet.solver.get_role_candidate_codes",
+        lambda **kwargs: {
+            "protein": ["protein_a", "protein_b"],
+            "carb": ["carb_a"],
+            "fat": ["fat_a"],
+        },
+    )
+    monkeypatch.setattr(
+        "app.services.diet.solver.get_support_option_specs",
+        lambda **kwargs: [[]],
+    )
+    monkeypatch.setattr(
+        "app.services.diet.solver.apply_daily_usage_candidate_limits",
+        lambda candidate_codes, **kwargs: candidate_codes,
+    )
+    monkeypatch.setattr(
+        "app.services.diet.solver.apply_meal_candidate_constraints",
+        lambda candidate_codes, **kwargs: candidate_codes,
+    )
+    monkeypatch.setattr(
+        "app.services.diet.solver.apply_support_option_constraints",
+        lambda support_options, **kwargs: support_options,
+    )
+
+    def fake_build_exact_meal_solution(**kwargs):
+        role_foods = kwargs["role_foods"]
+        protein_code = role_foods["protein"]["code"]
+        return {
+            "foods": [
+                {"food_code": protein_code, "calories": 120.0},
+                {"food_code": "carb_a", "calories": 140.0},
+                {"food_code": "fat_a", "calories": 80.0},
+            ],
+            "selected_role_codes": {
+                "protein": protein_code,
+                "carb": "carb_a",
+                "fat": "fat_a",
+            },
+            "support_food_specs": [],
+            "actual_calories": 340.0,
+            "score": 0.0,
+        }
+
+    monkeypatch.setattr(
+        "app.services.diet.solver.build_exact_meal_solution",
+        fake_build_exact_meal_solution,
+    )
+
+    selected_proteins = set()
+    with _PATCH_ML:
+        for seed in range(1, 10):
+            result = find_exact_solution_for_meal(
+                meal=meal,
+                meal_index=0,
+                meals_count=3,
+                training_focus=False,
+                food_lookup=controlled_lookup,
+                variety_seed=seed,
+            )
+            selected_proteins.add(result["selected_role_codes"]["protein"])
+
+    assert selected_proteins == {"protein_a", "protein_b"}
+
+
 # ── Test 6: solo ancla entra, el otro alimento no cabe → dieta igualmente ─────
 
 def test_un_preferido_entra_el_otro_no_cabe():

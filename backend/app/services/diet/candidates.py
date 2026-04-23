@@ -24,9 +24,11 @@ from app.services.diet.constants import (
     BREAKFAST_FAT_TOKENS,
     BREAKFAST_ONLY_DAIRY_TOKENS,
     BREAKFAST_PROTEIN_TOKENS,
+    CORE_MACRO_KEYS,
     COOKING_FAT_TOKENS,
     DEFAULT_PROTEIN_ROLE_DAILY_MAX_USAGE,
     EARLY_SWEET_FAT_CODES,
+    FAMILY_REPEAT_PENALTY_BY_ROLE,
     FAST_DIGESTING_CARB_CODES,
     FOOD_OMIT_THRESHOLD,
     LEAN_PROTEIN_CODES,
@@ -35,6 +37,8 @@ from app.services.diet.constants import (
     MAX_SUPPORT_CANDIDATES_PER_ROLE,
     PREFERRED_FOOD_BONUS_BY_ROLE,
     PROTEIN_ROLE_DAILY_MAX_USAGE_BY_CODE,
+    REPEATED_MAIN_FAMILY_PAIR_PENALTY,
+    REPEATED_MEAL_STRUCTURE_PENALTY,
     REPEATED_MAIN_PAIR_PENALTY,
     REPEAT_ESCALATION_BY_ROLE,
     REPEAT_PENALTY_BY_ROLE,
@@ -46,7 +50,6 @@ from app.services.diet.constants import (
     SWEET_BREAKFAST_CARB_TOKENS,
     WEEKLY_DIVERSITY_WINDOW_DAYS,
     WEEKLY_REPEAT_PENALTY_BY_ROLE,
-    CORE_MACRO_KEYS,
 )
 
 CONCENTRATED_FRUIT_TOKENS = (
@@ -75,6 +78,126 @@ CONCENTRATED_FRUIT_MAIN_CARB_PENALTY = 0.8
 BREAKFAST_CONCENTRATED_FRUIT_MAIN_CARB_EXTRA_PENALTY = 0.24
 CONCENTRATED_FRUIT_SUPPORT_PENALTY = 0.55
 BREAKFAST_CONCENTRATED_FRUIT_SUPPORT_EXTRA_PENALTY = 0.18
+FAMILY_VARIANT_NOISE_TOKENS = {
+    "natural",
+    "normal",
+    "clasico",
+    "clasica",
+    "plain",
+    "light",
+    "zero",
+    "fat",
+    "free",
+    "low",
+    "skimmed",
+    "semi",
+    "reduced",
+    "desnatado",
+    "desnatada",
+    "semidesnatado",
+    "semidesnatada",
+    "entero",
+    "entera",
+    "al",
+    "la",
+    "de",
+    "sin",
+    "con",
+    "azucar",
+    "sugar",
+    "added",
+    "proteico",
+    "proteina",
+    "fresh",
+}
+
+
+def _canonical_food_sort_key(
+    food: dict[str, Any],
+    *,
+    fallback_code: str = "",
+) -> tuple[str, str, str, str]:
+    normalized_code = str(food.get("code") or fallback_code or "").strip().lower()
+    normalized_internal_code = str(food.get("internal_code") or "").strip().lower()
+    normalized_name = normalize_food_name(
+        str(food.get("display_name") or food.get("name") or food.get("original_name") or normalized_code)
+    ).strip()
+    category = normalize_food_name(str(food.get("category") or "")).strip()
+    return (
+        normalized_internal_code or normalized_code,
+        normalized_code,
+        normalized_name,
+        category,
+    )
+
+
+def iter_canonical_food_items(
+    food_lookup: dict[str, dict[str, Any]],
+) -> list[tuple[str, dict[str, Any]]]:
+    return sorted(
+        food_lookup.items(),
+        key=lambda item: _canonical_food_sort_key(item[1], fallback_code=item[0]),
+    )
+
+
+def iter_canonical_foods(
+    food_lookup: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [food for _code, food in iter_canonical_food_items(food_lookup)]
+FOOD_FAMILY_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("greek_yogurt", ("greek yogurt", "yogur griego", "yogurt griego")),
+    ("yogurt", ("yogur", "yogurt", "skyr")),
+    ("fresh_cheese", ("queso fresco batido", "queso fresco", "cottage", "quark")),
+    ("milk", ("leche", "milk", "bebida vegetal")),
+    ("egg_whites", ("claras de huevo", "egg whites", "claras")),
+    ("eggs", ("huevo", "huevos", "egg", "eggs")),
+    ("chicken", ("pechuga de pollo", "pollo", "chicken")),
+    ("turkey", ("pechuga de pavo", "pavo", "turkey")),
+    ("tuna", ("atun", "tuna")),
+    ("salmon", ("salmon",)),
+    ("rice_cake", ("tortitas de arroz", "rice cake", "rice cakes", "corn cake")),
+    ("cornflakes", ("cornflakes", "copos de maiz")),
+    ("cereal", ("cereal", "cereales", "granola", "muesli")),
+    ("oats", ("avena", "oats", "rolled oats")),
+    ("bread", ("pan integral", "pan tostado", "tostada", "tostadas", "bread", "toast", "pan")),
+    ("wrap", ("wrap", "tortilla")),
+    ("rice", ("arroz", "rice")),
+    ("pasta", ("pasta", "macarron", "espagueti")),
+    ("potato", ("patata", "potato", "boniato", "batata", "sweet potato")),
+    ("banana", ("platano", "banana", "banano")),
+    ("apple", ("manzana", "apple")),
+    ("mixed_vegetables", ("verduras", "vegetables", "ensalada", "salad")),
+    ("olive_oil", ("aceite de oliva", "olive oil", "aceite", "oil")),
+    ("avocado", ("aguacate", "avocado")),
+    ("mixed_nuts", ("frutos secos", "mixed nuts", "nuts", "almendra", "walnut")),
+    ("peanut_butter", ("crema de cacahuete", "mantequilla de cacahuete", "peanut butter")),
+    ("jam", ("mermelada", "jam")),
+)
+STRUCTURE_BUCKET_PATTERNS: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {
+    "protein": (
+        ("dairy", ("greek yogurt", "yogur", "yogurt", "skyr", "queso fresco", "milk", "leche")),
+        ("egg", ("egg whites", "claras", "egg", "eggs", "huevo", "huevos")),
+        ("poultry", ("chicken", "pollo", "turkey", "pavo")),
+        ("fish", ("tuna", "atun", "salmon", "fish")),
+    ),
+    "carb": (
+        ("wrap", ("wrap", "tortilla")),
+        ("bread", ("bread", "toast", "pan", "tostada")),
+        ("cereal", ("cornflakes", "cereal", "granola", "muesli")),
+        ("oats", ("oats", "avena")),
+        ("rice_cake", ("rice cake", "rice cakes", "tortitas de arroz", "corn cake")),
+        ("rice", ("rice", "arroz")),
+        ("pasta", ("pasta", "macarron", "espagueti")),
+        ("potato", ("potato", "patata", "boniato", "batata")),
+        ("fruit", ("banana", "platano", "manzana", "apple", "fruta", "fruit")),
+    ),
+    "fat": (
+        ("spread", ("peanut butter", "crema de cacahuete", "mantequilla de cacahuete")),
+        ("avocado", ("avocado", "aguacate")),
+        ("oil", ("olive oil", "aceite", "oil")),
+        ("nuts", ("nuts", "frutos secos", "almendra", "walnut", "cacahuete")),
+    ),
+}
 
 
 def _dedupe_foods_by_code(foods: list[dict]) -> list[dict]:
@@ -87,6 +210,133 @@ def _dedupe_foods_by_code(foods: list[dict]) -> list[dict]:
             continue
 
         seen_codes.add(food_code)
+        deduped_foods.append(food)
+
+    return deduped_foods
+
+
+def _normalize_food_like_text(food_or_code: dict[str, Any] | str) -> str:
+    if isinstance(food_or_code, dict):
+        return get_food_text_signature(food_or_code)
+    return normalize_food_name(str(food_or_code or "").replace("_", " "))
+
+
+def _strip_variant_noise_tokens(normalized_text: str) -> str:
+    tokens = [
+        token
+        for token in normalized_text.split()
+        if token
+        and token not in FAMILY_VARIANT_NOISE_TOKENS
+        and not token.isdigit()
+    ]
+    return " ".join(tokens).strip()
+
+
+def _match_family_pattern(normalized_text: str) -> str | None:
+    for family_name, patterns in FOOD_FAMILY_PATTERNS:
+        if any(pattern in normalized_text for pattern in patterns):
+            return family_name
+    return None
+
+
+def get_food_family_signature(
+    food_or_code: dict[str, Any] | str,
+    *,
+    role: str | None = None,
+) -> str:
+    normalized_text = _normalize_food_like_text(food_or_code)
+    if not normalized_text:
+        return f"{role or 'food'}:unknown"
+
+    family_name = _match_family_pattern(normalized_text)
+    if not family_name:
+        stripped_text = _strip_variant_noise_tokens(normalized_text)
+        family_name = " ".join(stripped_text.split()[:3]).strip() or normalized_text
+
+    if role:
+        family_role = role
+    elif isinstance(food_or_code, dict):
+        family_role = derive_functional_group(food_or_code)
+    else:
+        family_role = "food"
+
+    return f"{family_role}:{family_name}"
+
+
+def get_food_structure_bucket(
+    food_or_code: dict[str, Any] | str,
+    *,
+    role: str,
+) -> str:
+    normalized_text = _normalize_food_like_text(food_or_code)
+    for bucket_name, patterns in STRUCTURE_BUCKET_PATTERNS.get(role, ()):
+        if any(pattern in normalized_text for pattern in patterns):
+            return bucket_name
+
+    if isinstance(food_or_code, dict):
+        functional_group = derive_functional_group(food_or_code)
+        if role == "protein" and functional_group == "dairy":
+            return "dairy"
+        if role == "carb" and functional_group == "fruit":
+            return "fruit"
+        if role == "fat" and functional_group == "fat":
+            return "fat"
+
+    return role
+
+
+def get_meal_structure_signature(
+    *,
+    selected_role_codes: dict[str, str],
+    support_food_specs: list[dict[str, Any]],
+) -> str:
+    protein_bucket = get_food_structure_bucket(selected_role_codes.get("protein", ""), role="protein")
+    carb_bucket = get_food_structure_bucket(selected_role_codes.get("carb", ""), role="carb")
+    fat_bucket = get_food_structure_bucket(selected_role_codes.get("fat", ""), role="fat")
+    support_signatures = sorted({
+        get_food_family_signature(
+            str(support_food.get("food_code") or "").strip(),
+            role=str(support_food.get("role") or "support").strip().lower(),
+        )
+        for support_food in support_food_specs
+        if str(support_food.get("food_code") or "").strip()
+    })
+    return f"P:{protein_bucket}|C:{carb_bucket}|F:{fat_bucket}|S:{','.join(support_signatures)}"
+
+
+def _dedupe_codes_by_family(
+    codes: list[str],
+    *,
+    food_lookup: dict[str, dict[str, Any]] | None,
+    role: str,
+) -> list[str]:
+    deduped_codes: list[str] = []
+    seen_signatures: set[str] = set()
+
+    for code in codes:
+        food_entry = food_lookup.get(code) if food_lookup else code
+        family_signature = get_food_family_signature(food_entry, role=role)
+        if family_signature in seen_signatures:
+            continue
+        seen_signatures.add(family_signature)
+        deduped_codes.append(code)
+
+    return deduped_codes
+
+
+def _dedupe_foods_by_family(
+    foods: list[dict[str, Any]],
+    *,
+    role: str,
+) -> list[dict[str, Any]]:
+    deduped_foods: list[dict[str, Any]] = []
+    seen_signatures: set[str] = set()
+
+    for food in foods:
+        family_signature = get_food_family_signature(food, role=role)
+        if family_signature in seen_signatures:
+            continue
+        seen_signatures.add(family_signature)
         deduped_foods.append(food)
 
     return deduped_foods
@@ -249,7 +499,11 @@ def apply_meal_candidate_constraints(
                 code for code in filtered_codes if code != forced_code
             ]
 
-        constrained_candidate_codes[role] = filtered_codes
+        constrained_candidate_codes[role] = _dedupe_codes_by_family(
+            filtered_codes,
+            food_lookup=food_lookup,
+            role=role,
+        )
 
     return constrained_candidate_codes
 
@@ -283,6 +537,7 @@ def apply_support_option_constraints(
 
     excluded_codes = set(excluded_food_codes or set())
     filtered_support_options: list[list[dict]] = []
+    seen_option_signatures: set[tuple[tuple[str, str], ...]] = set()
 
     for support_option in support_options:
         if any(
@@ -291,14 +546,28 @@ def apply_support_option_constraints(
         ):
             continue
 
-        filtered_support_options.append([
+        normalized_option = [
             {
                 "role": support_food["role"],
                 "food_code": support_food["food_code"],
                 "quantity": float(support_food["quantity"]),
             }
             for support_food in support_option
-        ])
+        ]
+        option_signature = tuple(sorted(
+            (
+                str(support_food["role"]),
+                get_food_family_signature(
+                    food_lookup[support_food["food_code"]],
+                    role=str(support_food["role"]),
+                ),
+            )
+            for support_food in normalized_option
+        ))
+        if option_signature in seen_option_signatures:
+            continue
+        seen_option_signatures.add(option_signature)
+        filtered_support_options.append(normalized_option)
 
     if [] not in filtered_support_options:
         filtered_support_options.insert(0, [])
@@ -633,12 +902,16 @@ def sort_codes_by_meal_fit(
 ) -> list[str]:
     return sorted(
         codes,
-        key=lambda code: -get_food_role_fit_score(
-            food_lookup[code],
-            role=role,
-            meal_slot=meal_slot,
-            meal_role=meal_role,
-            training_focus=training_focus,
+        key=lambda code: (
+            -get_food_role_fit_score(
+                food_lookup[code],
+                role=role,
+                meal_slot=meal_slot,
+                meal_role=meal_role,
+                training_focus=training_focus,
+            ),
+            get_food_family_signature(food_lookup[code], role=role),
+            _canonical_food_sort_key(food_lookup[code], fallback_code=code),
         ),
     )
 
@@ -843,11 +1116,12 @@ def get_support_candidate_foods(
     meal_slot: str,
     meal_role: str,
     training_focus: bool,
+    expand_candidate_pool: bool = False,
 ) -> list[dict[str, Any]]:
     ranked_candidates = sorted(
         (
             food
-            for food in food_lookup.values()
+            for food in iter_canonical_foods(food_lookup)
             if is_support_food_allowed(
                 food,
                 support_role=support_role,
@@ -855,15 +1129,27 @@ def get_support_candidate_foods(
                 meal_role=meal_role,
             )
         ),
-        key=lambda food: -get_support_food_fit_score(
-            food,
-            support_role=support_role,
-            meal_slot=meal_slot,
-            meal_role=meal_role,
-            training_focus=training_focus,
+        key=lambda food: (
+            -get_support_food_fit_score(
+                food,
+                support_role=support_role,
+                meal_slot=meal_slot,
+                meal_role=meal_role,
+                training_focus=training_focus,
+            ),
+            get_food_family_signature(food, role=support_role),
+            _canonical_food_sort_key(food),
         ),
     )
-    return _dedupe_foods_by_code(ranked_candidates)[:MAX_SUPPORT_CANDIDATES_PER_ROLE]
+    deduped_candidates = _dedupe_foods_by_code(ranked_candidates)
+    deduped_candidates = _dedupe_foods_by_family(
+        deduped_candidates,
+        role=support_role,
+    )
+    candidate_limit = MAX_SUPPORT_CANDIDATES_PER_ROLE
+    if expand_candidate_pool:
+        candidate_limit *= 2 if meal_slot != "early" else 3
+    return deduped_candidates[:candidate_limit]
 
 
 def apply_daily_usage_candidate_limits(
@@ -921,7 +1207,11 @@ def create_daily_food_usage_tracker() -> dict[str, dict]:
     return {
         "food_counts": {},
         "role_counts": {},
+        "family_counts": {},
         "main_pair_counts": {},
+        "main_family_pair_counts": {},
+        "structure_counts": {},
+        "template_counts": {},
     }
 
 
@@ -968,6 +1258,9 @@ def track_food_usage_across_day(daily_food_usage: dict[str, dict], meal_plan: di
         daily_food_usage["food_counts"][food_code] = daily_food_usage["food_counts"].get(food_code, 0) + 1
         role_counts = daily_food_usage["role_counts"].setdefault(role, {})
         role_counts[food_code] = role_counts.get(food_code, 0) + 1
+        family_signature = get_food_family_signature(food_code, role=role)
+        family_counts = daily_food_usage["family_counts"].setdefault(role, {})
+        family_counts[family_signature] = family_counts.get(family_signature, 0) + 1
 
     for role, food_code in selected_role_codes.items():
         add_usage(food_code, role)
@@ -978,6 +1271,24 @@ def track_food_usage_across_day(daily_food_usage: dict[str, dict], meal_plan: di
     if protein_code and carb_code:
         pair_key = f"{protein_code}::{carb_code}"
         daily_food_usage["main_pair_counts"][pair_key] = daily_food_usage["main_pair_counts"].get(pair_key, 0) + 1
+        protein_family = get_food_family_signature(protein_code, role="protein")
+        carb_family = get_food_family_signature(carb_code, role="carb")
+        family_pair_key = f"{protein_family}::{carb_family}"
+        daily_food_usage["main_family_pair_counts"][family_pair_key] = (
+            daily_food_usage["main_family_pair_counts"].get(family_pair_key, 0) + 1
+        )
+
+    structure_signature = get_meal_structure_signature(
+        selected_role_codes=selected_role_codes,
+        support_food_specs=meal_plan.get("support_food_specs", []),
+    )
+    daily_food_usage["structure_counts"][structure_signature] = (
+        daily_food_usage["structure_counts"].get(structure_signature, 0) + 1
+    )
+
+    template_id = str(meal_plan.get("applied_template_id") or "").strip()
+    if template_id:
+        daily_food_usage["template_counts"][template_id] = daily_food_usage["template_counts"].get(template_id, 0) + 1
 
 
 def get_food_usage_summary_from_meals(meals: list[dict]) -> dict[str, int]:
@@ -1034,6 +1345,23 @@ def apply_repeat_penalty(
     return base_penalty + escalation_penalty
 
 
+def apply_family_repeat_penalty(
+    food: dict[str, Any] | str,
+    *,
+    role: str,
+    daily_food_usage: dict | None,
+) -> float:
+    if not daily_food_usage:
+        return 0.0
+
+    family_signature = get_food_family_signature(food, role=role)
+    family_count = int(daily_food_usage.get("family_counts", {}).get(role, {}).get(family_signature, 0))
+    if family_count <= 0:
+        return 0.0
+
+    return FAMILY_REPEAT_PENALTY_BY_ROLE.get(role, 0.1) * family_count
+
+
 def apply_main_pair_repeat_penalty(
     role_foods: dict[str, dict],
     *,
@@ -1047,6 +1375,48 @@ def apply_main_pair_repeat_penalty(
     pair_key = f"{protein_code}::{carb_code}"
     pair_count = int(daily_food_usage.get("main_pair_counts", {}).get(pair_key, 0))
     return pair_count * REPEATED_MAIN_PAIR_PENALTY
+
+
+def apply_main_family_pair_repeat_penalty(
+    role_foods: dict[str, dict],
+    *,
+    daily_food_usage: dict | None,
+) -> float:
+    if not daily_food_usage:
+        return 0.0
+
+    protein_family = get_food_family_signature(role_foods["protein"], role="protein")
+    carb_family = get_food_family_signature(role_foods["carb"], role="carb")
+    pair_key = f"{protein_family}::{carb_family}"
+    pair_count = int(daily_food_usage.get("main_family_pair_counts", {}).get(pair_key, 0))
+    return pair_count * REPEATED_MAIN_FAMILY_PAIR_PENALTY
+
+
+def apply_meal_structure_repeat_penalty(
+    *,
+    role_foods: dict[str, dict],
+    support_foods: list[dict[str, Any]],
+    daily_food_usage: dict | None,
+) -> float:
+    if not daily_food_usage:
+        return 0.0
+
+    structure_signature = get_meal_structure_signature(
+        selected_role_codes={
+            role: str(food.get("code") or "").strip()
+            for role, food in role_foods.items()
+        },
+        support_food_specs=[
+            {
+                "role": str(food.get("role") or "support"),
+                "food_code": str(food.get("code") or food.get("food_code") or "").strip(),
+            }
+            for food in support_foods
+            if str(food.get("code") or food.get("food_code") or "").strip()
+        ],
+    )
+    structure_count = int(daily_food_usage.get("structure_counts", {}).get(structure_signature, 0))
+    return structure_count * REPEATED_MEAL_STRUCTURE_PENALTY
 
 
 def get_role_candidate_codes(
@@ -1070,7 +1440,7 @@ def get_role_candidate_codes(
     fat_codes = []
 
     if food_lookup:
-        for code, f_data in food_lookup.items():
+        for code, f_data in iter_canonical_food_items(food_lookup):
             candidate_role = get_candidate_role_for_food(f_data, meal_slot)
             if not candidate_role or not is_food_allowed_for_role_and_slot(f_data, role=candidate_role, meal_slot=meal_slot):
                 continue
@@ -1155,6 +1525,22 @@ def get_role_candidate_codes(
         carb_codes = rotate_codes(carb_codes, rotation_seed + 1)
         fat_codes = rotate_codes(fat_codes, rotation_seed + 2)
 
+    protein_codes = _dedupe_codes_by_family(
+        protein_codes,
+        food_lookup=food_lookup,
+        role="protein",
+    )
+    carb_codes = _dedupe_codes_by_family(
+        carb_codes,
+        food_lookup=food_lookup,
+        role="carb",
+    )
+    fat_codes = _dedupe_codes_by_family(
+        fat_codes,
+        food_lookup=food_lookup,
+        role="fat",
+    )
+
     return {
         "protein": protein_codes[:MAX_ROLE_CANDIDATES_PER_MEAL["protein"]],
         "carb": carb_codes[:MAX_ROLE_CANDIDATES_PER_MEAL["carb"]],
@@ -1169,6 +1555,7 @@ def get_support_option_specs(
     meals_count: int,
     training_focus: bool,
     food_lookup: dict[str, dict] | None = None,
+    expand_candidate_pool: bool = False,
 ) -> list[list[dict]]:
     meal_slot, meal_role = resolve_meal_context(
         meal,
@@ -1179,12 +1566,7 @@ def get_support_option_specs(
     support_options: list[list[dict]] = [[]]
     seen_keys: set[tuple[tuple[str, float], ...]] = {tuple()}
 
-    def add_support_option(role: str, food_code: str, quantity: float) -> None:
-        option = [{
-            "role": role,
-            "food_code": food_code,
-            "quantity": float(quantity),
-        }]
+    def add_support_option(option: list[dict[str, Any]]) -> None:
         option_key = tuple(sorted((item["food_code"], float(item["quantity"])) for item in option))
         if option_key in seen_keys:
             return
@@ -1200,6 +1582,7 @@ def get_support_option_specs(
                 meal_slot=meal_slot,
                 meal_role=meal_role,
                 training_focus=training_focus,
+                expand_candidate_pool=expand_candidate_pool,
             )
             if ranked_foods:
                 return ranked_foods
@@ -1217,8 +1600,12 @@ def get_support_option_specs(
     if meal_slot == "early":
         roles_soporte.append(("dairy", ["greek_yogurt"]))
 
+    support_candidates_by_role: dict[str, list[dict[str, Any]]] = {}
+
     for support_role, fallback_codes in roles_soporte:
-        for support_food in iter_support_foods(support_role, fallback_codes):
+        support_candidates = iter_support_foods(support_role, fallback_codes)
+        support_candidates_by_role[support_role] = support_candidates
+        for support_food in support_candidates:
             quantity = construir_cantidad_soporte_razonable(
                 support_food,
                 support_role=support_role,
@@ -1229,6 +1616,52 @@ def get_support_option_specs(
                 quantity=quantity,
             ):
                 continue
-            add_support_option(support_role, support_food["code"], quantity)
+            add_support_option([{
+                "role": support_role,
+                "food_code": support_food["code"],
+                "quantity": float(quantity),
+            }])
+
+    if expand_candidate_pool and len(roles_soporte) >= 2:
+        for role_index, (primary_role, _fallback_codes) in enumerate(roles_soporte):
+            primary_candidates = support_candidates_by_role.get(primary_role, [])[:2]
+            for secondary_role, _secondary_fallback in roles_soporte[role_index + 1:]:
+                secondary_candidates = support_candidates_by_role.get(secondary_role, [])[:2]
+                for primary_food in primary_candidates:
+                    primary_quantity = construir_cantidad_soporte_razonable(
+                        primary_food,
+                        support_role=primary_role,
+                    )
+                    if not es_soporte_significativo(
+                        primary_food,
+                        support_role=primary_role,
+                        quantity=primary_quantity,
+                    ):
+                        continue
+                    for secondary_food in secondary_candidates:
+                        if primary_food["code"] == secondary_food["code"]:
+                            continue
+                        secondary_quantity = construir_cantidad_soporte_razonable(
+                            secondary_food,
+                            support_role=secondary_role,
+                        )
+                        if not es_soporte_significativo(
+                            secondary_food,
+                            support_role=secondary_role,
+                            quantity=secondary_quantity,
+                        ):
+                            continue
+                        add_support_option([
+                            {
+                                "role": primary_role,
+                                "food_code": primary_food["code"],
+                                "quantity": float(primary_quantity),
+                            },
+                            {
+                                "role": secondary_role,
+                                "food_code": secondary_food["code"],
+                                "quantity": float(secondary_quantity),
+                            },
+                        ])
 
     return support_options

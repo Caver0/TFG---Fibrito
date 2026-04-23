@@ -77,7 +77,7 @@ function RegisterPage({ onSwitch }) {
               <input
                 name="email"
                 type="email"
-                placeholder="usuario@laboratoriocinetico.io"
+                placeholder="usuario@email.com"
                 autoComplete="email"
                 value={form.email}
                 onChange={handleChange}

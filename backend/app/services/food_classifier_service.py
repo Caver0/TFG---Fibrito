@@ -1,6 +1,7 @@
 """Motor de Clasificación de Alimentos (Auto-Tagger) usando Machine Learning (ExtraTrees) + reglas híbridas."""
 
 import logging
+from functools import lru_cache
 from pathlib import Path
 
 import joblib
@@ -23,6 +24,12 @@ _model: ExtraTreesClassifier | None = None
 _mlb: MultiLabelBinarizer | None = None
 _is_trained: bool = False
 _training_samples: int = 0
+
+
+def _clear_prediction_cache() -> None:
+    cached_predictor = globals().get("_predict_meal_slot_scores_cached")
+    if cached_predictor is not None and hasattr(cached_predictor, "cache_clear"):
+        cached_predictor.cache_clear()
 
 # ---------------------------------------------------------------------------
 # Conocimiento semántico de dominio (nivel 2 del sistema híbrido)
@@ -136,8 +143,11 @@ def _load_model() -> bool:
             return False
         _model = state["model"]
         _mlb = state["mlb"]
+        if hasattr(_model, "n_jobs"):
+            _model.n_jobs = 1
         _training_samples = state.get("training_samples", 0)
         _is_trained = True
+        _clear_prediction_cache()
         logger.info(
             "[Auto-Tagger] Modelo cargado desde caché (%d muestras de entrenamiento)",
             _training_samples,
@@ -186,9 +196,11 @@ def train_classifier(database) -> bool:
         n_jobs=-1,               # Paralelismo completo
     )
     _model.fit(X, y)
+    _model.n_jobs = 1
 
     _training_samples = len(labeled_foods)
     _is_trained = True
+    _clear_prediction_cache()
 
     _save_model()
 
@@ -218,6 +230,7 @@ def invalidate_model_cache() -> None:
     except Exception as exc:
         logger.warning("[Auto-Tagger] No se pudo eliminar la caché del modelo: %s", exc)
     _is_trained = False
+    _clear_prediction_cache()
 
 
 # ---------------------------------------------------------------------------
@@ -261,7 +274,39 @@ def _build_rule_based_slot_scores(food_data: dict) -> dict[str, float]:
     return scores
 
 
-def predict_meal_slot_scores(food_data: dict) -> dict[str, float]:
+def _food_signature(food_data: dict) -> tuple[str, str, float, float, float, float, float, float]:
+    return (
+        str(food_data.get("code") or food_data.get("internal_code") or food_data.get("name") or "").strip().lower(),
+        str(food_data.get("category") or "").strip().lower(),
+        round(float(food_data.get("calories") or 0.0), 4),
+        round(float(food_data.get("protein_grams") or 0.0), 4),
+        round(float(food_data.get("fat_grams") or 0.0), 4),
+        round(float(food_data.get("carb_grams") or 0.0), 4),
+        round(float(food_data.get("fiber_grams") or 0.0), 4),
+        round(float(food_data.get("sugar_grams") or 0.0), 4),
+    )
+
+
+def _food_data_from_signature(
+    food_signature: tuple[str, str, float, float, float, float, float, float],
+) -> dict[str, float | str]:
+    return {
+        "code": food_signature[0],
+        "category": food_signature[1],
+        "calories": food_signature[2],
+        "protein_grams": food_signature[3],
+        "fat_grams": food_signature[4],
+        "carb_grams": food_signature[5],
+        "fiber_grams": food_signature[6],
+        "sugar_grams": food_signature[7],
+    }
+
+
+@lru_cache(maxsize=8192)
+def _predict_meal_slot_scores_cached(
+    food_signature: tuple[str, str, float, float, float, float, float, float],
+) -> tuple[tuple[str, float], ...]:
+    food_data = _food_data_from_signature(food_signature)
     """Returns per-slot affinity scores for ranking already valid candidates."""
     if _is_trained and _model is not None and _mlb is not None:
         try:
@@ -282,11 +327,15 @@ def predict_meal_slot_scores(food_data: dict) -> dict[str, float]:
             for slot in ("early", "main", "late", "snack"):
                 slot_scores.setdefault(slot, 0.0)
 
-            return slot_scores
+            return tuple(sorted(slot_scores.items()))
         except Exception as exc:
             logger.warning("[Auto-Tagger] Error obteniendo scores ML, usando fallback: %s", exc)
 
-    return _build_rule_based_slot_scores(food_data)
+    return tuple(sorted(_build_rule_based_slot_scores(food_data).items()))
+
+
+def predict_meal_slot_scores(food_data: dict) -> dict[str, float]:
+    return dict(_predict_meal_slot_scores_cached(_food_signature(food_data)))
 
 
 def predict_suitable_meals(food_data: dict) -> list[str]:

@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+﻿import { useEffect, useRef, useState } from 'react'
 import * as adherenceApi from '../api/adherenceApi'
 import * as dietsApi from '../api/dietsApi'
 import * as userApi from '../api/userApi'
@@ -235,6 +235,9 @@ function DietsPage() {
   const [activeReplacementPreviewCode, setActiveReplacementPreviewCode] = useState('')
   const [generationStageIndex, setGenerationStageIndex] = useState(0)
   const [manualDraftRequest, setManualDraftRequest] = useState(null)
+  const latestDietRequestRef = useRef(0)
+  const dietHistoryRequestRef = useRef(0)
+  const mealMutationRequestRef = useRef(0)
 
   const activeDiet = latestDiet
   const activeDietId = activeDiet?.id ?? ''
@@ -301,36 +304,54 @@ function DietsPage() {
     }
   }
 
-  async function loadLatestDiet(activeToken = token) {
+  async function loadLatestDiet(activeToken = token, options = {}) {
+    const { preserveOnError = false } = options
     if (!activeToken) return null
 
+    const requestId = latestDietRequestRef.current + 1
+    latestDietRequestRef.current = requestId
     setIsLatestDietLoading(true)
     setLatestDietError('')
 
     try {
       const diet = await dietsApi.getLatestDiet(activeToken)
+      if (latestDietRequestRef.current !== requestId) {
+        return diet
+      }
       setLatestDiet(diet)
       setSelectedDiet((currentSelectedDiet) => (
         currentSelectedDiet?.id === diet?.id ? null : currentSelectedDiet
       ))
       return diet
     } catch (error) {
-      setLatestDiet(null)
-      setLatestDietError(error.message)
+      if (latestDietRequestRef.current === requestId) {
+        if (!preserveOnError) {
+          setLatestDiet(null)
+        }
+        setLatestDietError(error.message)
+      }
       return null
     } finally {
-      setIsLatestDietLoading(false)
+      if (latestDietRequestRef.current === requestId) {
+        setIsLatestDietLoading(false)
+      }
     }
   }
 
-  async function loadDietHistory(activeToken = token) {
+  async function loadDietHistory(activeToken = token, options = {}) {
+    const { preserveOnError = false } = options
     if (!activeToken) return []
 
+    const requestId = dietHistoryRequestRef.current + 1
+    dietHistoryRequestRef.current = requestId
     setIsHistoryLoading(true)
     setHistoryError('')
 
     try {
       const response = await dietsApi.getDietHistory(activeToken)
+      if (dietHistoryRequestRef.current !== requestId) {
+        return response.diets
+      }
       setDietHistory(response.diets)
       setSelectedDiet((currentSelectedDiet) => {
         if (!currentSelectedDiet) {
@@ -342,11 +363,17 @@ function DietsPage() {
       })
       return response.diets
     } catch (error) {
-      setDietHistory([])
-      setHistoryError(error.message)
+      if (dietHistoryRequestRef.current === requestId) {
+        if (!preserveOnError) {
+          setDietHistory([])
+        }
+        setHistoryError(error.message)
+      }
       return []
     } finally {
-      setIsHistoryLoading(false)
+      if (dietHistoryRequestRef.current === requestId) {
+        setIsHistoryLoading(false)
+      }
     }
   }
 
@@ -486,16 +513,36 @@ function DietsPage() {
       currentSelectedDiet?.id === updatedDiet.id ? null : currentSelectedDiet
     ))
 
-    setLatestDiet((currentLatest) => {
-      if (!currentLatest || currentLatest.id === updatedDiet.id) {
-        return updatedDiet
-      }
-      return currentLatest
-    })
+    setLatestDiet(updatedDiet)
 
-    setDietHistory((currentHistory) =>
-      currentHistory.map((d) => (d.id === updatedDiet.id ? updatedDiet : d))
-    )
+    setDietHistory((currentHistory) => {
+      const nextHistory = currentHistory.map((diet) => {
+        if (diet.id === updatedDiet.id) {
+          return updatedDiet
+        }
+        if (updatedDiet.is_active && diet.is_active && diet.id !== updatedDiet.id) {
+          return { ...diet, is_active: false }
+        }
+        return diet
+      })
+
+      if (nextHistory.some((diet) => diet.id === updatedDiet.id)) {
+        return nextHistory
+      }
+
+      return [updatedDiet, ...nextHistory]
+    })
+  }
+
+  function refreshDietCollectionsInBackground(activeToken = token) {
+    if (!activeToken) return
+
+    Promise.allSettled([
+      loadLatestDiet(activeToken, { preserveOnError: true }),
+      loadDietHistory(activeToken, { preserveOnError: true }),
+    ]).catch(() => {
+      // Mantenemos la UI ya sincronizada con la respuesta de mutacion aunque falle el refresh secundario.
+    })
   }
 
   function handleGeneratorBaseChange(event) {
@@ -696,8 +743,10 @@ function DietsPage() {
   }
 
   async function handleRegenerateMeal(mealNumber) {
-    if (!token || !activeDietId) return
+    if (!token || !activeDietId || isMealActionLoading) return
 
+    const requestId = mealMutationRequestRef.current + 1
+    mealMutationRequestRef.current = requestId
     setIsMealActionLoading(true)
     setActiveMealNumber(mealNumber)
     setDietActionError('')
@@ -705,15 +754,24 @@ function DietsPage() {
 
     try {
       const response = await dietsApi.regenerateMeal(token, activeDietId, mealNumber)
+      if (mealMutationRequestRef.current !== requestId) {
+        return
+      }
       syncUpdatedDiet(response.diet)
+      closeReplacementLab()
+      setActiveFoodCode('')
       setDietActionMessage(response.summary.message)
-      await loadDietHistory(token)
       window.dispatchEvent(new CustomEvent('dashboard:refresh'))
+      refreshDietCollectionsInBackground(token)
     } catch (error) {
-      setDietActionError(error.message)
+      if (mealMutationRequestRef.current === requestId) {
+        setDietActionError(error.message)
+      }
     } finally {
-      setIsMealActionLoading(false)
-      setActiveMealNumber(null)
+      if (mealMutationRequestRef.current === requestId) {
+        setIsMealActionLoading(false)
+        setActiveMealNumber(null)
+      }
     }
   }
 
@@ -823,11 +881,13 @@ function DietsPage() {
   }
 
   async function handleApplyReplacement() {
-    if (!token || !activeDietId || !replacementLab?.food || !selectedReplacementCode) return
+    if (!token || !activeDietId || !replacementLab?.food || !selectedReplacementCode || isMealActionLoading) return
 
     const selectedOption = replacementOptions.find((option) => option.food_code === selectedReplacementCode)
     if (!selectedOption) return
 
+    const requestId = mealMutationRequestRef.current + 1
+    mealMutationRequestRef.current = requestId
     setIsMealActionLoading(true)
     setActiveMealNumber(replacementLab.mealNumber)
     setActiveFoodCode(replacementLab.food.food_code ?? replacementLab.food.name)
@@ -842,18 +902,25 @@ function DietsPage() {
         replacement_food_name: selectedOption.name,
         replacement_food_code: selectedOption.food_code,
       })
+      if (mealMutationRequestRef.current !== requestId) {
+        return
+      }
       syncUpdatedDiet(response.diet)
       setDietActionMessage(response.summary.message)
       closeReplacementLab()
-      await loadDietHistory(token)
       window.dispatchEvent(new CustomEvent('dashboard:refresh'))
+      refreshDietCollectionsInBackground(token)
     } catch (error) {
-      setDietActionError(error.message)
-      setReplacementError(error.message)
+      if (mealMutationRequestRef.current === requestId) {
+        setDietActionError(error.message)
+        setReplacementError(error.message)
+      }
     } finally {
-      setIsMealActionLoading(false)
-      setActiveMealNumber(null)
-      setActiveFoodCode('')
+      if (mealMutationRequestRef.current === requestId) {
+        setIsMealActionLoading(false)
+        setActiveMealNumber(null)
+        setActiveFoodCode('')
+      }
     }
   }
 
@@ -1240,7 +1307,7 @@ function DietsPage() {
                           type="button"
                           className="protocol-secondary-button"
                           onClick={() => handleRegenerateMeal(meal.meal_number)}
-                          disabled={isMealActionLoading && activeMealNumber === meal.meal_number}
+                          disabled={isMealActionLoading}
                         >
                           {isMealActionLoading && activeMealNumber === meal.meal_number ? 'Regenerando...' : 'Regenerar'}
                         </button>

@@ -63,6 +63,11 @@ MACRO_CALORIE_FACTORS = {
     "carb_grams": 4.0,
 }
 CANDIDATE_INDEX_WEIGHT = 0.08
+NEAR_BEST_SELECTION_WINDOW_BY_SLOT = {
+    "early": 1.55,
+    "main": 0.9,
+    "late": 0.9,
+}
 # Este bonus debe ser mayor que CANDIDATE_INDEX_WEIGHT * profundidad tipica
 # para que un alimento preferido gane frente a uno no preferido.
 PREFERRED_FOOD_BONUS_BY_ROLE = {
@@ -89,7 +94,18 @@ REPEAT_ESCALATION_BY_ROLE = {
     "vegetable": 0.08,
     "dairy": 0.18,
 }
+FAMILY_REPEAT_PENALTY_BY_ROLE = {
+    "protein": 0.45,
+    "carb": 0.35,
+    "fat": 0.14,
+    "fruit": 0.12,
+    "vegetable": 0.08,
+    "dairy": 0.16,
+}
 REPEATED_MAIN_PAIR_PENALTY = 0.5
+REPEATED_MAIN_FAMILY_PAIR_PENALTY = 0.85
+REPEATED_MEAL_STRUCTURE_PENALTY = 1.15
+REPEATED_TEMPLATE_PENALTY = 1.75
 WEEKLY_REPEAT_PENALTY_BY_ROLE = {
     "protein": 0.12,
     "carb": 0.08,

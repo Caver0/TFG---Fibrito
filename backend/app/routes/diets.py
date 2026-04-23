@@ -1,4 +1,6 @@
 """Routes for generating and retrieving user food-based diets."""
+import time
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.database import get_database
@@ -30,6 +32,8 @@ from app.services.food_substitution_service import (
 )
 from app.services.manual_diet_service import build_manual_diet_payload
 from app.services.food_preferences_service import FoodPreferenceConflictError
+from app.services.diet_runtime_audit import emit_runtime_audit, new_audit_id, runtime_audit_context
+from app.services.diet_v2.telemetry import get_last_generation_diagnostics, get_last_regeneration_diagnostics
 from app.services.meal_regeneration_service import regenerate_meal
 from app.services.nutrition_service import NutritionProfileIncompleteError
 
@@ -51,27 +55,77 @@ def create_daily_diet(
     current_user: UserPublic = Depends(get_current_user),
 ) -> DailyDiet:
     database = get_database()
+    audit_id = new_audit_id("diet_generate")
+    endpoint_started_at = time.perf_counter()
 
-    try:
-        diet_payload = generate_food_based_diet(
-            database,
-            current_user,
-            payload.meals_count,
-            custom_percentages=payload.custom_percentages,
-            training_time_of_day=payload.training_time_of_day,
+    with runtime_audit_context(audit_id=audit_id, endpoint="/diets/generate", user_id=current_user.id):
+        emit_runtime_audit(
+            "diet_generate_request_started",
+            {
+                "request_payload": payload.model_dump(mode="json"),
+            },
         )
-    except NutritionProfileIncompleteError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
-    except FoodPreferenceConflictError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(exc),
-        ) from exc
+        try:
+            diet_payload = generate_food_based_diet(
+                database,
+                current_user,
+                payload.meals_count,
+                custom_percentages=payload.custom_percentages,
+                training_time_of_day=payload.training_time_of_day,
+            )
+            generation_diagnostics = get_last_generation_diagnostics() or {}
+            persisted_diet = save_diet(database, current_user.id, diet_payload)
+        except NutritionProfileIncompleteError as exc:
+            emit_runtime_audit(
+                "diet_generate_request_failed",
+                {
+                    "error_type": type(exc).__name__,
+                    "error_detail": str(exc),
+                    "elapsed_seconds": time.perf_counter() - endpoint_started_at,
+                    "generation_diagnostics": get_last_generation_diagnostics(),
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
+        except FoodPreferenceConflictError as exc:
+            emit_runtime_audit(
+                "diet_generate_request_failed",
+                {
+                    "error_type": type(exc).__name__,
+                    "error_detail": str(exc),
+                    "elapsed_seconds": time.perf_counter() - endpoint_started_at,
+                    "generation_diagnostics": get_last_generation_diagnostics(),
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            ) from exc
+        except Exception as exc:
+            emit_runtime_audit(
+                "diet_generate_request_failed",
+                {
+                    "error_type": type(exc).__name__,
+                    "error_detail": str(exc),
+                    "elapsed_seconds": time.perf_counter() - endpoint_started_at,
+                    "generation_diagnostics": get_last_generation_diagnostics(),
+                },
+            )
+            raise
 
-    return save_diet(database, current_user.id, diet_payload)
+        emit_runtime_audit(
+            "diet_generate_request_completed",
+            {
+                "elapsed_seconds": time.perf_counter() - endpoint_started_at,
+                "generation_diagnostics": generation_diagnostics,
+                "generated_payload_before_save": diet_payload,
+                "persisted_payload": persisted_diet.model_dump(mode="json"),
+                "returned_payload": persisted_diet.model_dump(mode="json"),
+            },
+        )
+        return persisted_diet
 
 
 @router.post("/manual", response_model=DailyDiet, status_code=status.HTTP_201_CREATED)
@@ -143,20 +197,70 @@ def regenerate_user_meal(
     current_user: UserPublic = Depends(get_current_user),
 ) -> DietMutationResponse:
     database = get_database()
+    audit_id = new_audit_id("meal_regenerate")
+    endpoint_started_at = time.perf_counter()
     _ensure_diet_supports_automatic_actions(database, current_user.id, diet_id)
 
-    try:
-        return regenerate_meal(
-            database,
-            user=current_user,
-            diet_id=diet_id,
-            meal_number=meal_number,
+    with runtime_audit_context(
+        audit_id=audit_id,
+        endpoint="/diets/{diet_id}/meals/{meal_number}/regenerate",
+        user_id=current_user.id,
+    ):
+        emit_runtime_audit(
+            "meal_regenerate_request_started",
+            {
+                "diet_id": diet_id,
+                "meal_number": meal_number,
+            },
         )
-    except FoodPreferenceConflictError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(exc),
-        ) from exc
+        try:
+            response = regenerate_meal(
+                database,
+                user=current_user,
+                diet_id=diet_id,
+                meal_number=meal_number,
+            )
+        except FoodPreferenceConflictError as exc:
+            emit_runtime_audit(
+                "meal_regenerate_request_failed",
+                {
+                    "diet_id": diet_id,
+                    "meal_number": meal_number,
+                    "error_type": type(exc).__name__,
+                    "error_detail": str(exc),
+                    "elapsed_seconds": time.perf_counter() - endpoint_started_at,
+                    "regeneration_diagnostics": get_last_regeneration_diagnostics(),
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            ) from exc
+        except Exception as exc:
+            emit_runtime_audit(
+                "meal_regenerate_request_failed",
+                {
+                    "diet_id": diet_id,
+                    "meal_number": meal_number,
+                    "error_type": type(exc).__name__,
+                    "error_detail": str(exc),
+                    "elapsed_seconds": time.perf_counter() - endpoint_started_at,
+                    "regeneration_diagnostics": get_last_regeneration_diagnostics(),
+                },
+            )
+            raise
+
+        emit_runtime_audit(
+            "meal_regenerate_request_completed",
+            {
+                "diet_id": diet_id,
+                "meal_number": meal_number,
+                "elapsed_seconds": time.perf_counter() - endpoint_started_at,
+                "regeneration_diagnostics": get_last_regeneration_diagnostics(),
+                "returned_payload": response.model_dump(mode="json"),
+            },
+        )
+        return response
 
 
 @router.post("/{diet_id}/meals/{meal_number}/replace-food", response_model=DietMutationResponse)

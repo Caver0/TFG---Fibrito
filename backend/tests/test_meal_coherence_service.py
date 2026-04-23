@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.schemas.diet import DietMeal
 from app.services.diet.common import calculate_difference_summary
 from app.services.diet.solver import build_exact_meal_solution, build_food_portion, calculate_meal_actuals_from_foods
+from app.services import meal_coherence_service
 from app.services.meal_coherence_service import apply_generation_coherence
 
 
@@ -163,6 +164,146 @@ LOOKUP = {
         step=10.0,
         aliases=["aguacate", "avocado"],
     ),
+    "mixed_nuts": _food(
+        "mixed_nuts",
+        "grasas",
+        protein=15.0,
+        fat=50.0,
+        carb=20.0,
+        suitable_meals=["early", "snack"],
+        name="Frutos secos",
+        default_qty=20.0,
+        min_qty=10.0,
+        max_qty=80.0,
+        step=5.0,
+        aliases=["frutos secos", "nuts"],
+    ),
+    "whole_wheat_bread": _food(
+        "whole_wheat_bread",
+        "carbohidratos",
+        protein=13.0,
+        fat=4.2,
+        carb=41.2,
+        suitable_meals=["early", "main", "snack"],
+        name="Pan integral",
+        default_qty=70.0,
+        min_qty=40.0,
+        max_qty=220.0,
+        step=10.0,
+        aliases=["pan integral", "pan tostado", "toast", "bread"],
+    ),
+    "turkey_breast": _food(
+        "turkey_breast",
+        "proteinas",
+        protein=23.0,
+        fat=1.5,
+        carb=0.0,
+        suitable_meals=["main", "late", "snack"],
+        name="Pechuga de pavo",
+        default_qty=150.0,
+        min_qty=60.0,
+        max_qty=300.0,
+        step=5.0,
+        aliases=["pavo", "pechuga de pavo", "turkey"],
+    ),
+    "chicken_breast": _food(
+        "chicken_breast",
+        "proteinas",
+        protein=23.0,
+        fat=2.0,
+        carb=0.0,
+        suitable_meals=["main", "late"],
+        name="Pechuga de pollo",
+        default_qty=150.0,
+        min_qty=60.0,
+        max_qty=300.0,
+        step=5.0,
+        aliases=["pollo", "chicken"],
+    ),
+    "tuna": _food(
+        "tuna",
+        "proteinas",
+        protein=26.0,
+        fat=1.0,
+        carb=0.0,
+        suitable_meals=["main", "late"],
+        name="Atun",
+        default_qty=120.0,
+        min_qty=60.0,
+        max_qty=220.0,
+        step=10.0,
+        aliases=["atun", "tuna"],
+    ),
+    "rice": _food(
+        "rice",
+        "carbohidratos",
+        protein=7.1,
+        fat=0.7,
+        carb=80.0,
+        suitable_meals=["main", "late"],
+        name="Arroz",
+        default_qty=80.0,
+        min_qty=30.0,
+        max_qty=250.0,
+        step=5.0,
+        aliases=["arroz", "rice"],
+    ),
+    "pasta": _food(
+        "pasta",
+        "carbohidratos",
+        protein=13.0,
+        fat=1.5,
+        carb=74.7,
+        suitable_meals=["main", "late"],
+        name="Pasta",
+        default_qty=90.0,
+        min_qty=40.0,
+        max_qty=250.0,
+        step=5.0,
+        aliases=["pasta", "macarrones"],
+    ),
+    "potato": _food(
+        "potato",
+        "carbohidratos",
+        protein=2.0,
+        fat=0.1,
+        carb=17.5,
+        suitable_meals=["main", "late"],
+        name="Patata",
+        default_qty=250.0,
+        min_qty=100.0,
+        max_qty=500.0,
+        step=10.0,
+        aliases=["patata", "potato"],
+    ),
+    "olive_oil": _food(
+        "olive_oil",
+        "grasas",
+        protein=0.0,
+        fat=100.0,
+        carb=0.0,
+        suitable_meals=["main", "late"],
+        name="Aceite de oliva",
+        default_qty=10.0,
+        min_qty=5.0,
+        max_qty=25.0,
+        step=1.0,
+        aliases=["aceite de oliva", "olive oil"],
+    ),
+    "mixed_vegetables": _food(
+        "mixed_vegetables",
+        "vegetales",
+        protein=2.0,
+        fat=0.3,
+        carb=6.0,
+        suitable_meals=["main", "late", "snack"],
+        name="Verduras variadas",
+        default_qty=120.0,
+        min_qty=80.0,
+        max_qty=250.0,
+        step=10.0,
+        aliases=["verduras", "verduras variadas", "vegetables"],
+    ),
 }
 
 
@@ -286,3 +427,342 @@ def test_breakfast_templates_can_promote_oats_yogurt_banana_when_they_fit():
 
     coherent_codes = {food["food_code"] for food in coherent_plan["foods"]}
     assert "banana" in coherent_codes
+
+
+def test_regeneration_mode_prevents_pairing_rules_from_reintroducing_excluded_foods():
+    meal = _build_meal_from_portions(
+        meal_number=1,
+        meal_slot="early",
+        meal_role="breakfast",
+        meal_label="Desayuno",
+        portions=[("eggs", 2.0), ("cornflakes", 55.0), ("avocado", 30.0)],
+    )
+    original_plan = build_exact_meal_solution(
+        meal=meal,
+        role_foods={
+            "protein": LOOKUP["eggs"],
+            "carb": LOOKUP["cornflakes"],
+            "fat": LOOKUP["avocado"],
+        },
+        support_food_specs=[],
+        candidate_indexes={"protein": 0, "carb": 0, "fat": 0},
+        food_lookup=LOOKUP,
+        training_focus=False,
+        meal_slot="early",
+    )
+
+    assert original_plan is not None
+
+    coherent_plan = apply_generation_coherence(
+        meal=meal,
+        meal_index=0,
+        meals_count=3,
+        training_focus=False,
+        meal_plan=original_plan,
+        food_lookup=LOOKUP,
+        preference_profile=None,
+        excluded_food_codes={"semi_skimmed_milk", "greek_yogurt"},
+        strict_exclusions=True,
+    )
+
+    coherent_codes = {food["food_code"] for food in coherent_plan["foods"]}
+    assert "semi_skimmed_milk" not in coherent_codes
+    assert "greek_yogurt" not in coherent_codes
+
+
+def test_regeneration_mode_prevents_templates_from_reintroducing_excluded_foods():
+    meal = _build_meal_from_portions(
+        meal_number=1,
+        meal_slot="early",
+        meal_role="breakfast",
+        meal_label="Desayuno",
+        portions=[("greek_yogurt", 2.0), ("oats", 45.0), ("avocado", 20.0)],
+    )
+    original_plan = build_exact_meal_solution(
+        meal=meal,
+        role_foods={
+            "protein": LOOKUP["greek_yogurt"],
+            "carb": LOOKUP["oats"],
+            "fat": LOOKUP["avocado"],
+        },
+        support_food_specs=[],
+        candidate_indexes={"protein": 0, "carb": 0, "fat": 0},
+        food_lookup=LOOKUP,
+        training_focus=False,
+        meal_slot="early",
+    )
+
+    assert original_plan is not None
+
+    coherent_plan = apply_generation_coherence(
+        meal=meal,
+        meal_index=0,
+        meals_count=3,
+        training_focus=False,
+        meal_plan=original_plan,
+        food_lookup=LOOKUP,
+        preference_profile=None,
+        excluded_food_codes={"banana"},
+        strict_exclusions=True,
+    )
+
+    coherent_codes = {food["food_code"] for food in coherent_plan["foods"]}
+    assert "banana" not in coherent_codes
+
+
+def test_regeneration_allows_two_food_templates_that_are_fully_new(monkeypatch):
+    meal = _build_meal_from_portions(
+        meal_number=1,
+        meal_slot="early",
+        meal_role="breakfast",
+        meal_label="Desayuno",
+        portions=[("eggs", 2.0), ("banana", 1.0), ("mixed_nuts", 20.0)],
+    )
+    base_plan = build_exact_meal_solution(
+        meal=meal,
+        role_foods={
+            "protein": LOOKUP["eggs"],
+            "carb": LOOKUP["banana"],
+            "fat": LOOKUP["mixed_nuts"],
+        },
+        support_food_specs=[],
+        candidate_indexes={"protein": 0, "carb": 0, "fat": 0},
+        food_lookup=LOOKUP,
+        training_focus=False,
+        meal_slot="early",
+    )
+
+    assert base_plan is not None
+
+    monkeypatch.setattr(
+        meal_coherence_service,
+        "load_meal_templates",
+        lambda: [
+            {
+                "id": "cereal_milk_test",
+                "name": "Cereal con leche",
+                "meal_types": ["breakfast"],
+                "priority": 100,
+                "foods": [
+                    {"name": "cornflakes", "role": "carb", "ratio": 0.55},
+                    {"name": "leche semidesnatada", "role": "liquid", "ratio": 0.45},
+                ],
+            }
+        ],
+    )
+
+    coherent_plan = apply_generation_coherence(
+        meal=meal,
+        meal_index=0,
+        meals_count=3,
+        training_focus=False,
+        meal_plan=base_plan,
+        food_lookup=LOOKUP,
+        preference_profile=None,
+        regeneration_context={
+            "original_food_codes": {"greek_yogurt", "oats", "avocado"},
+            "original_selected_role_codes": {
+                "protein": "greek_yogurt",
+                "carb": "oats",
+                "fat": "avocado",
+            },
+            "prefer_visible_difference": True,
+            "min_visual_difference": 2,
+            "avoid_same_template": True,
+        },
+    )
+
+    coherent_codes = {food["food_code"] for food in coherent_plan["foods"]}
+    assert "cornflakes" in coherent_codes
+    assert "semi_skimmed_milk" in coherent_codes
+    assert coherent_plan.get("applied_template_id") == "cereal_milk_test"
+
+
+def test_normal_generation_keeps_template_gate_for_fully_new_two_food_candidates(monkeypatch):
+    meal = _build_meal_from_portions(
+        meal_number=1,
+        meal_slot="early",
+        meal_role="breakfast",
+        meal_label="Desayuno",
+        portions=[("eggs", 2.0), ("banana", 1.0), ("mixed_nuts", 20.0)],
+    )
+    base_plan = build_exact_meal_solution(
+        meal=meal,
+        role_foods={
+            "protein": LOOKUP["eggs"],
+            "carb": LOOKUP["banana"],
+            "fat": LOOKUP["mixed_nuts"],
+        },
+        support_food_specs=[],
+        candidate_indexes={"protein": 0, "carb": 0, "fat": 0},
+        food_lookup=LOOKUP,
+        training_focus=False,
+        meal_slot="early",
+    )
+
+    assert base_plan is not None
+
+    monkeypatch.setattr(
+        meal_coherence_service,
+        "load_meal_templates",
+        lambda: [
+            {
+                "id": "cereal_milk_test",
+                "name": "Cereal con leche",
+                "meal_types": ["breakfast"],
+                "priority": 100,
+                "foods": [
+                    {"name": "cornflakes", "role": "carb", "ratio": 0.55},
+                    {"name": "leche semidesnatada", "role": "liquid", "ratio": 0.45},
+                ],
+            }
+        ],
+    )
+
+    coherent_plan = apply_generation_coherence(
+        meal=meal,
+        meal_index=0,
+        meals_count=3,
+        training_focus=False,
+        meal_plan=base_plan,
+        food_lookup=LOOKUP,
+        preference_profile=None,
+    )
+
+    coherent_codes = {food["food_code"] for food in coherent_plan["foods"]}
+    assert "cornflakes" not in coherent_codes
+    assert coherent_plan.get("applied_template_id") is None
+
+
+def test_regeneration_prefers_breakfast_structure_visibly_different_from_original():
+    meal = _build_meal_from_portions(
+        meal_number=1,
+        meal_slot="early",
+        meal_role="breakfast",
+        meal_label="Desayuno",
+        portions=[("eggs", 2.0), ("whole_wheat_bread", 70.0), ("avocado", 35.0)],
+    )
+    base_plan = build_exact_meal_solution(
+        meal=meal,
+        role_foods={
+            "protein": LOOKUP["eggs"],
+            "carb": LOOKUP["whole_wheat_bread"],
+            "fat": LOOKUP["avocado"],
+        },
+        support_food_specs=[],
+        candidate_indexes={"protein": 0, "carb": 0, "fat": 0},
+        food_lookup=LOOKUP,
+        training_focus=False,
+        meal_slot="early",
+    )
+
+    assert base_plan is not None
+
+    coherent_plan = apply_generation_coherence(
+        meal=meal,
+        meal_index=0,
+        meals_count=3,
+        training_focus=False,
+        meal_plan=base_plan,
+        food_lookup=LOOKUP,
+        preference_profile=None,
+        regeneration_context={
+            "original_food_codes": {"greek_yogurt", "oats", "avocado"},
+            "original_selected_role_codes": {
+                "protein": "greek_yogurt",
+                "carb": "oats",
+                "fat": "avocado",
+            },
+            "prefer_visible_difference": True,
+            "min_visual_difference": 2,
+            "avoid_same_template": True,
+        },
+    )
+
+    coherent_codes = {food["food_code"] for food in coherent_plan["foods"]}
+    assert "greek_yogurt" not in coherent_codes
+    assert "oats" not in coherent_codes
+    assert "whole_wheat_bread" in coherent_codes
+
+
+def test_regeneration_avoids_collapsing_lunch_back_to_same_visible_structure(monkeypatch):
+    meal = _build_meal_from_portions(
+        meal_number=2,
+        meal_slot="main",
+        meal_role="meal",
+        meal_label="Comida",
+        portions=[("rice", 80.0), ("tuna", 120.0), ("olive_oil", 10.0)],
+    )
+    base_plan = build_exact_meal_solution(
+        meal=meal,
+        role_foods={
+            "protein": LOOKUP["tuna"],
+            "carb": LOOKUP["rice"],
+            "fat": LOOKUP["olive_oil"],
+        },
+        support_food_specs=[],
+        candidate_indexes={"protein": 0, "carb": 0, "fat": 0},
+        food_lookup=LOOKUP,
+        training_focus=False,
+        meal_slot="main",
+    )
+
+    assert base_plan is not None
+
+    monkeypatch.setattr(
+        meal_coherence_service,
+        "load_meal_templates",
+        lambda: [
+            {
+                "id": "same_rice_chicken",
+                "name": "Arroz con pollo",
+                "meal_types": ["lunch"],
+                "priority": 100,
+                "foods": [
+                    {"name": "arroz", "role": "carb", "ratio": 0.5},
+                    {"name": "pollo", "role": "protein", "ratio": 0.35},
+                    {"name": "verduras", "role": "vegetable", "ratio": 0.15},
+                ],
+            },
+            {
+                "id": "different_pasta_tuna",
+                "name": "Pasta con atun",
+                "meal_types": ["lunch"],
+                "priority": 90,
+                "foods": [
+                    {"name": "pasta", "role": "carb", "ratio": 0.5},
+                    {"name": "atun", "role": "protein", "ratio": 0.3},
+                    {"name": "verduras", "role": "vegetable", "ratio": 0.2},
+                ],
+            },
+        ],
+    )
+
+    coherent_plan = apply_generation_coherence(
+        meal=meal,
+        meal_index=1,
+        meals_count=3,
+        training_focus=False,
+        meal_plan=base_plan,
+        food_lookup=LOOKUP,
+        preference_profile=None,
+        regeneration_context={
+            "original_food_codes": {"rice", "chicken_breast", "mixed_vegetables"},
+            "original_selected_role_codes": {
+                "protein": "chicken_breast",
+                "carb": "rice",
+                "fat": "olive_oil",
+            },
+            "original_support_food_specs": [
+                {"role": "vegetable", "food_code": "mixed_vegetables", "quantity": 120.0},
+            ],
+            "prefer_visible_difference": True,
+            "min_visual_difference": 2,
+            "avoid_same_template": True,
+        },
+    )
+
+    coherent_codes = {food["food_code"] for food in coherent_plan["foods"]}
+    assert "pasta" in coherent_codes
+    assert "chicken_breast" not in coherent_codes
+    assert coherent_plan.get("applied_template_id") == "different_pasta_tuna"
