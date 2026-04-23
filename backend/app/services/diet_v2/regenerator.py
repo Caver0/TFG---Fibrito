@@ -5,9 +5,9 @@ import time
 from typing import Any
 
 from app.services.diet.candidates import get_meal_structure_signature
-from app.services.diet_v2.blueprints import get_blueprint
+from app.services.diet_v2.blueprints import get_blueprint, get_blueprint_visual_family
 from app.services.diet_v2.day_planner import rank_blueprints_for_meal
-from app.services.diet_v2.diversity import create_diversity_state
+from app.services.diet_v2.diversity import create_diversity_state, register_instantiated_meal
 from app.services.diet_v2.meal_instantiator import instantiate_blueprint
 from app.services.diet_v2.repair import repair_meal_plan
 from app.services.diet_v2.families import get_primary_family_id
@@ -78,12 +78,73 @@ def summarize_visible_difference(
         selected_role_codes=candidate_role_codes,
         support_food_specs=candidate_plan.get("support_food_specs", []),
     )
+    current_visual_family = str((current_meal_plan or {}).get("applied_blueprint_visual_family") or "")
+    candidate_visual_family = str(candidate_plan.get("applied_blueprint_visual_family") or "")
+    current_visual_continuity = str((current_meal_plan or {}).get("applied_blueprint_visual_continuity_group") or "")
+    candidate_visual_continuity = str(candidate_plan.get("applied_blueprint_visual_continuity_group") or "")
     return {
         "visible_change_count": visible_change_count,
         "changed_roles": changed_roles,
         "same_visible_structure": current_structure == candidate_structure if current_structure else False,
         "structure_changed": current_structure != candidate_structure if current_structure else True,
+        "visual_family_changed": bool(current_visual_family) and current_visual_family != candidate_visual_family,
+        "visual_continuity_changed": bool(current_visual_continuity) and current_visual_continuity != candidate_visual_continuity,
     }
+
+
+def _build_regeneration_diversity_state(
+    *,
+    current_meal_plan: dict[str, Any] | None,
+    current_blueprint_id: str | None,
+    meal_slot: str,
+    meal_role: str,
+    food_lookup: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    diversity_state = create_diversity_state()
+    if not current_meal_plan or not current_blueprint_id:
+        return diversity_state
+
+    blueprint = get_blueprint(current_blueprint_id)
+    role_codes = current_meal_plan.get("selected_role_codes", {})
+    if blueprint is None or not role_codes:
+        return diversity_state
+
+    protein_code = str(role_codes.get("protein") or "").strip()
+    carb_code = str(role_codes.get("carb") or "").strip()
+    fat_code = str(role_codes.get("fat") or "").strip()
+    if protein_code not in food_lookup or carb_code not in food_lookup or fat_code not in food_lookup:
+        return diversity_state
+
+    support_families = [
+        get_primary_family_id(
+            food_lookup[support_food["food_code"]],
+            role=support_food["role"],
+        )
+        for support_food in current_meal_plan.get("support_food_specs", [])
+        if support_food["food_code"] in food_lookup
+    ]
+    register_instantiated_meal(
+        diversity_state,
+        blueprint_id=current_blueprint_id,
+        structural_family=str(current_meal_plan.get("applied_blueprint_family") or blueprint.structural_family),
+        visual_family=str(
+            current_meal_plan.get("applied_blueprint_visual_family")
+            or get_blueprint_visual_family(blueprint, meal_slot=meal_slot)
+        ),
+        visual_continuity_group=str(
+            current_meal_plan.get("applied_blueprint_visual_continuity_group")
+            or blueprint.visual_continuity_group
+        ),
+        style_tags=current_meal_plan.get("applied_blueprint_style_tags", list(blueprint.style_tags)),
+        meal_slot=meal_slot,
+        meal_role=meal_role,
+        protein_family=get_primary_family_id(food_lookup[protein_code], role="protein"),
+        carb_family=get_primary_family_id(food_lookup[carb_code], role="carb"),
+        fat_family=get_primary_family_id(food_lookup[fat_code], role="fat"),
+        support_families=support_families,
+        selected_role_codes=role_codes,
+    )
+    return diversity_state
 
 
 def regenerate_meal_plan_v2(
@@ -120,12 +181,33 @@ def regenerate_meal_plan_v2(
         preference_profile=preference_profile,
         variety_seed=variety_seed,
     )
+    if current_meal_plan and current_blueprint_id:
+        current_blueprint = get_blueprint(current_blueprint_id)
+        if current_blueprint is not None:
+            current_meal_plan = {
+                **current_meal_plan,
+                "applied_blueprint_visual_family": (
+                    current_meal_plan.get("applied_blueprint_visual_family")
+                    or get_blueprint_visual_family(current_blueprint, meal_slot=meal_slot)
+                ),
+                "applied_blueprint_visual_continuity_group": (
+                    current_meal_plan.get("applied_blueprint_visual_continuity_group")
+                    or current_blueprint.visual_continuity_group
+                ),
+            }
+    regeneration_diversity_state = _build_regeneration_diversity_state(
+        current_meal_plan=current_meal_plan,
+        current_blueprint_id=current_blueprint_id,
+        meal_slot=meal_slot,
+        meal_role=meal_role,
+        food_lookup=food_lookup,
+    )
     ranked_blueprints = rank_blueprints_for_meal(
         meal_request=meal_request,
         food_lookup=food_lookup,
         preference_profile=preference_profile,
         variety_seed=variety_seed,
-        diversity_state=create_diversity_state(),
+        diversity_state=regeneration_diversity_state,
     )
 
     best_candidate: dict[str, Any] | None = None
@@ -183,7 +265,7 @@ def regenerate_meal_plan_v2(
                 preference_profile=preference_profile,
                 daily_food_usage=daily_food_usage,
                 weekly_food_usage=weekly_food_usage,
-                diversity_state=create_diversity_state(),
+                diversity_state=regeneration_diversity_state,
                 variety_seed=variety_seed + phase_index,
                 excluded_food_codes=phase["excluded_food_codes"],
             )
@@ -221,8 +303,12 @@ def regenerate_meal_plan_v2(
                 candidate_plan=candidate_plan,
             )
             blueprint_changed = int(str(candidate_plan.get("applied_blueprint_id") or "") != str(current_blueprint_id or ""))
+            visual_family_changed = int(difference["visual_family_changed"])
+            visual_continuity_changed = int(difference["visual_continuity_changed"])
             changed_primary = int(any(role in difference["changed_roles"] for role in ("protein", "carb")))
             ranking = (
+                -visual_family_changed,
+                -visual_continuity_changed,
                 -blueprint_changed,
                 -changed_primary,
                 -difference["visible_change_count"],
@@ -242,7 +328,12 @@ def regenerate_meal_plan_v2(
                 best_difference = ranking
             if (
                 difference["visible_change_count"] >= phase["min_visible_difference"]
-                and (blueprint_changed or changed_primary or len(difference["changed_roles"]) >= 2)
+                and (
+                    visual_family_changed
+                    or blueprint_changed
+                    or changed_primary
+                    or len(difference["changed_roles"]) >= 2
+                )
             ):
                 candidate_plan["regeneration_difference"] = difference
                 candidate_plan["regeneration_source_blueprint_id"] = current_blueprint_id
@@ -291,7 +382,7 @@ def regenerate_meal_plan_v2(
                 preference_profile=preference_profile,
                 daily_food_usage=daily_food_usage,
                 weekly_food_usage=weekly_food_usage,
-                diversity_state=create_diversity_state(),
+                diversity_state=regeneration_diversity_state,
                 variety_seed=variety_seed + 50,
                 excluded_food_codes=current_food_codes,
             )

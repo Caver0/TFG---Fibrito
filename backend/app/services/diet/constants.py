@@ -42,19 +42,28 @@ ROLE_FALLBACK_CODE_POOLS = {
         "chicken_breast",
         "turkey_breast",
         "tuna",
+        "salmon",
+        "lean_beef",
         "egg_whites",
         "greek_yogurt",
+        "skyr",
+        "cottage_cheese",
         "eggs",
     ],
     "carb": [
         "rice",
         "potato",
+        "sweet_potato",
         "pasta",
         "whole_wheat_bread",
+        "whole_grain_bagel",
+        "whole_wheat_wrap",
+        "rice_cakes",
+        "cornflakes",
         "banana",
         "oats",
     ],
-    "fat": ["olive_oil", "avocado", "mixed_nuts"],
+    "fat": ["olive_oil", "avocado", "mixed_nuts", "peanut_butter"],
 }
 CORE_MACRO_KEYS = ("protein_grams", "fat_grams", "carb_grams")
 MACRO_CALORIE_FACTORS = {
@@ -120,6 +129,8 @@ PROTEIN_ROLE_DAILY_MAX_USAGE_BY_CODE = {
     "egg_whites": 1,
     "eggs": 1,
     "greek_yogurt": 2,
+    "skyr": 2,
+    "cottage_cheese": 2,
 }
 SWEET_BREAKFAST_CARB_TOKENS = (
     "avena",
@@ -147,7 +158,6 @@ SAVORY_STARCH_TOKENS = (
     "chickpea",
     "judia",
     "bean",
-    "tortilla",
 )
 SAVORY_PROTEIN_TOKENS = (
     "chicken",
@@ -178,14 +188,18 @@ BREAKFAST_PROTEIN_TOKENS = (
     "claras",
     "yogur",
     "yogurt",
-    "cottage",
+    "yogur griego",
     "skyr",
+    "cottage",
+    "queso fresco",
     "quark",
 )
 BREAKFAST_ONLY_DAIRY_TOKENS = (
     "yogur",
     "yogurt",
+    "yogur griego",
     "cottage",
+    "queso fresco",
     "skyr",
     "quark",
     "leche",
@@ -202,9 +216,12 @@ BREAKFAST_FAT_TOKENS = (
     "lino",
     "flax",
     "seed",
+    "peanut",
+    "cacahuete",
+    "crema de cacahuete",
 )
 COOKING_FAT_TOKENS = ("aceite", "olive oil", "oil")
-BREAKFAST_BREAD_TOKENS = ("pan", "bread", "toast", "tostada")
+BREAKFAST_BREAD_TOKENS = ("pan", "bread", "toast", "tostada", "bagel", "wrap")
 VALID_MEAL_SLOTS = {"early", "main", "late"}
 VALID_MEAL_ROLES = {"meal", "breakfast", "pre_workout", "post_workout", "dinner", "training_focus"}
 LOW_FAT_MEAL_ROLES = {"pre_workout", "post_workout", "training_focus"}
@@ -214,8 +231,8 @@ MAX_ROLE_CANDIDATES_PER_MEAL = {
     "fat": 8,
 }
 MAX_SUPPORT_CANDIDATES_PER_ROLE = 3
-LEAN_PROTEIN_CODES = {"chicken_breast", "turkey_breast", "tuna", "egg_whites", "greek_yogurt"}
-FAST_DIGESTING_CARB_CODES = {"rice", "potato", "pasta", "oats", "banana", "whole_wheat_bread"}
+LEAN_PROTEIN_CODES = {"chicken_breast", "turkey_breast", "tuna", "egg_whites", "greek_yogurt", "skyr", "cottage_cheese"}
+FAST_DIGESTING_CARB_CODES = {"rice", "potato", "pasta", "oats", "banana", "whole_wheat_bread", "rice_cakes", "cornflakes", "whole_grain_bagel"}
 EARLY_SWEET_FAT_CODES = {"mixed_nuts"}
 SAVORY_FAT_CODES = {"olive_oil", "avocado"}
 
@@ -250,20 +267,30 @@ BONUS_CORRELACION_ALIMENTARIA = 0.18
 # Se aplica como bonus negativo en build_solution_score (menor score = mejor candidato).
 CORRELACIONES_ALIMENTOS_COMPATIBLES: dict[str, list[str]] = {
     "cornflakes": ["greek_yogurt", "milk", "oats"],
+    "granola": ["greek_yogurt", "skyr", "berries"],
+    "muesli": ["greek_yogurt", "skyr", "apple"],
     "oats": ["greek_yogurt", "milk", "banana", "mixed_nuts"],
-    "muesli": ["greek_yogurt", "milk", "banana"],
-    "granola": ["greek_yogurt", "milk"],
+    "rice_cakes": ["peanut_butter", "banana", "cottage_cheese", "skyr"],
     "rice": ["chicken_breast", "turkey_breast", "tuna", "eggs"],
     "pasta": ["chicken_breast", "turkey_breast", "tuna"],
     "potato": ["chicken_breast", "salmon", "eggs"],
+    "sweet_potato": ["salmon", "lean_beef", "eggs"],
     "whole_wheat_bread": ["eggs", "turkey_breast", "avocado"],
+    "whole_grain_bagel": ["eggs", "turkey_breast", "cottage_cheese"],
+    "whole_wheat_wrap": ["eggs", "turkey_breast", "avocado"],
     "banana": ["oats", "greek_yogurt"],
+    "apple": ["cottage_cheese", "peanut_butter", "muesli"],
+    "berries": ["greek_yogurt", "skyr", "granola"],
     "chicken_breast": ["rice", "potato", "pasta"],
     "turkey_breast": ["rice", "pasta", "whole_wheat_bread"],
     "tuna": ["rice", "pasta", "potato"],
     "salmon": ["potato", "rice"],
+    "lean_beef": ["rice", "pasta", "sweet_potato"],
     "eggs": ["whole_wheat_bread", "potato", "rice"],
     "greek_yogurt": ["oats", "cornflakes", "banana", "muesli", "granola"],
+    "skyr": ["granola", "muesli", "berries", "banana"],
+    "cottage_cheese": ["apple", "whole_grain_bagel", "rice_cakes"],
+    "peanut_butter": ["rice_cakes", "banana", "apple"],
 }
 
 # Equivalencias semánticas conocidas entre alimentos con distintos nombres o idiomas.

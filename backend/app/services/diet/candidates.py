@@ -78,6 +78,12 @@ CONCENTRATED_FRUIT_MAIN_CARB_PENALTY = 0.8
 BREAKFAST_CONCENTRATED_FRUIT_MAIN_CARB_EXTRA_PENALTY = 0.24
 CONCENTRATED_FRUIT_SUPPORT_PENALTY = 0.55
 BREAKFAST_CONCENTRATED_FRUIT_SUPPORT_EXTRA_PENALTY = 0.18
+LIGHT_BREAKFAST_STARCH_TOKENS = (
+    "rice cake",
+    "rice cakes",
+    "tortitas de arroz",
+    "corn cake",
+)
 FAMILY_VARIANT_NOISE_TOKENS = {
     "natural",
     "normal",
@@ -644,7 +650,16 @@ def is_sweet_breakfast_carb(food: dict[str, Any]) -> bool:
     return _food_has_any_token(food, SWEET_BREAKFAST_CARB_TOKENS)
 
 
+def is_light_breakfast_starch(food: dict[str, Any]) -> bool:
+    food_code = str(food.get("code") or "").strip().lower()
+    if food_code == "rice_cakes":
+        return True
+    return _food_has_any_token(food, LIGHT_BREAKFAST_STARCH_TOKENS)
+
+
 def is_savory_starch(food: dict[str, Any]) -> bool:
+    if is_light_breakfast_starch(food):
+        return False
     if _food_has_any_token(food, SAVORY_STARCH_TOKENS):
         return True
 

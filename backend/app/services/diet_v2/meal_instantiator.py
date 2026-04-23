@@ -14,8 +14,8 @@ from app.services.diet.candidates import (
     iter_canonical_food_items,
 )
 from app.services.diet.constants import LOW_FAT_MEAL_ROLES
-from app.services.diet_v2.blueprints import MealBlueprint
-from app.services.diet_v2.diversity import build_meal_diversity_penalty
+from app.services.diet_v2.blueprints import MealBlueprint, get_blueprint_visual_family
+from app.services.diet_v2.diversity import build_meal_diversity_penalty, get_carb_cluster
 from app.services.diet_v2.families import (
     food_matches_allowed_families,
     get_primary_family_id,
@@ -81,7 +81,14 @@ def _build_role_candidate_score(
     if role == "protein":
         score -= float(diversity_state["protein_family_counts"].get(family_id, 0)) * 0.8
     elif role == "carb":
-        score -= float(diversity_state["carb_family_counts"].get(family_id, 0)) * 0.65
+        score -= float(diversity_state["carb_family_counts"].get(family_id, 0)) * 0.95
+        carb_cluster = get_carb_cluster(family_id)
+        if carb_cluster:
+            score -= float(diversity_state["carb_cluster_counts"].get(carb_cluster, 0)) * 0.55
+            if meal_slot == "early" and carb_cluster == "breakfast_cereal":
+                score -= float(
+                    diversity_state["meal_slot_carb_cluster_counts"].get(meal_slot, {}).get(carb_cluster, 0)
+                ) * 1.25
     elif role == "fat":
         score -= float(diversity_state["fat_family_counts"].get(family_id, 0)) * 0.2
 
@@ -328,10 +335,18 @@ def instantiate_blueprint(
         for support_food in support_food_specs
         if support_food["food_code"] in food_lookup
     ]
+    visual_family = get_blueprint_visual_family(
+        blueprint,
+        meal_slot=meal_request["meal_slot"],
+    )
     diversity_penalty = build_meal_diversity_penalty(
         blueprint_id=blueprint.id,
         structural_family=blueprint.structural_family,
+        visual_family=visual_family,
+        visual_continuity_group=blueprint.visual_continuity_group,
         style_tags=blueprint.style_tags,
+        meal_slot=meal_request["meal_slot"],
+        meal_role=meal_request["meal_role"],
         protein_family=protein_family,
         carb_family=carb_family,
         fat_family=fat_family,
@@ -350,5 +365,7 @@ def instantiate_blueprint(
         "blueprint_diversity_penalty": diversity_penalty,
         "applied_blueprint_id": blueprint.id,
         "applied_blueprint_family": blueprint.structural_family,
+        "applied_blueprint_visual_family": visual_family,
+        "applied_blueprint_visual_continuity_group": blueprint.visual_continuity_group,
         "applied_blueprint_style_tags": sorted(blueprint.style_tags),
     }

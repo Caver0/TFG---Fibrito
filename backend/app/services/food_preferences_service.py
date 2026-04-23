@@ -50,7 +50,11 @@ INTERNAL_FOOD_COMPATIBILITY: dict[str, dict[str, list[str]]] = {
     "eggs": {"dietary_tags": ["vegetariano", "sin_lactosa", "sin_gluten"], "allergen_tags": ["huevo"]},
     "egg_whites": {"dietary_tags": ["vegetariano", "sin_lactosa", "sin_gluten"], "allergen_tags": ["huevo"]},
     "tuna": {"dietary_tags": ["sin_lactosa", "sin_gluten"], "allergen_tags": ["pescado"]},
+    "salmon": {"dietary_tags": ["sin_lactosa", "sin_gluten"], "allergen_tags": ["pescado"]},
+    "lean_beef": {"dietary_tags": ["sin_lactosa", "sin_gluten"], "allergen_tags": []},
     "greek_yogurt": {"dietary_tags": ["vegetariano", "sin_gluten"], "allergen_tags": ["lacteos"]},
+    "skyr": {"dietary_tags": ["vegetariano", "sin_gluten"], "allergen_tags": ["lacteos"]},
+    "cottage_cheese": {"dietary_tags": ["vegetariano", "sin_gluten"], "allergen_tags": ["lacteos"]},
     "semi_skimmed_milk": {"dietary_tags": ["vegetariano", "sin_gluten"], "allergen_tags": ["lacteos"]},
     "rice": {
         "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten"],
@@ -64,11 +68,39 @@ INTERNAL_FOOD_COMPATIBILITY: dict[str, dict[str, list[str]]] = {
         "dietary_tags": ["vegetariano", "vegano", "sin_lactosa"],
         "allergen_tags": ["gluten"],
     },
+    "cornflakes": {
+        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa"],
+        "allergen_tags": ["gluten"],
+    },
+    "granola": {
+        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa"],
+        "allergen_tags": ["gluten"],
+    },
+    "muesli": {
+        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa"],
+        "allergen_tags": ["gluten"],
+    },
     "whole_wheat_bread": {
         "dietary_tags": ["vegetariano", "vegano", "sin_lactosa"],
         "allergen_tags": ["gluten"],
     },
+    "whole_grain_bagel": {
+        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa"],
+        "allergen_tags": ["gluten"],
+    },
+    "whole_wheat_wrap": {
+        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa"],
+        "allergen_tags": ["gluten"],
+    },
+    "rice_cakes": {
+        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten"],
+        "allergen_tags": [],
+    },
     "potato": {
+        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten"],
+        "allergen_tags": [],
+    },
+    "sweet_potato": {
         "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten"],
         "allergen_tags": [],
     },
@@ -84,11 +116,27 @@ INTERNAL_FOOD_COMPATIBILITY: dict[str, dict[str, list[str]]] = {
         "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten"],
         "allergen_tags": ["frutos_secos"],
     },
+    "peanut_butter": {
+        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten"],
+        "allergen_tags": ["frutos_secos"],
+    },
     "banana": {
         "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten"],
         "allergen_tags": [],
     },
+    "apple": {
+        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten"],
+        "allergen_tags": [],
+    },
+    "berries": {
+        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten"],
+        "allergen_tags": [],
+    },
     "mixed_vegetables": {
+        "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten"],
+        "allergen_tags": [],
+    },
+    "salad_mix": {
         "dietary_tags": ["vegetariano", "vegano", "sin_lactosa", "sin_gluten"],
         "allergen_tags": [],
     },

@@ -187,7 +187,10 @@ def _build_approximate_meal_solution(
         "score": score,
         "portion_fit_method": "approximate_v2",
         **actuals,
-        **blueprint_metadata(blueprint),
+        **blueprint_metadata(
+            blueprint,
+            meal_slot=meal_request["meal_slot"],
+        ),
     }
 
 
@@ -234,7 +237,10 @@ def fit_meal_portions(
         )
         if solution is None:
             continue
-        solution.update(blueprint_metadata(blueprint))
+        solution.update(blueprint_metadata(
+            blueprint,
+            meal_slot=meal_request["meal_slot"],
+        ))
         solution["support_food_specs"] = support_variant
         return solution
 

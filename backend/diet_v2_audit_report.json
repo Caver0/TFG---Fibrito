@@ -18,36 +18,36 @@
     "current_generation_failures": []
   },
   "benchmark": {
-    "current_mean_seconds": 0.073226,
-    "current_min_seconds": 0.051103,
-    "current_max_seconds": 0.10431,
-    "legacy_mean_seconds": 0.117323,
-    "legacy_min_seconds": 0.08728,
-    "legacy_max_seconds": 0.147814,
-    "mean_speedup_ratio_vs_legacy": 1.6022,
+    "current_mean_seconds": 0.087045,
+    "current_min_seconds": 0.063169,
+    "current_max_seconds": 0.108884,
+    "legacy_mean_seconds": 0.123042,
+    "legacy_min_seconds": 0.093346,
+    "legacy_max_seconds": 0.157569,
+    "mean_speedup_ratio_vs_legacy": 1.4135,
     "paired_successful_run_count": 16,
-    "paired_current_mean_seconds": 0.070487,
-    "paired_legacy_mean_seconds": 0.117323,
-    "paired_speedup_ratio_vs_legacy": 1.6645,
+    "paired_current_mean_seconds": 0.084646,
+    "paired_legacy_mean_seconds": 0.123042,
+    "paired_speedup_ratio_vs_legacy": 1.4536,
     "current_service_phase_means": {
-      "food_resolution": 0.002106,
-      "meal_context": 1.6e-05,
-      "payload_build": 0.001572,
-      "planning_and_coherence": 0.066699,
-      "preference_anchors": 0.000231,
-      "setup": 0.002364,
-      "total": 0.07299,
-      "v2_day_planning": 0.019337,
-      "v2_instantiation": 0.047227
+      "food_resolution": 0.002141,
+      "meal_context": 1.7e-05,
+      "payload_build": 0.001628,
+      "planning_and_coherence": 0.078732,
+      "preference_anchors": 0.000248,
+      "setup": 0.002458,
+      "total": 0.085826,
+      "v2_day_planning": 0.023897,
+      "v2_instantiation": 0.05469
     },
     "current_engine_phase_means": {
-      "day_planning": 0.019337,
-      "instantiation_and_fit": 0.047227,
-      "request_build": 1e-05,
-      "total": 0.066575
+      "day_planning": 0.023897,
+      "instantiation_and_fit": 0.05469,
+      "request_build": 1.3e-05,
+      "total": 0.078602
     },
-    "avg_meal_elapsed_seconds": 0.011713,
-    "max_meal_elapsed_seconds": 0.027128,
+    "avg_meal_elapsed_seconds": 0.013573,
+    "max_meal_elapsed_seconds": 0.029213,
     "legacy_generation_failures": [
       {
         "scenario_id": "gain_4_tarde",
@@ -256,7 +256,7 @@
       "P:poultry|C:pasta|F:oil|S:vegetable:mixed_vegetables": 7,
       "P:fish|C:pasta|F:oil|S:vegetable:mixed_vegetables": 5,
       "P:poultry|C:bread|F:oil|S:": 5,
-      "P:egg|C:bread|F:avocado|S:": 3,
+      "P:egg|C:bread|F:avocado|S:vegetable:mixed_vegetables": 3,
       "P:egg|C:potato|F:oil|S:vegetable:mixed_vegetables": 3
     },
     "repeated_protein_examples": []
@@ -332,8 +332,8 @@
     "blueprint_changed_rate": 0.8125,
     "base_changed_rate": 1.0,
     "visible_two_plus_rate": 1.0,
-    "avg_v2_elapsed_seconds": 0.019857,
-    "max_v2_elapsed_seconds": 0.038374,
+    "avg_v2_elapsed_seconds": 0.024261,
+    "max_v2_elapsed_seconds": 0.047157,
     "examples": [
       {
         "scenario_id": "gain_4_tarde",
@@ -350,9 +350,10 @@
         "after_foods": [
           "Claras de huevo",
           "Pan integral",
+          "Verduras variadas",
           "Aguacate"
         ],
-        "visible_change_count": 7,
+        "visible_change_count": 8,
         "used_legacy": false
       },
       {
@@ -432,9 +433,10 @@
         "after_foods": [
           "Claras de huevo",
           "Pan integral",
+          "Verduras variadas",
           "Aguacate"
         ],
-        "visible_change_count": 7,
+        "visible_change_count": 8,
         "used_legacy": false
       },
       {
