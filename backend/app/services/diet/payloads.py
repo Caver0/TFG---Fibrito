@@ -8,6 +8,7 @@ from app.services.food_preferences_service import count_preferred_food_matches_i
 
 from app.services.diet.candidates import get_food_usage_summary_from_meals
 from app.services.diet.common import (
+    calculate_macro_calories,
     calculate_difference_summary,
     normalize_diet_food_source,
     resolve_meal_context,
@@ -121,10 +122,16 @@ def calculate_daily_totals_from_meals(
     target_carb_grams: float,
     meals: list[dict],
 ) -> dict[str, float]:
-    actual_calories = round_diet_value(sum(meal["actual_calories"] for meal in meals))
     actual_protein_grams = round_diet_value(sum(meal["actual_protein_grams"] for meal in meals))
     actual_fat_grams = round_diet_value(sum(meal["actual_fat_grams"] for meal in meals))
     actual_carb_grams = round_diet_value(sum(meal["actual_carb_grams"] for meal in meals))
+    actual_calories = round_diet_value(
+        calculate_macro_calories(
+            actual_protein_grams,
+            actual_fat_grams,
+            actual_carb_grams,
+        )
+    )
 
     return {
         "actual_calories": actual_calories,

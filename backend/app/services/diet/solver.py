@@ -149,10 +149,16 @@ def calculate_support_totals(
 
 
 def calculate_meal_actuals_from_foods(foods: list[dict]) -> dict[str, float]:
-    actual_calories = round_diet_value(sum(float(food["calories"]) for food in foods))
     actual_protein_grams = round_diet_value(sum(float(food["protein_grams"]) for food in foods))
     actual_fat_grams = round_diet_value(sum(float(food["fat_grams"]) for food in foods))
     actual_carb_grams = round_diet_value(sum(float(food["carb_grams"]) for food in foods))
+    actual_calories = round_diet_value(
+        calculate_macro_calories(
+            actual_protein_grams,
+            actual_fat_grams,
+            actual_carb_grams,
+        )
+    )
     return {
         "actual_calories": actual_calories,
         "actual_protein_grams": actual_protein_grams,

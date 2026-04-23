@@ -140,6 +140,11 @@ def build_nutrition_summary(
         else calculate_target_calories(tdee, input_data.goal)
     )
     macros = calculate_macros(input_data.current_weight, target_calories)
+    aligned_target_calories = round_nutrition(
+        (macros["protein_grams"] * 4.0)
+        + (macros["fat_grams"] * 9.0)
+        + (macros["carb_grams"] * 4.0)
+    )
 
     return NutritionSummary(
         age=input_data.age,
@@ -151,7 +156,7 @@ def build_nutrition_summary(
         activity_factor=activity_factor,
         bmr=round_nutrition(bmr),
         tdee=round_nutrition(tdee),
-        target_calories=round_nutrition(target_calories),
+        target_calories=aligned_target_calories,
         protein_grams=round_nutrition(macros["protein_grams"]),
         fat_grams=round_nutrition(macros["fat_grams"]),
         carb_grams=round_nutrition(macros["carb_grams"]),

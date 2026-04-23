@@ -5,7 +5,7 @@ from fastapi import HTTPException, status
 
 from app.schemas.diet import DietMeal, TrainingTimeOfDay
 from app.schemas.user import UserPublic
-from app.services.nutrition_service import build_nutrition_summary
+from app.services.nutrition_service import build_nutrition_summary, get_default_target_calories
 from app.utils.meal_roles import (
     format_meal_role_label,
     get_meal_slot,
@@ -505,6 +505,11 @@ def generate_meal_distribution_targets(
         user,
         target_calories_override=user.target_calories,
     )
+    raw_target_calories = (
+        float(user.target_calories)
+        if user.target_calories is not None
+        else get_default_target_calories(user)
+    )
 
     base_percentages = (
         validate_distribution_percentages(custom_percentages, meals_count)
@@ -516,7 +521,7 @@ def generate_meal_distribution_targets(
     )
     base_meals = build_base_meal_distribution(
         meals_count=meals_count,
-        target_calories=nutrition.target_calories,
+        target_calories=raw_target_calories,
         distribution_percentages=distribution_percentages,
     )
     meals = distribute_macros_across_meals(
