@@ -25,6 +25,13 @@ Thumbs.db
 # Logs
 *.log
 
+# Generated audit/runtime artifacts
+backend/runtime_logs/
+backend/*audit_report.json
+backend/*audit_stdout.txt
+backend/diagnostic_plot.png
+backend/cluster_plot.png
+
 # Coverage
 .coverage
 htmlcov/
