@@ -8,6 +8,7 @@ from app.schemas.diet import DailyDiet, DietFood, DietMeal
 from app.services import meal_regeneration_service as meal_regeneration
 from app.services.diet.common import calculate_difference_summary
 from app.services.diet.candidates import get_meal_structure_signature
+from app.services.diet_v2.portion_fitter import apply_regeneration_micro_adjustment
 from app.services.diet.solver import build_food_portion, calculate_meal_actuals_from_foods
 from app.services.food_catalog_service import get_internal_food_lookup
 
@@ -577,3 +578,84 @@ def test_regeneration_varies_valid_breakfast_alternatives_across_seeds():
 
     assert len(regenerated_triplets) >= 2
     assert len(regenerated_structures) >= 2
+
+
+def test_regeneration_micro_adjustment_improves_bad_approximate_fit_without_changing_foods():
+    lookup = get_internal_food_lookup()
+    meal = DietMeal(
+        meal_number=2,
+        meal_slot="early",
+        meal_role="pre_workout",
+        meal_label="Pre-entrenamiento",
+        distribution_percentage=12.0,
+        target_calories=336.1,
+        target_protein_grams=31.2,
+        target_fat_grams=4.9,
+        target_carb_grams=41.8,
+        actual_calories=336.1,
+        actual_protein_grams=31.2,
+        actual_fat_grams=4.9,
+        actual_carb_grams=41.8,
+        calorie_difference=0.0,
+        protein_difference=0.0,
+        fat_difference=0.0,
+        carb_difference=0.0,
+        foods=[],
+    )
+    support_food_specs = [{
+        "role": "fruit",
+        "food_code": "berries",
+        "quantity": 66.66666666666667,
+    }]
+    plan_foods = [
+        build_food_portion(lookup["rice_cakes"], 37.93),
+        build_food_portion(lookup["avocado"], 7.2),
+        build_food_portion(lookup["berries"], 66.66666666666667),
+        build_food_portion(lookup["eggs"], 4.0),
+    ]
+    before_actuals = calculate_meal_actuals_from_foods(plan_foods)
+    before_differences = calculate_difference_summary(
+        target_calories=meal.target_calories,
+        target_protein_grams=meal.target_protein_grams,
+        target_fat_grams=meal.target_fat_grams,
+        target_carb_grams=meal.target_carb_grams,
+        actual_calories=before_actuals["actual_calories"],
+        actual_protein_grams=before_actuals["actual_protein_grams"],
+        actual_fat_grams=before_actuals["actual_fat_grams"],
+        actual_carb_grams=before_actuals["actual_carb_grams"],
+    )
+    before_score = (
+        abs(before_differences["calorie_difference"])
+        + abs(before_differences["protein_difference"]) * 1.4
+        + abs(before_differences["fat_difference"]) * 1.2
+        + abs(before_differences["carb_difference"]) * 1.2
+    )
+    approximate_plan = {
+        "foods": plan_foods,
+        "selected_role_codes": {
+            "protein": "eggs",
+            "carb": "rice_cakes",
+            "fat": "avocado",
+        },
+        "support_food_specs": support_food_specs,
+        "portion_fit_method": "approximate_v2",
+        "score": before_score,
+        **before_actuals,
+        **before_differences,
+    }
+
+    adjusted_plan = apply_regeneration_micro_adjustment(
+        meal=meal,
+        meal_plan=approximate_plan,
+        meal_slot="early",
+        meal_role="pre_workout",
+        food_lookup=lookup,
+    )
+
+    assert adjusted_plan["selected_role_codes"] == approximate_plan["selected_role_codes"]
+    assert adjusted_plan["support_food_specs"] == approximate_plan["support_food_specs"]
+    assert [food["food_code"] for food in adjusted_plan["foods"]] == [food["food_code"] for food in approximate_plan["foods"]]
+    assert adjusted_plan["regeneration_micro_adjustment"]["applied"] is True
+    assert adjusted_plan["score"] < before_score
+    assert abs(adjusted_plan["fat_difference"]) < abs(before_differences["fat_difference"])
+    assert abs(adjusted_plan["calorie_difference"]) < abs(before_differences["calorie_difference"])

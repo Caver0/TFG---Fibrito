@@ -9,7 +9,7 @@ from app.services.diet_v2.blueprints import get_blueprint, get_blueprint_visual_
 from app.services.diet_v2.day_planner import rank_blueprints_for_meal
 from app.services.diet_v2.diversity import create_diversity_state, register_instantiated_meal
 from app.services.diet_v2.meal_instantiator import instantiate_blueprint
-from app.services.diet_v2.repair import repair_meal_plan
+from app.services.diet_v2.repair import repair_regenerated_meal_plan
 from app.services.diet_v2.families import get_primary_family_id
 from app.services.diet_v2.telemetry import set_last_regeneration_diagnostics
 
@@ -89,6 +89,45 @@ def summarize_visible_difference(
         "structure_changed": current_structure != candidate_structure if current_structure else True,
         "visual_family_changed": bool(current_visual_family) and current_visual_family != candidate_visual_family,
         "visual_continuity_changed": bool(current_visual_continuity) and current_visual_continuity != candidate_visual_continuity,
+    }
+
+
+def _build_regeneration_candidate_ranking(
+    *,
+    candidate_plan: dict[str, Any],
+    difference: dict[str, Any],
+    current_blueprint_id: str | None,
+) -> tuple[float, ...]:
+    nutrition_validation = dict(candidate_plan.get("nutrition_validation") or {})
+    blueprint_changed = int(str(candidate_plan.get("applied_blueprint_id") or "") != str(current_blueprint_id or ""))
+    visual_family_changed = int(difference["visual_family_changed"])
+    visual_continuity_changed = int(difference["visual_continuity_changed"])
+    changed_primary = int(any(role in difference["changed_roles"] for role in ("protein", "carb")))
+    return (
+        0.0 if nutrition_validation.get("within_tolerance") else 1.0,
+        float(nutrition_validation.get("max_overflow_ratio") or 0.0),
+        float(nutrition_validation.get("normalized_overflow_score") or 0.0),
+        float(nutrition_validation.get("normalized_error_score") or 0.0),
+        -float(visual_family_changed),
+        -float(visual_continuity_changed),
+        -float(blueprint_changed),
+        -float(changed_primary),
+        -float(difference["visible_change_count"]),
+        0.0 if candidate_plan.get("portion_fit_method", "exact") == "exact" else 1.0,
+        float(candidate_plan.get("score") or 0.0),
+    )
+
+
+def _build_regeneration_residual_reason(candidate_plan: dict[str, Any]) -> dict[str, Any]:
+    nutrition_validation = dict(candidate_plan.get("nutrition_validation") or {})
+    existing_reason = nutrition_validation.get("residual_reason")
+    if existing_reason:
+        return dict(existing_reason)
+    return {
+        "code": "strict_tolerance_unreachable_after_regeneration_search",
+        "out_of_tolerance_fields": list(nutrition_validation.get("out_of_tolerance_fields") or []),
+        "problem_roles": list(nutrition_validation.get("problem_roles") or []),
+        "bound_signals": list(nutrition_validation.get("bound_signals") or []),
     }
 
 
@@ -211,7 +250,7 @@ def regenerate_meal_plan_v2(
     )
 
     best_candidate: dict[str, Any] | None = None
-    best_difference: tuple[int, int, int, float] | None = None
+    best_difference: tuple[float, ...] | None = None
     diagnostics = {
         "meal_index": meal_index,
         "meal_slot": meal_slot,
@@ -222,6 +261,7 @@ def regenerate_meal_plan_v2(
         "selected_blueprint_id": None,
         "used_v2": False,
         "returned_candidate": False,
+        "accepted_with_residual_error": False,
         "fallback_reason": None,
         "elapsed_seconds": 0.0,
     }
@@ -249,192 +289,342 @@ def regenerate_meal_plan_v2(
 
     for phase_index, phase in enumerate(phases):
         for blueprint in ranked_blueprints:
-            attempt_started_at = time.perf_counter()
             if not phase["allow_same_blueprint"] and blueprint.id == current_blueprint_id:
                 diagnostics["attempts"].append({
                     "phase": phase["name"],
                     "blueprint_id": blueprint.id,
                     "status": "skipped_same_blueprint",
-                    "elapsed_seconds": time.perf_counter() - attempt_started_at,
+                    "elapsed_seconds": 0.0,
                 })
                 continue
-            instantiation = instantiate_blueprint(
-                blueprint=blueprint,
-                meal_request=meal_request,
-                food_lookup=food_lookup,
-                preference_profile=preference_profile,
-                daily_food_usage=daily_food_usage,
-                weekly_food_usage=weekly_food_usage,
-                diversity_state=regeneration_diversity_state,
-                variety_seed=variety_seed + phase_index,
-                excluded_food_codes=phase["excluded_food_codes"],
-            )
-            if instantiation is None:
-                diagnostics["attempts"].append({
-                    "phase": phase["name"],
-                    "blueprint_id": blueprint.id,
-                    "status": "instantiation_failed",
-                    "elapsed_seconds": time.perf_counter() - attempt_started_at,
-                })
-                continue
-            candidate_plan = repair_meal_plan(
-                blueprint=blueprint,
-                meal=meal,
-                meal_request=meal_request,
-                instantiation=instantiation,
-                food_lookup=food_lookup,
-                preference_profile=preference_profile,
-                daily_food_usage=daily_food_usage,
-                weekly_food_usage=weekly_food_usage,
-            )
-            if candidate_plan is None:
-                diagnostics["attempts"].append({
-                    "phase": phase["name"],
-                    "blueprint_id": blueprint.id,
-                    "status": "portion_fit_failed",
-                    "selected_role_codes": instantiation.get("selected_role_codes", {}),
-                    "elapsed_seconds": time.perf_counter() - attempt_started_at,
-                })
-                continue
-
-            difference = summarize_visible_difference(
-                current_meal_plan=current_meal_plan,
-                current_food_codes=current_food_codes,
-                candidate_plan=candidate_plan,
-            )
-            blueprint_changed = int(str(candidate_plan.get("applied_blueprint_id") or "") != str(current_blueprint_id or ""))
-            visual_family_changed = int(difference["visual_family_changed"])
-            visual_continuity_changed = int(difference["visual_continuity_changed"])
-            changed_primary = int(any(role in difference["changed_roles"] for role in ("protein", "carb")))
-            ranking = (
-                -visual_family_changed,
-                -visual_continuity_changed,
-                -blueprint_changed,
-                -changed_primary,
-                -difference["visible_change_count"],
-                float(candidate_plan.get("score") or 0.0),
-            )
-            diagnostics["attempts"].append({
-                "phase": phase["name"],
-                "blueprint_id": blueprint.id,
-                "status": "candidate_resolved",
-                "fit_method": candidate_plan.get("portion_fit_method", "exact"),
-                "selected_role_codes": candidate_plan.get("selected_role_codes", {}),
-                "difference": difference,
-                "elapsed_seconds": time.perf_counter() - attempt_started_at,
-            })
-            if best_candidate is None or best_difference is None or ranking < best_difference:
-                best_candidate = candidate_plan
-                best_difference = ranking
-            if (
-                difference["visible_change_count"] >= phase["min_visible_difference"]
-                and (
-                    visual_family_changed
-                    or blueprint_changed
-                    or changed_primary
-                    or len(difference["changed_roles"]) >= 2
+            for instantiation_variant, instantiation_seed_offset in enumerate((0, 97)):
+                attempt_started_at = time.perf_counter()
+                instantiation = instantiate_blueprint(
+                    blueprint=blueprint,
+                    meal_request=meal_request,
+                    food_lookup=food_lookup,
+                    preference_profile=preference_profile,
+                    daily_food_usage=daily_food_usage,
+                    weekly_food_usage=weekly_food_usage,
+                    diversity_state=regeneration_diversity_state,
+                    variety_seed=variety_seed + phase_index + instantiation_seed_offset,
+                    excluded_food_codes=phase["excluded_food_codes"],
                 )
-            ):
-                candidate_plan["regeneration_difference"] = difference
-                candidate_plan["regeneration_source_blueprint_id"] = current_blueprint_id
-                diagnostics["selected_phase"] = phase["name"]
-                diagnostics["selected_blueprint_id"] = candidate_plan.get("applied_blueprint_id")
-                diagnostics["used_v2"] = True
-                diagnostics["returned_candidate"] = True
-                diagnostics["elapsed_seconds"] = time.perf_counter() - started_at
-                candidate_plan["regeneration_diagnostics"] = diagnostics
-                set_last_regeneration_diagnostics(diagnostics)
-                return candidate_plan
+                if instantiation is None:
+                    diagnostics["attempts"].append({
+                        "phase": phase["name"],
+                        "blueprint_id": blueprint.id,
+                        "instantiation_variant": instantiation_variant,
+                        "status": "instantiation_failed",
+                        "elapsed_seconds": time.perf_counter() - attempt_started_at,
+                    })
+                    continue
+                candidate_plan, repair_attempts = repair_regenerated_meal_plan(
+                    blueprint=blueprint,
+                    meal=meal,
+                    meal_request=meal_request,
+                    instantiation=instantiation,
+                    food_lookup=food_lookup,
+                    preference_profile=preference_profile,
+                    daily_food_usage=daily_food_usage,
+                    weekly_food_usage=weekly_food_usage,
+                )
+                if candidate_plan is None:
+                    diagnostics["attempts"].append({
+                        "phase": phase["name"],
+                        "blueprint_id": blueprint.id,
+                        "instantiation_variant": instantiation_variant,
+                        "status": "portion_fit_failed",
+                        "selected_role_codes": instantiation.get("selected_role_codes", {}),
+                        "repair_attempts": repair_attempts,
+                        "elapsed_seconds": time.perf_counter() - attempt_started_at,
+                    })
+                    continue
 
-    if best_candidate is not None:
-        best_candidate["regeneration_difference"] = summarize_visible_difference(
-            current_meal_plan=current_meal_plan,
-            current_food_codes=current_food_codes,
-            candidate_plan=best_candidate,
-        )
-        best_candidate["regeneration_source_blueprint_id"] = current_blueprint_id
-        diagnostics["selected_phase"] = "best_candidate_after_phases"
-        diagnostics["selected_blueprint_id"] = best_candidate.get("applied_blueprint_id")
-        diagnostics["used_v2"] = True
-        diagnostics["returned_candidate"] = True
-        diagnostics["elapsed_seconds"] = time.perf_counter() - started_at
-        best_candidate["regeneration_diagnostics"] = diagnostics
-        set_last_regeneration_diagnostics(diagnostics)
-        return best_candidate
+                difference = summarize_visible_difference(
+                    current_meal_plan=current_meal_plan,
+                    current_food_codes=current_food_codes,
+                    candidate_plan=candidate_plan,
+                )
+                nutrition_validation = dict(candidate_plan.get("nutrition_validation") or {})
+                blueprint_changed = int(str(candidate_plan.get("applied_blueprint_id") or "") != str(current_blueprint_id or ""))
+                visual_family_changed = int(difference["visual_family_changed"])
+                changed_primary = int(any(role in difference["changed_roles"] for role in ("protein", "carb")))
+                ranking = _build_regeneration_candidate_ranking(
+                    candidate_plan=candidate_plan,
+                    difference=difference,
+                    current_blueprint_id=current_blueprint_id,
+                )
+                diagnostics["attempts"].append({
+                    "phase": phase["name"],
+                    "blueprint_id": blueprint.id,
+                    "instantiation_variant": instantiation_variant,
+                    "status": "candidate_resolved"
+                    if nutrition_validation.get("within_tolerance")
+                    else "candidate_rejected_outside_tolerance",
+                    "fit_method": candidate_plan.get("portion_fit_method", "exact"),
+                    "selected_role_codes": candidate_plan.get("selected_role_codes", {}),
+                    "difference": difference,
+                    "within_tolerance": bool(nutrition_validation.get("within_tolerance")),
+                    "out_of_tolerance_fields": list(nutrition_validation.get("out_of_tolerance_fields") or []),
+                    "normalized_overflow_score": float(nutrition_validation.get("normalized_overflow_score") or 0.0),
+                    "repair_attempts": repair_attempts,
+                    "elapsed_seconds": time.perf_counter() - attempt_started_at,
+                })
+                if best_candidate is None or best_difference is None or ranking < best_difference:
+                    best_candidate = candidate_plan
+                    best_difference = ranking
+                if (
+                    bool(nutrition_validation.get("within_tolerance"))
+                    and difference["visible_change_count"] >= phase["min_visible_difference"]
+                    and (
+                        visual_family_changed
+                        or blueprint_changed
+                        or changed_primary
+                        or len(difference["changed_roles"]) >= 2
+                    )
+                ):
+                    candidate_plan["regeneration_difference"] = difference
+                    candidate_plan["regeneration_source_blueprint_id"] = current_blueprint_id
+                    candidate_plan["nutrition_validation"]["accepted_with_residual_error"] = False
+                    diagnostics["selected_phase"] = phase["name"]
+                    diagnostics["selected_blueprint_id"] = candidate_plan.get("applied_blueprint_id")
+                    diagnostics["used_v2"] = True
+                    diagnostics["returned_candidate"] = True
+                    diagnostics["accepted_with_residual_error"] = False
+                    diagnostics["elapsed_seconds"] = time.perf_counter() - started_at
+                    candidate_plan["regeneration_diagnostics"] = diagnostics
+                    set_last_regeneration_diagnostics(diagnostics)
+                    return candidate_plan
 
     if current_blueprint_id:
         sibling_ids = tuple(get_blueprint(current_blueprint_id).sibling_blueprints) if get_blueprint(current_blueprint_id) else tuple()
         for sibling_blueprint_id in sibling_ids:
-            attempt_started_at = time.perf_counter()
             sibling_blueprint = get_blueprint(sibling_blueprint_id)
             if sibling_blueprint is None:
                 diagnostics["attempts"].append({
                     "phase": "sibling_blueprint_fallback",
                     "blueprint_id": sibling_blueprint_id,
                     "status": "unknown_blueprint",
-                    "elapsed_seconds": time.perf_counter() - attempt_started_at,
+                    "elapsed_seconds": 0.0,
                 })
                 continue
-            instantiation = instantiate_blueprint(
-                blueprint=sibling_blueprint,
-                meal_request=meal_request,
-                food_lookup=food_lookup,
-                preference_profile=preference_profile,
-                daily_food_usage=daily_food_usage,
-                weekly_food_usage=weekly_food_usage,
-                diversity_state=regeneration_diversity_state,
-                variety_seed=variety_seed + 50,
-                excluded_food_codes=current_food_codes,
-            )
-            if instantiation is None:
-                diagnostics["attempts"].append({
-                    "phase": "sibling_blueprint_fallback",
-                    "blueprint_id": sibling_blueprint_id,
-                    "status": "instantiation_failed",
-                    "elapsed_seconds": time.perf_counter() - attempt_started_at,
-                })
-                continue
-            candidate_plan = repair_meal_plan(
-                blueprint=sibling_blueprint,
-                meal=meal,
-                meal_request=meal_request,
-                instantiation=instantiation,
-                food_lookup=food_lookup,
-                preference_profile=preference_profile,
-                daily_food_usage=daily_food_usage,
-                weekly_food_usage=weekly_food_usage,
-            )
-            if candidate_plan is not None:
-                candidate_plan["regeneration_difference"] = summarize_visible_difference(
+            for instantiation_variant, instantiation_seed_offset in enumerate((50, 147)):
+                attempt_started_at = time.perf_counter()
+                instantiation = instantiate_blueprint(
+                    blueprint=sibling_blueprint,
+                    meal_request=meal_request,
+                    food_lookup=food_lookup,
+                    preference_profile=preference_profile,
+                    daily_food_usage=daily_food_usage,
+                    weekly_food_usage=weekly_food_usage,
+                    diversity_state=regeneration_diversity_state,
+                    variety_seed=variety_seed + instantiation_seed_offset,
+                    excluded_food_codes=current_food_codes,
+                )
+                if instantiation is None:
+                    diagnostics["attempts"].append({
+                        "phase": "sibling_blueprint_fallback",
+                        "blueprint_id": sibling_blueprint_id,
+                        "instantiation_variant": instantiation_variant,
+                        "status": "instantiation_failed",
+                        "elapsed_seconds": time.perf_counter() - attempt_started_at,
+                    })
+                    continue
+                candidate_plan, repair_attempts = repair_regenerated_meal_plan(
+                    blueprint=sibling_blueprint,
+                    meal=meal,
+                    meal_request=meal_request,
+                    instantiation=instantiation,
+                    food_lookup=food_lookup,
+                    preference_profile=preference_profile,
+                    daily_food_usage=daily_food_usage,
+                    weekly_food_usage=weekly_food_usage,
+                )
+                if candidate_plan is None:
+                    diagnostics["attempts"].append({
+                        "phase": "sibling_blueprint_fallback",
+                        "blueprint_id": sibling_blueprint_id,
+                        "instantiation_variant": instantiation_variant,
+                        "status": "portion_fit_failed",
+                        "selected_role_codes": instantiation.get("selected_role_codes", {}),
+                        "repair_attempts": repair_attempts,
+                        "elapsed_seconds": time.perf_counter() - attempt_started_at,
+                    })
+                    continue
+
+                difference = summarize_visible_difference(
                     current_meal_plan=current_meal_plan,
                     current_food_codes=current_food_codes,
                     candidate_plan=candidate_plan,
                 )
-                candidate_plan["regeneration_source_blueprint_id"] = current_blueprint_id
+                nutrition_validation = dict(candidate_plan.get("nutrition_validation") or {})
+                ranking = _build_regeneration_candidate_ranking(
+                    candidate_plan=candidate_plan,
+                    difference=difference,
+                    current_blueprint_id=current_blueprint_id,
+                )
                 diagnostics["attempts"].append({
                     "phase": "sibling_blueprint_fallback",
                     "blueprint_id": sibling_blueprint_id,
-                    "status": "candidate_resolved",
+                    "instantiation_variant": instantiation_variant,
+                    "status": "candidate_resolved"
+                    if nutrition_validation.get("within_tolerance")
+                    else "candidate_rejected_outside_tolerance",
                     "fit_method": candidate_plan.get("portion_fit_method", "exact"),
                     "selected_role_codes": candidate_plan.get("selected_role_codes", {}),
-                    "difference": candidate_plan["regeneration_difference"],
+                    "difference": difference,
+                    "within_tolerance": bool(nutrition_validation.get("within_tolerance")),
+                    "out_of_tolerance_fields": list(nutrition_validation.get("out_of_tolerance_fields") or []),
+                    "normalized_overflow_score": float(nutrition_validation.get("normalized_overflow_score") or 0.0),
+                    "repair_attempts": repair_attempts,
                     "elapsed_seconds": time.perf_counter() - attempt_started_at,
                 })
-                diagnostics["selected_phase"] = "sibling_blueprint_fallback"
-                diagnostics["selected_blueprint_id"] = candidate_plan.get("applied_blueprint_id")
-                diagnostics["used_v2"] = True
-                diagnostics["returned_candidate"] = True
-                diagnostics["elapsed_seconds"] = time.perf_counter() - started_at
-                candidate_plan["regeneration_diagnostics"] = diagnostics
-                set_last_regeneration_diagnostics(diagnostics)
-                return candidate_plan
-            diagnostics["attempts"].append({
-                "phase": "sibling_blueprint_fallback",
-                "blueprint_id": sibling_blueprint_id,
-                "status": "portion_fit_failed",
-                "selected_role_codes": instantiation.get("selected_role_codes", {}),
-                "elapsed_seconds": time.perf_counter() - attempt_started_at,
-            })
+                if best_candidate is None or best_difference is None or ranking < best_difference:
+                    best_candidate = candidate_plan
+                    best_difference = ranking
+                if nutrition_validation.get("within_tolerance"):
+                    candidate_plan["regeneration_difference"] = difference
+                    candidate_plan["regeneration_source_blueprint_id"] = current_blueprint_id
+                    candidate_plan["nutrition_validation"]["accepted_with_residual_error"] = False
+                    candidate_plan["accepted_with_residual_error"] = False
+                    diagnostics["selected_phase"] = "sibling_blueprint_fallback"
+                    diagnostics["selected_blueprint_id"] = candidate_plan.get("applied_blueprint_id")
+                    diagnostics["used_v2"] = True
+                    diagnostics["returned_candidate"] = True
+                    diagnostics["accepted_with_residual_error"] = False
+                    diagnostics["elapsed_seconds"] = time.perf_counter() - started_at
+                    candidate_plan["regeneration_diagnostics"] = diagnostics
+                    set_last_regeneration_diagnostics(diagnostics)
+                    return candidate_plan
+
+    if best_candidate is None or not best_candidate.get("nutrition_validation", {}).get("within_tolerance"):
+        rescue_blueprints = ranked_blueprints[: min(len(ranked_blueprints), 8)]
+        for blueprint in rescue_blueprints:
+            for instantiation_variant, instantiation_seed_offset in enumerate((193, 389)):
+                attempt_started_at = time.perf_counter()
+                instantiation = instantiate_blueprint(
+                    blueprint=blueprint,
+                    meal_request=meal_request,
+                    food_lookup=food_lookup,
+                    preference_profile=preference_profile,
+                    daily_food_usage=daily_food_usage,
+                    weekly_food_usage=weekly_food_usage,
+                    diversity_state=regeneration_diversity_state,
+                    variety_seed=variety_seed + instantiation_seed_offset,
+                    excluded_food_codes=set(),
+                )
+                if instantiation is None:
+                    diagnostics["attempts"].append({
+                        "phase": "nutrition_rescue",
+                        "blueprint_id": blueprint.id,
+                        "instantiation_variant": instantiation_variant,
+                        "status": "instantiation_failed",
+                        "elapsed_seconds": time.perf_counter() - attempt_started_at,
+                    })
+                    continue
+                candidate_plan, repair_attempts = repair_regenerated_meal_plan(
+                    blueprint=blueprint,
+                    meal=meal,
+                    meal_request=meal_request,
+                    instantiation=instantiation,
+                    food_lookup=food_lookup,
+                    preference_profile=preference_profile,
+                    daily_food_usage=daily_food_usage,
+                    weekly_food_usage=weekly_food_usage,
+                )
+                if candidate_plan is None:
+                    diagnostics["attempts"].append({
+                        "phase": "nutrition_rescue",
+                        "blueprint_id": blueprint.id,
+                        "instantiation_variant": instantiation_variant,
+                        "status": "portion_fit_failed",
+                        "selected_role_codes": instantiation.get("selected_role_codes", {}),
+                        "repair_attempts": repair_attempts,
+                        "elapsed_seconds": time.perf_counter() - attempt_started_at,
+                    })
+                    continue
+
+                difference = summarize_visible_difference(
+                    current_meal_plan=current_meal_plan,
+                    current_food_codes=current_food_codes,
+                    candidate_plan=candidate_plan,
+                )
+                nutrition_validation = dict(candidate_plan.get("nutrition_validation") or {})
+                ranking = _build_regeneration_candidate_ranking(
+                    candidate_plan=candidate_plan,
+                    difference=difference,
+                    current_blueprint_id=current_blueprint_id,
+                )
+                diagnostics["attempts"].append({
+                    "phase": "nutrition_rescue",
+                    "blueprint_id": blueprint.id,
+                    "instantiation_variant": instantiation_variant,
+                    "status": "candidate_resolved"
+                    if nutrition_validation.get("within_tolerance")
+                    else "candidate_rejected_outside_tolerance",
+                    "fit_method": candidate_plan.get("portion_fit_method", "exact"),
+                    "selected_role_codes": candidate_plan.get("selected_role_codes", {}),
+                    "difference": difference,
+                    "within_tolerance": bool(nutrition_validation.get("within_tolerance")),
+                    "out_of_tolerance_fields": list(nutrition_validation.get("out_of_tolerance_fields") or []),
+                    "normalized_overflow_score": float(nutrition_validation.get("normalized_overflow_score") or 0.0),
+                    "repair_attempts": repair_attempts,
+                    "elapsed_seconds": time.perf_counter() - attempt_started_at,
+                })
+                if best_candidate is None or best_difference is None or ranking < best_difference:
+                    best_candidate = candidate_plan
+                    best_difference = ranking
+                if (
+                    nutrition_validation.get("within_tolerance")
+                    and (
+                        difference["visible_change_count"] >= 1
+                        or bool(difference["changed_roles"])
+                        or str(candidate_plan.get("applied_blueprint_id") or "") != str(current_blueprint_id or "")
+                    )
+                ):
+                    candidate_plan["regeneration_difference"] = difference
+                    candidate_plan["regeneration_source_blueprint_id"] = current_blueprint_id
+                    candidate_plan["nutrition_validation"]["accepted_with_residual_error"] = False
+                    candidate_plan["accepted_with_residual_error"] = False
+                    diagnostics["selected_phase"] = "nutrition_rescue"
+                    diagnostics["selected_blueprint_id"] = candidate_plan.get("applied_blueprint_id")
+                    diagnostics["used_v2"] = True
+                    diagnostics["returned_candidate"] = True
+                    diagnostics["accepted_with_residual_error"] = False
+                    diagnostics["elapsed_seconds"] = time.perf_counter() - started_at
+                    candidate_plan["regeneration_diagnostics"] = diagnostics
+                    set_last_regeneration_diagnostics(diagnostics)
+                    return candidate_plan
+
+    if best_candidate is not None:
+        nutrition_validation = dict(best_candidate.get("nutrition_validation") or {})
+        accepted_with_residual_error = not bool(nutrition_validation.get("within_tolerance"))
+        best_candidate["regeneration_difference"] = summarize_visible_difference(
+            current_meal_plan=current_meal_plan,
+            current_food_codes=current_food_codes,
+            candidate_plan=best_candidate,
+        )
+        best_candidate["regeneration_source_blueprint_id"] = current_blueprint_id
+        best_candidate["nutrition_validation"]["accepted_with_residual_error"] = accepted_with_residual_error
+        best_candidate["nutrition_validation"]["residual_reason"] = (
+            _build_regeneration_residual_reason(best_candidate)
+            if accepted_with_residual_error
+            else None
+        )
+        best_candidate["accepted_with_residual_error"] = accepted_with_residual_error
+        diagnostics["selected_phase"] = "best_candidate_after_phases"
+        diagnostics["selected_blueprint_id"] = best_candidate.get("applied_blueprint_id")
+        diagnostics["used_v2"] = True
+        diagnostics["returned_candidate"] = True
+        diagnostics["accepted_with_residual_error"] = accepted_with_residual_error
+        if accepted_with_residual_error:
+            diagnostics["fallback_reason"] = "accepted_with_residual_error"
+            diagnostics["residual_reason"] = dict(best_candidate["nutrition_validation"]["residual_reason"] or {})
+        diagnostics["elapsed_seconds"] = time.perf_counter() - started_at
+        best_candidate["regeneration_diagnostics"] = diagnostics
+        set_last_regeneration_diagnostics(diagnostics)
+        return best_candidate
 
     diagnostics["fallback_reason"] = "no_v2_regeneration_candidate"
     diagnostics["elapsed_seconds"] = time.perf_counter() - started_at

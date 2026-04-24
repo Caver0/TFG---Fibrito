@@ -31,13 +31,18 @@ def _build_user(user_id: str = "user-regen") -> UserPublic:
     )
 
 
-def _build_day(seed: int = 123) -> tuple[dict, list[dict], list[dict]]:
-    user = _build_user()
+def _build_day(
+    seed: int = 123,
+    *,
+    meals_count: int = 4,
+    training_time_of_day: str | None = "tarde",
+) -> tuple[dict, list[dict], list[dict]]:
+    user = _build_user(f"user-regen-{seed}-{meals_count}-{training_time_of_day or 'none'}")
     meal_distribution, focus_indexes = generate_meal_distribution_targets(
         user=user,
-        meals_count=4,
+        meals_count=meals_count,
         custom_percentages=None,
-        training_time_of_day="tarde",
+        training_time_of_day=training_time_of_day,
     )
     meals_context: list[dict] = []
     for meal_index, meal in enumerate(meal_distribution["meals"]):
@@ -45,7 +50,7 @@ def _build_day(seed: int = 123) -> tuple[dict, list[dict], list[dict]]:
         meal_slot, meal_role = resolve_meal_context(
             DietMeal.model_validate(meal),
             meal_index=meal_index,
-            meals_count=4,
+            meals_count=meals_count,
             training_focus=training_focus,
         )
         meals_context.append({
@@ -56,7 +61,7 @@ def _build_day(seed: int = 123) -> tuple[dict, list[dict], list[dict]]:
     result = generate_day_meal_plans_v2(
         meal_distribution=meal_distribution,
         meals_context=meals_context,
-        meals_count=4,
+        meals_count=meals_count,
         food_lookup=get_internal_food_lookup(),
         preference_profile=build_user_food_preferences_profile(user),
         daily_food_usage=create_daily_food_usage_tracker(),
@@ -136,3 +141,83 @@ def test_regenerate_meal_plan_v2_changes_at_least_two_visible_foods_when_possibl
 
     assert regenerated_plan is not None
     assert regenerated_plan["regeneration_difference"]["visible_change_count"] >= 2
+
+
+def test_regenerate_meal_plan_v2_rejects_bad_macro_fit_and_repairs_into_tolerance():
+    meal_distribution, meals_context, meal_plans = _build_day(
+        seed=35,
+        meals_count=5,
+        training_time_of_day="mediodia",
+    )
+    meal_index = 1
+    meal = DietMeal.model_validate(meal_distribution["meals"][meal_index])
+    current_meal_plan = meal_plans[meal_index]
+    current_food_codes = {
+        food["food_code"]
+        for food in current_meal_plan["foods"]
+    }
+    daily_food_usage = create_daily_food_usage_tracker()
+    for index, meal_plan in enumerate(meal_plans):
+        if index == meal_index:
+            continue
+        track_food_usage_across_day(daily_food_usage, meal_plan)
+
+    regenerated_plan = regenerate_meal_plan_v2(
+        meal=meal,
+        meal_index=meal_index,
+        meals_count=5,
+        training_focus=meals_context[meal_index]["training_focus"],
+        meal_slot=meals_context[meal_index]["meal_slot"],
+        meal_role=meals_context[meal_index]["meal_role"],
+        food_lookup=get_internal_food_lookup(),
+        preference_profile=build_user_food_preferences_profile(_build_user("user-regen-3")),
+        daily_food_usage=daily_food_usage,
+        weekly_food_usage={},
+        current_food_codes=current_food_codes,
+        current_meal_plan=current_meal_plan,
+        variety_seed=999,
+    )
+
+    assert regenerated_plan is not None
+    assert regenerated_plan["nutrition_validation"]["within_tolerance"] is True
+    assert regenerated_plan["nutrition_validation"]["accepted_with_residual_error"] is False
+
+
+def test_regenerate_meal_plan_v2_repairs_low_carb_early_meal_without_residual_error():
+    meal_distribution, meals_context, meal_plans = _build_day(
+        seed=7,
+        meals_count=5,
+        training_time_of_day="tarde",
+    )
+    meal_index = 1
+    meal = DietMeal.model_validate(meal_distribution["meals"][meal_index])
+    current_meal_plan = meal_plans[meal_index]
+    current_food_codes = {
+        food["food_code"]
+        for food in current_meal_plan["foods"]
+    }
+    daily_food_usage = create_daily_food_usage_tracker()
+    for index, meal_plan in enumerate(meal_plans):
+        if index == meal_index:
+            continue
+        track_food_usage_across_day(daily_food_usage, meal_plan)
+
+    regenerated_plan = regenerate_meal_plan_v2(
+        meal=meal,
+        meal_index=meal_index,
+        meals_count=5,
+        training_focus=meals_context[meal_index]["training_focus"],
+        meal_slot=meals_context[meal_index]["meal_slot"],
+        meal_role=meals_context[meal_index]["meal_role"],
+        food_lookup=get_internal_food_lookup(),
+        preference_profile=build_user_food_preferences_profile(_build_user("user-regen-4")),
+        daily_food_usage=daily_food_usage,
+        weekly_food_usage={},
+        current_food_codes=current_food_codes,
+        current_meal_plan=current_meal_plan,
+        variety_seed=7001,
+    )
+
+    assert regenerated_plan is not None
+    assert regenerated_plan["nutrition_validation"]["within_tolerance"] is True
+    assert regenerated_plan["nutrition_validation"]["accepted_with_residual_error"] is False

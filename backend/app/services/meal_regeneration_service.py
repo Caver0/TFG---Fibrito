@@ -36,6 +36,7 @@ from app.services.diet.candidates import build_weekly_food_usage
 from app.services.food_group_service import derive_functional_group
 from app.services.food_preferences_service import FoodPreferenceConflictError, build_user_food_preferences_profile
 from app.services.diet_v2 import regenerate_meal_plan_v2
+from app.services.diet_v2.portion_fitter import finalize_regeneration_candidate
 from app.services.diet_v2.telemetry import get_last_regeneration_diagnostics, set_last_regeneration_diagnostics
 from app.services.meal_coherence_service import (
     apply_generation_coherence,
@@ -899,6 +900,26 @@ def regenerate_meal(
             current_food_codes=current_food_codes,
             variety_seed=variety_seed,
         )
+
+    regenerated_meal_plan = finalize_regeneration_candidate(
+        meal=meal,
+        meal_plan=regenerated_meal_plan,
+        meal_slot=meal_slot,
+        meal_role=meal_role,
+        food_lookup=full_food_lookup,
+    )
+    regeneration_diagnostics = get_last_regeneration_diagnostics() or {}
+    regeneration_diagnostics["regeneration_micro_adjustment"] = dict(
+        regenerated_meal_plan.get("regeneration_micro_adjustment") or {},
+    )
+    regeneration_diagnostics["nutrition_validation"] = dict(
+        regenerated_meal_plan.get("nutrition_validation") or {},
+    )
+    if regeneration_diagnostics["nutrition_validation"].get("accepted_with_residual_error"):
+        regeneration_diagnostics["residual_reason"] = dict(
+            regeneration_diagnostics["nutrition_validation"].get("residual_reason") or {},
+        )
+    set_last_regeneration_diagnostics(regeneration_diagnostics)
 
     selected_food_codes = collect_selected_food_codes([regenerated_meal_plan])
     internal_codes_to_resolve = [code for code in selected_food_codes if code in internal_food_lookup]

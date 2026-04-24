@@ -45,7 +45,7 @@ from app.schemas.user import UserPublic, FoodPreferencesProfile
 MONGO_URL = "mongodb://localhost:27017"
 DB_NAME   = "fibrito"
 
-DEFAULT_USER_ID = "69e21966e1880adf53eee270"
+DEFAULT_USER_ID = "69ea7c572bcb0b0fcfd52cf4"
 
 # ── Perfil del usuario de prueba ───────────────────────────────────────────────
 # Hombre, 27 años, 178 cm, 78 kg, objetivo: perder_grasa, 4 días/semana
