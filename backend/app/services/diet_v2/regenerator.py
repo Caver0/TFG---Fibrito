@@ -597,36 +597,38 @@ def regenerate_meal_plan_v2(
                     set_last_regeneration_diagnostics(diagnostics)
                     return candidate_plan
 
-    if best_candidate is not None:
+    if best_candidate is not None and bool(best_candidate.get("nutrition_validation", {}).get("within_tolerance")):
         nutrition_validation = dict(best_candidate.get("nutrition_validation") or {})
-        accepted_with_residual_error = not bool(nutrition_validation.get("within_tolerance"))
         best_candidate["regeneration_difference"] = summarize_visible_difference(
             current_meal_plan=current_meal_plan,
             current_food_codes=current_food_codes,
             candidate_plan=best_candidate,
         )
         best_candidate["regeneration_source_blueprint_id"] = current_blueprint_id
-        best_candidate["nutrition_validation"]["accepted_with_residual_error"] = accepted_with_residual_error
-        best_candidate["nutrition_validation"]["residual_reason"] = (
-            _build_regeneration_residual_reason(best_candidate)
-            if accepted_with_residual_error
-            else None
-        )
-        best_candidate["accepted_with_residual_error"] = accepted_with_residual_error
+        best_candidate["nutrition_validation"]["accepted_with_residual_error"] = False
+        best_candidate["nutrition_validation"]["residual_reason"] = None
+        best_candidate["accepted_with_residual_error"] = False
         diagnostics["selected_phase"] = "best_candidate_after_phases"
         diagnostics["selected_blueprint_id"] = best_candidate.get("applied_blueprint_id")
         diagnostics["used_v2"] = True
         diagnostics["returned_candidate"] = True
-        diagnostics["accepted_with_residual_error"] = accepted_with_residual_error
-        if accepted_with_residual_error:
-            diagnostics["fallback_reason"] = "accepted_with_residual_error"
-            diagnostics["residual_reason"] = dict(best_candidate["nutrition_validation"]["residual_reason"] or {})
+        diagnostics["accepted_with_residual_error"] = False
         diagnostics["elapsed_seconds"] = time.perf_counter() - started_at
         best_candidate["regeneration_diagnostics"] = diagnostics
         set_last_regeneration_diagnostics(diagnostics)
         return best_candidate
 
-    diagnostics["fallback_reason"] = "no_v2_regeneration_candidate"
+    diagnostics["fallback_reason"] = (
+        "no_v2_regeneration_candidate"
+        if best_candidate is None
+        else "no_strict_regeneration_candidate"
+    )
+    if best_candidate is not None:
+        diagnostics["best_candidate_rejected"] = {
+            "applied_blueprint_id": best_candidate.get("applied_blueprint_id"),
+            "selected_role_codes": dict(best_candidate.get("selected_role_codes", {})),
+            "nutrition_validation": dict(best_candidate.get("nutrition_validation") or {}),
+        }
     diagnostics["elapsed_seconds"] = time.perf_counter() - started_at
     set_last_regeneration_diagnostics(diagnostics)
     return None

@@ -69,7 +69,7 @@ function RegisterPage({ onSwitch }) {
           </label>
 
           <label className="auth-field">
-            <span>ID de Laboratorio (Email)</span>
+            <span>Correo</span>
             <div className="auth-input-shell">
               <i className="material-symbols-outlined" aria-hidden="true">
                 alternate_email

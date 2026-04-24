@@ -235,6 +235,21 @@ def _current_plan() -> dict:
     }
 
 
+def _finalize_as_strict_candidate(meal_plan: dict) -> dict:
+    return {
+        **meal_plan,
+        "portion_fit_method": meal_plan.get("portion_fit_method", "exact"),
+        "nutrition_validation": {
+            "within_tolerance": True,
+            "accepted_with_residual_error": False,
+            "out_of_tolerance_fields": [],
+            "normalized_error_score": 0.0,
+            "normalized_overflow_score": 0.0,
+            "max_overflow_ratio": 0.0,
+        },
+    }
+
+
 def test_breakfast_regeneration_tries_full_exclusion_first(monkeypatch):
     meal = _build_breakfast_meal()
     current_food_codes = {"greek_yogurt", "oats", "avocado"}
@@ -257,6 +272,11 @@ def test_breakfast_regeneration_tries_full_exclusion_first(monkeypatch):
 
     monkeypatch.setattr(meal_regeneration, "find_exact_solution_for_meal", fake_solver)
     monkeypatch.setattr(meal_regeneration, "apply_generation_coherence", fake_coherence)
+    monkeypatch.setattr(
+        meal_regeneration,
+        "finalize_regeneration_candidate",
+        lambda **kwargs: _finalize_as_strict_candidate(kwargs["meal_plan"]),
+    )
 
     regenerated_plan = meal_regeneration._solve_regenerated_meal_plan(
         meal=meal,
@@ -310,6 +330,11 @@ def test_breakfast_regeneration_can_fallback_to_partially_different_meal(monkeyp
 
     monkeypatch.setattr(meal_regeneration, "find_exact_solution_for_meal", fake_solver)
     monkeypatch.setattr(meal_regeneration, "apply_generation_coherence", fake_coherence)
+    monkeypatch.setattr(
+        meal_regeneration,
+        "finalize_regeneration_candidate",
+        lambda **kwargs: _finalize_as_strict_candidate(kwargs["meal_plan"]),
+    )
 
     regenerated_plan = meal_regeneration._solve_regenerated_meal_plan(
         meal=meal,
@@ -359,6 +384,11 @@ def test_regeneration_uses_last_resort_before_failing_when_reasonable_solution_e
 
     monkeypatch.setattr(meal_regeneration, "find_exact_solution_for_meal", fake_solver)
     monkeypatch.setattr(meal_regeneration, "apply_generation_coherence", fake_coherence)
+    monkeypatch.setattr(
+        meal_regeneration,
+        "finalize_regeneration_candidate",
+        lambda **kwargs: _finalize_as_strict_candidate(kwargs["meal_plan"]),
+    )
 
     regenerated_plan = meal_regeneration._solve_regenerated_meal_plan(
         meal=meal,
@@ -404,6 +434,11 @@ def test_regeneration_skips_candidate_that_is_valid_but_not_visibly_different(mo
         raise HTTPException(status_code=500, detail="unexpected branch")
 
     monkeypatch.setattr(meal_regeneration, "find_exact_solution_for_meal", fake_solver)
+    monkeypatch.setattr(
+        meal_regeneration,
+        "finalize_regeneration_candidate",
+        lambda **kwargs: _finalize_as_strict_candidate(kwargs["meal_plan"]),
+    )
 
     regenerated_plan = meal_regeneration._solve_regenerated_meal_plan(
         meal=meal,

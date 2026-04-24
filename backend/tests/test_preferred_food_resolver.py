@@ -82,6 +82,9 @@ def test_cornflakes_no_local_se_inyecta_desde_spoonacular():
     database = MagicMock()
 
     with _PATCH_ML, patch(
+        "app.services.preferred_food_resolver.search_internal_food",
+        return_value=[],
+    ), patch(
         "app.services.preferred_food_resolver.search_spoonacular_food",
         return_value=FAKE_CORNFLAKES,
     ) as mock_spoon:
@@ -92,8 +95,8 @@ def test_cornflakes_no_local_se_inyecta_desde_spoonacular():
         )
 
     # El alimento debe haber sido inyectado
-    assert FAKE_CORNFLAKES["code"] in lookup_inicial, (
-        "El código de cornflakes debe estar en full_food_lookup tras el enriquecimiento"
+    assert buscar_alimentos_por_nombre("Cornflakes", lookup_inicial), (
+        "Cornflakes debe quedar resoluble en full_food_lookup tras el enriquecimiento"
     )
     # No debe quedar como no resuelto
     assert "Cornflakes" not in no_resueltos
@@ -154,14 +157,18 @@ def test_cornflakes_disponible_en_lookup_antes_del_anclaje():
     database = MagicMock()
 
     with _PATCH_ML, patch(
+        "app.services.preferred_food_resolver.search_internal_food",
+        return_value=[],
+    ), patch(
         "app.services.preferred_food_resolver.search_spoonacular_food",
         return_value=FAKE_CORNFLAKES,
     ):
         enrich_lookup_con_preferidos(database, preferred_foods=["Cornflakes"], full_food_lookup=lookup)
 
-    assert FAKE_CORNFLAKES["code"] in lookup
+    matching_codes = buscar_alimentos_por_nombre("Cornflakes", lookup)
+    assert matching_codes
     # El alimento debe tener todos los campos necesarios para el solver
-    food = lookup[FAKE_CORNFLAKES["code"]]
+    food = lookup[matching_codes[0]]
     for campo in ("protein_grams", "fat_grams", "carb_grams", "reference_amount",
                   "max_quantity", "min_quantity", "default_quantity", "reference_unit"):
         assert campo in food, f"Campo requerido '{campo}' no encontrado en el food inyectado"
@@ -182,6 +189,9 @@ def test_datiles_y_cornflakes_ambos_inyectados():
         return None
 
     with _PATCH_ML, patch(
+        "app.services.preferred_food_resolver.search_internal_food",
+        return_value=[],
+    ), patch(
         "app.services.preferred_food_resolver.search_spoonacular_food",
         side_effect=_mock_spoonacular,
     ):
@@ -191,8 +201,8 @@ def test_datiles_y_cornflakes_ambos_inyectados():
             full_food_lookup=lookup,
         )
 
-    assert FAKE_CORNFLAKES["code"] in lookup, "Cornflakes debe estar en el lookup"
-    assert FAKE_DATES["code"] in lookup, "Dates debe estar en el lookup"
+    assert buscar_alimentos_por_nombre("Cornflakes", lookup), "Cornflakes debe estar resoluble en el lookup"
+    assert buscar_alimentos_por_nombre("Dátiles", lookup), "Dates debe estar resoluble en el lookup"
     assert len(no_resueltos) == 0, f"No deben quedar preferidos sin resolver: {no_resueltos}"
 
 

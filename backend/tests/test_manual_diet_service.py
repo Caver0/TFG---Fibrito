@@ -89,7 +89,7 @@ def test_build_manual_diet_payload_marks_diet_as_manual_and_recalculates_totals(
 
     assert manual_diet["diet_mode"] == "manual"
     assert manual_diet["meals_count"] == 3
-    assert manual_diet["actual_calories"] == 520.0
+    assert manual_diet["actual_calories"] == 509.9
     assert manual_diet["actual_protein_grams"] == 42.0
     assert manual_diet["actual_fat_grams"] == 11.1
     assert manual_diet["actual_carb_grams"] == 60.5

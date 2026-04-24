@@ -11,6 +11,8 @@ import os
 import sys
 
 os.environ["MONGODB_URL"] = "mongodb://localhost:27017"
+os.environ["MONGO_DB_NAME"] = "fibrito_test"
+os.environ["JWT_SECRET_KEY"] = "test-secret"
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import matplotlib.pyplot as plt

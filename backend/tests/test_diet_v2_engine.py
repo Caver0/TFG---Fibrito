@@ -9,6 +9,7 @@ from app.services.diet.candidates import create_daily_food_usage_tracker
 from app.services.diet.common import resolve_meal_context
 from app.services.diet_v2.engine import generate_day_meal_plans_v2
 from app.services.diet_v2.families import get_primary_family_id
+from app.services.diet_v2.nutrition_validation import summarize_daily_payload_nutrition, summarize_meal_payload_nutrition, summarize_meal_plan_nutrition
 from app.services.food_catalog_service import get_internal_food_lookup
 from app.services.food_preferences_service import build_user_food_preferences_profile
 from app.services.meal_distribution_service import generate_meal_distribution_targets
@@ -101,7 +102,36 @@ def test_generate_day_meal_plans_v2_generates_complete_day_without_fallback():
         assert "applied_blueprint_id" in meal_plan
 
 
-def test_diet_service_generate_food_based_diet_keeps_public_contract_with_v2():
+def test_generate_day_meal_plans_v2_keeps_each_meal_within_strict_tolerance():
+    user = _build_user("user-strict-meals")
+    meal_distribution, meals_context = _build_distribution(user, meals_count=4, training_time_of_day="tarde")
+
+    result = generate_day_meal_plans_v2(
+        meal_distribution=meal_distribution,
+        meals_context=meals_context,
+        meals_count=4,
+        food_lookup=get_internal_food_lookup(),
+        preference_profile=build_user_food_preferences_profile(user),
+        daily_food_usage=create_daily_food_usage_tracker(),
+        weekly_food_usage={},
+        variety_seed=123,
+    )
+
+    assert result["used_legacy_fallback"] is False
+    assert len(result["meal_plans"]) == 4
+    for meal_index, meal_plan in enumerate(result["meal_plans"]):
+        meal_model = DietMeal.model_validate(meal_distribution["meals"][meal_index])
+        nutrition_summary = summarize_meal_plan_nutrition(
+            meal=meal_model,
+            meal_plan=meal_plan,
+        )
+        assert nutrition_summary["within_tolerance"] is True
+
+
+def test_diet_service_generate_food_based_diet_keeps_public_contract_with_v2(monkeypatch):
+    monkeypatch.setenv("MONGODB_URL", "mongodb://localhost:27017")
+    monkeypatch.setenv("MONGO_DB_NAME", "fibrito_test")
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-secret")
     user = _build_user("user-contract")
     generated_diet = diet_service.generate_food_based_diet(
         _DummyDatabase(),
@@ -144,6 +174,44 @@ def test_diet_service_generate_food_based_diet_keeps_public_contract_with_v2():
             "actual_carb_grams",
             "foods",
         }.issubset(meal)
+
+
+def test_diet_service_generate_food_based_diet_returns_payload_within_strict_tolerances(monkeypatch):
+    monkeypatch.setenv("MONGODB_URL", "mongodb://localhost:27017")
+    monkeypatch.setenv("MONGO_DB_NAME", "fibrito_test")
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-secret")
+    user = _build_user("user-strict-day")
+    generated_diet = diet_service.generate_food_based_diet(
+        _DummyDatabase(),
+        user=user,
+        meals_count=4,
+        training_time_of_day="tarde",
+    )
+
+    for meal in generated_diet["meals"]:
+        meal_summary = summarize_meal_payload_nutrition(
+            target_calories=meal["target_calories"],
+            target_protein_grams=meal["target_protein_grams"],
+            target_fat_grams=meal["target_fat_grams"],
+            target_carb_grams=meal["target_carb_grams"],
+            foods=meal["foods"],
+            actuals_override={
+                "actual_calories": meal["actual_calories"],
+                "actual_protein_grams": meal["actual_protein_grams"],
+                "actual_fat_grams": meal["actual_fat_grams"],
+                "actual_carb_grams": meal["actual_carb_grams"],
+            },
+        )
+        assert meal_summary["within_tolerance"] is True
+
+    daily_summary = summarize_daily_payload_nutrition(
+        target_calories=generated_diet["target_calories"],
+        target_protein_grams=generated_diet["protein_grams"],
+        target_fat_grams=generated_diet["fat_grams"],
+        target_carb_grams=generated_diet["carb_grams"],
+        meals=generated_diet["meals"],
+    )
+    assert daily_summary["within_tolerance"] is True
 
 
 def test_v2_breakfast_blueprints_vary_across_seeds():

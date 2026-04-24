@@ -6,7 +6,7 @@ from typing import Any
 from app.services.diet.candidates import is_food_allowed_for_role_and_slot, iter_canonical_food_items
 from app.services.diet.solver import get_food_macro_density
 from app.services.diet_v2.families import food_matches_allowed_families
-from app.services.diet_v2.portion_fitter import finalize_regeneration_candidate, fit_meal_portions
+from app.services.diet_v2.portion_fitter import finalize_meal_candidate, fit_meal_portions
 from app.services.food_preferences_service import is_food_allowed_for_user
 
 
@@ -21,42 +21,17 @@ def repair_meal_plan(
     daily_food_usage: dict[str, Any] | None,
     weekly_food_usage: dict[str, int] | None,
 ) -> dict[str, Any] | None:
-    fitted_solution = fit_meal_portions(
+    candidate_plan, _attempt_logs = repair_meal_plan_with_diagnostics(
         blueprint=blueprint,
         meal=meal,
         meal_request=meal_request,
-        selected_role_codes=instantiation["selected_role_codes"],
-        support_food_specs=instantiation["support_food_specs"],
-        role_candidate_pool=instantiation["role_candidate_pool"],
+        instantiation=instantiation,
         food_lookup=food_lookup,
         preference_profile=preference_profile,
         daily_food_usage=daily_food_usage,
         weekly_food_usage=weekly_food_usage,
     )
-    if fitted_solution is not None:
-        return fitted_solution
-
-    for role in ("protein", "carb", "fat"):
-        role_candidates = instantiation["role_candidate_pool"].get(role, [])
-        for alternative_code in role_candidates[1:]:
-            repaired_role_codes = dict(instantiation["selected_role_codes"])
-            repaired_role_codes[role] = alternative_code
-            fitted_solution = fit_meal_portions(
-                blueprint=blueprint,
-                meal=meal,
-                meal_request=meal_request,
-                selected_role_codes=repaired_role_codes,
-                support_food_specs=instantiation["support_food_specs"],
-                role_candidate_pool=instantiation["role_candidate_pool"],
-                food_lookup=food_lookup,
-                preference_profile=preference_profile,
-                daily_food_usage=daily_food_usage,
-                weekly_food_usage=weekly_food_usage,
-            )
-            if fitted_solution is not None:
-                return fitted_solution
-
-    return None
+    return candidate_plan
 
 
 def _build_regeneration_candidate_ranking(candidate_plan: dict[str, Any]) -> tuple[float, ...]:
@@ -357,7 +332,7 @@ def repair_regenerated_meal_plan(
                 })
                 continue
 
-            finalized_solution = finalize_regeneration_candidate(
+            finalized_solution = finalize_meal_candidate(
                 meal=meal,
                 meal_plan=fitted_solution,
                 meal_slot=meal_request["meal_slot"],
@@ -445,13 +420,27 @@ def repair_regenerated_meal_plan(
         if candidate_plan["nutrition_validation"]["within_tolerance"]:
             return candidate_plan, attempt_logs
 
-    if best_candidate is not None and not best_candidate["nutrition_validation"]["within_tolerance"]:
-        best_candidate["nutrition_validation"]["residual_reason"] = {
-            "code": "strict_tolerance_unreachable_after_local_substitutions",
-            "out_of_tolerance_fields": list(best_candidate["nutrition_validation"].get("out_of_tolerance_fields") or []),
-            "problem_roles": list(best_candidate["nutrition_validation"].get("problem_roles") or []),
-            "bound_signals": list(best_candidate["nutrition_validation"].get("bound_signals") or []),
-            "attempt_count": len(attempt_logs),
-        }
+    return None, attempt_logs
 
-    return best_candidate, attempt_logs
+
+def repair_meal_plan_with_diagnostics(
+    *,
+    blueprint,
+    meal,
+    meal_request: dict[str, Any],
+    instantiation: dict[str, Any],
+    food_lookup: dict[str, dict[str, Any]],
+    preference_profile: dict[str, Any] | None,
+    daily_food_usage: dict[str, Any] | None,
+    weekly_food_usage: dict[str, int] | None,
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    return repair_regenerated_meal_plan(
+        blueprint=blueprint,
+        meal=meal,
+        meal_request=meal_request,
+        instantiation=instantiation,
+        food_lookup=food_lookup,
+        preference_profile=preference_profile,
+        daily_food_usage=daily_food_usage,
+        weekly_food_usage=weekly_food_usage,
+    )

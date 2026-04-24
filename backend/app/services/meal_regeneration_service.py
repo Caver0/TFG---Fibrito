@@ -605,6 +605,12 @@ def _solve_regenerated_meal_plan(
     current_food_codes: set[str],
     variety_seed: int,
 ) -> dict[str, Any]:
+    meal_slot, meal_role = resolve_meal_context(
+        meal,
+        meal_index=meal_index,
+        meals_count=meals_count,
+        training_focus=training_focus,
+    )
     current_meal_plan: dict[str, Any] | None = None
     if current_food_codes:
         try:
@@ -678,22 +684,32 @@ def _solve_regenerated_meal_plan(
         regeneration_context: dict[str, Any],
         best_candidate: dict[str, Any] | None,
         best_candidate_ranking: tuple[Any, ...] | None,
-    ) -> tuple[dict[str, Any], tuple[Any, ...], dict[str, Any]]:
-        candidate_ranking = build_regeneration_candidate_ranking(
+    ) -> tuple[dict[str, Any] | None, tuple[Any, ...] | None, dict[str, Any], dict[str, Any] | None]:
+        finalized_candidate = finalize_regeneration_candidate(
             meal=meal,
             meal_plan=candidate_plan,
+            meal_slot=meal_slot,
+            meal_role=meal_role,
+            food_lookup=full_food_lookup,
+        )
+        nutrition_validation = dict(finalized_candidate.get("nutrition_validation") or {})
+        candidate_ranking = build_regeneration_candidate_ranking(
+            meal=meal,
+            meal_plan=finalized_candidate,
             food_lookup=full_food_lookup,
             regeneration_context=regeneration_context,
         )
         difference_summary = evaluate_regeneration_candidate(
             meal=meal,
-            meal_plan=candidate_plan,
+            meal_plan=finalized_candidate,
             food_lookup=full_food_lookup,
             regeneration_context=regeneration_context,
         )
+        if not nutrition_validation.get("within_tolerance"):
+            return best_candidate, best_candidate_ranking, difference_summary, None
         if best_candidate is None or best_candidate_ranking is None or candidate_ranking < best_candidate_ranking:
-            return candidate_plan, candidate_ranking, difference_summary
-        return best_candidate, best_candidate_ranking, difference_summary
+            return finalized_candidate, candidate_ranking, difference_summary, finalized_candidate
+        return best_candidate, best_candidate_ranking, difference_summary, finalized_candidate
 
     best_candidate: dict[str, Any] | None = None
     best_candidate_ranking: tuple[Any, ...] | None = None
@@ -712,14 +728,18 @@ def _solve_regenerated_meal_plan(
                 last_error = exc
                 continue
 
-            best_candidate, best_candidate_ranking, difference_summary = register_candidate(
+            best_candidate, best_candidate_ranking, difference_summary, accepted_candidate = register_candidate(
                 candidate_plan,
                 regeneration_context=regeneration_context,
                 best_candidate=best_candidate,
                 best_candidate_ranking=best_candidate_ranking,
             )
-            if difference_summary["passes_threshold"] and not difference_summary["same_visible_structure"]:
-                return candidate_plan
+            if (
+                accepted_candidate is not None
+                and difference_summary["passes_threshold"]
+                and not difference_summary["same_visible_structure"]
+            ):
+                return accepted_candidate
 
         partial_exclusion_sets = _build_partial_regeneration_exclusion_sets(
             current_food_codes,
@@ -738,14 +758,18 @@ def _solve_regenerated_meal_plan(
                 last_error = exc
                 continue
 
-            best_candidate, best_candidate_ranking, difference_summary = register_candidate(
+            best_candidate, best_candidate_ranking, difference_summary, accepted_candidate = register_candidate(
                 candidate_plan,
                 regeneration_context=regeneration_context,
                 best_candidate=best_candidate,
                 best_candidate_ranking=best_candidate_ranking,
             )
-            if difference_summary["passes_threshold"] and not difference_summary["same_visible_structure"]:
-                return candidate_plan
+            if (
+                accepted_candidate is not None
+                and difference_summary["passes_threshold"]
+                and not difference_summary["same_visible_structure"]
+            ):
+                return accepted_candidate
 
     try:
         candidate_plan, regeneration_context = attempt_regeneration(
@@ -757,13 +781,14 @@ def _solve_regenerated_meal_plan(
     except (FoodPreferenceConflictError, HTTPException) as exc:
         last_error = exc
     else:
-        best_candidate, best_candidate_ranking, _difference_summary = register_candidate(
+        best_candidate, best_candidate_ranking, _difference_summary, accepted_candidate = register_candidate(
             candidate_plan,
             regeneration_context=regeneration_context,
             best_candidate=best_candidate,
             best_candidate_ranking=best_candidate_ranking,
         )
-        return candidate_plan if best_candidate is candidate_plan else best_candidate
+        if accepted_candidate is not None:
+            return accepted_candidate if best_candidate is accepted_candidate else best_candidate
 
     if best_candidate is not None:
         return best_candidate

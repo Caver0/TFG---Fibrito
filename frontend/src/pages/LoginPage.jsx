@@ -102,7 +102,7 @@ function LoginPage({ onRecoverPassword, onSwitch }) {
             className="auth-primary-button"
             disabled={isSubmitting}
           >
-            <span>{isSubmitting ? 'Entrando al Laboratorio...' : 'Entrar al Laboratorio Cinetico'}</span>
+            <span>{isSubmitting ? 'Entrando a Fibrito...' : 'Entrar al Fibrito'}</span>
             <i className="material-symbols-outlined" aria-hidden="true">
               arrow_forward
             </i>

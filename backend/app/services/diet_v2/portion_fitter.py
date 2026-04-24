@@ -17,11 +17,11 @@ from app.services.diet.solver import (
     solve_linear_system,
 )
 from app.services.diet_v2.blueprints import MealBlueprint, blueprint_metadata
-
-STRICT_REGEN_CALORIE_TOLERANCE_RATIO = 0.02
-STRICT_REGEN_PROTEIN_TOLERANCE = 2.0
-STRICT_REGEN_CARB_TOLERANCE = 3.0
-STRICT_REGEN_FAT_TOLERANCE = 1.5
+from app.services.diet_v2.nutrition_validation import (
+    build_nutrition_validation_summary,
+    build_strict_meal_tolerances,
+    summarize_meal_plan_nutrition,
+)
 
 STRICT_REGEN_SEARCH_SCALES = (8.0, 4.0, 2.0, 1.0, 0.5, 0.25)
 STRICT_REGEN_DIRECTIONAL_MULTIPLIERS = (-2.0, -1.0, 1.0, 2.0)
@@ -313,13 +313,7 @@ def _score_meal_actuals(
 
 
 def _build_regeneration_tolerances(meal) -> dict[str, float]:
-    target_calories = max(float(meal.target_calories or 0.0), 0.0)
-    return {
-        "calories": max(target_calories * STRICT_REGEN_CALORIE_TOLERANCE_RATIO, 1.0),
-        "protein_grams": STRICT_REGEN_PROTEIN_TOLERANCE,
-        "carb_grams": STRICT_REGEN_CARB_TOLERANCE,
-        "fat_grams": STRICT_REGEN_FAT_TOLERANCE,
-    }
+    return build_strict_meal_tolerances(meal)
 
 
 def _build_regeneration_nutrition_summary(
@@ -328,44 +322,11 @@ def _build_regeneration_nutrition_summary(
     actuals: dict[str, float],
     differences: dict[str, float],
 ) -> dict[str, Any]:
-    tolerances = _build_regeneration_tolerances(meal)
-    absolute_differences = {
-        "calories": abs(float(differences["calorie_difference"])),
-        "protein_grams": abs(float(differences["protein_difference"])),
-        "carb_grams": abs(float(differences["carb_difference"])),
-        "fat_grams": abs(float(differences["fat_difference"])),
-    }
-    overflow = {
-        field_name: max(absolute_differences[field_name] - tolerance, 0.0)
-        for field_name, tolerance in tolerances.items()
-    }
-    overflow_ratios = {
-        field_name: overflow[field_name] / max(tolerances[field_name], 1e-6)
-        for field_name in tolerances
-    }
-    error_ratios = {
-        field_name: absolute_differences[field_name] / max(tolerances[field_name], 1e-6)
-        for field_name in tolerances
-    }
-    out_of_tolerance_fields = [
-        field_name
-        for field_name, overflow_value in overflow.items()
-        if overflow_value > 1e-6
-    ]
-    return {
-        **actuals,
-        **differences,
-        "tolerances": tolerances,
-        "absolute_differences": absolute_differences,
-        "overflow": overflow,
-        "overflow_ratios": overflow_ratios,
-        "within_tolerance": not out_of_tolerance_fields,
-        "out_of_tolerance_fields": out_of_tolerance_fields,
-        "normalized_overflow_score": sum(overflow_ratios.values()),
-        "normalized_error_score": sum(error_ratios.values()),
-        "max_overflow_ratio": max(overflow_ratios.values(), default=0.0),
-        "max_error_ratio": max(error_ratios.values(), default=0.0),
-    }
+    return build_nutrition_validation_summary(
+        actuals=actuals,
+        differences=differences,
+        tolerances=_build_regeneration_tolerances(meal),
+    )
 
 
 def _build_regeneration_nutrition_ranking(
@@ -848,40 +809,10 @@ def summarize_regeneration_nutrition(
     meal,
     meal_plan: dict[str, Any],
 ) -> dict[str, Any]:
-    foods = list(meal_plan.get("foods", []))
-    if foods:
-        actuals = calculate_meal_actuals_from_foods(foods)
-        differences = calculate_difference_summary(
-            target_calories=meal.target_calories,
-            target_protein_grams=meal.target_protein_grams,
-            target_fat_grams=meal.target_fat_grams,
-            target_carb_grams=meal.target_carb_grams,
-            actual_calories=actuals["actual_calories"],
-            actual_protein_grams=actuals["actual_protein_grams"],
-            actual_fat_grams=actuals["actual_fat_grams"],
-            actual_carb_grams=actuals["actual_carb_grams"],
-        )
-    else:
-        actuals = {
-            "actual_calories": float(meal_plan.get("actual_calories") or 0.0),
-            "actual_protein_grams": float(meal_plan.get("actual_protein_grams") or 0.0),
-            "actual_fat_grams": float(meal_plan.get("actual_fat_grams") or 0.0),
-            "actual_carb_grams": float(meal_plan.get("actual_carb_grams") or 0.0),
-        }
-        differences = calculate_difference_summary(
-            target_calories=meal.target_calories,
-            target_protein_grams=meal.target_protein_grams,
-            target_fat_grams=meal.target_fat_grams,
-            target_carb_grams=meal.target_carb_grams,
-            actual_calories=actuals["actual_calories"],
-            actual_protein_grams=actuals["actual_protein_grams"],
-            actual_fat_grams=actuals["actual_fat_grams"],
-            actual_carb_grams=actuals["actual_carb_grams"],
-        )
-    return _build_regeneration_nutrition_summary(
+    return summarize_meal_plan_nutrition(
         meal=meal,
-        actuals=actuals,
-        differences=differences,
+        meal_plan=meal_plan,
+        tolerances=_build_regeneration_tolerances(meal),
     )
 
 
@@ -984,7 +915,7 @@ def _build_regeneration_bound_signals(
     return bound_signals
 
 
-def finalize_regeneration_candidate(
+def finalize_meal_candidate(
     *,
     meal,
     meal_plan: dict[str, Any],
@@ -1029,3 +960,20 @@ def finalize_regeneration_candidate(
         "carb_difference": nutrition_summary["carb_difference"],
         "nutrition_validation": nutrition_summary,
     }
+
+
+def finalize_regeneration_candidate(
+    *,
+    meal,
+    meal_plan: dict[str, Any],
+    meal_slot: str,
+    meal_role: str,
+    food_lookup: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    return finalize_meal_candidate(
+        meal=meal,
+        meal_plan=meal_plan,
+        meal_slot=meal_slot,
+        meal_role=meal_role,
+        food_lookup=food_lookup,
+    )

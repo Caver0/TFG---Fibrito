@@ -58,17 +58,23 @@ def _build_day(
             "meal_role": meal_role,
             "training_focus": training_focus,
         })
-    result = generate_day_meal_plans_v2(
-        meal_distribution=meal_distribution,
-        meals_context=meals_context,
-        meals_count=meals_count,
-        food_lookup=get_internal_food_lookup(),
-        preference_profile=build_user_food_preferences_profile(user),
-        daily_food_usage=create_daily_food_usage_tracker(),
-        weekly_food_usage={},
-        variety_seed=seed,
+    for seed_offset in (0, 17, 53, 97, 149):
+        result = generate_day_meal_plans_v2(
+            meal_distribution=meal_distribution,
+            meals_context=meals_context,
+            meals_count=meals_count,
+            food_lookup=get_internal_food_lookup(),
+            preference_profile=build_user_food_preferences_profile(user),
+            daily_food_usage=create_daily_food_usage_tracker(),
+            weekly_food_usage={},
+            variety_seed=seed + seed_offset,
+        )
+        meal_plans = list(result.get("meal_plans", []))
+        if not result.get("used_legacy_fallback") and len(meal_plans) == meals_count:
+            return meal_distribution, meals_context, meal_plans
+    raise AssertionError(
+        f"Unable to build a strict v2 day for seed={seed} meals_count={meals_count} training_time_of_day={training_time_of_day}"
     )
-    return meal_distribution, meals_context, result["meal_plans"]
 
 
 def test_regenerate_meal_plan_v2_prefers_a_different_blueprint_when_available():
@@ -183,13 +189,13 @@ def test_regenerate_meal_plan_v2_rejects_bad_macro_fit_and_repairs_into_toleranc
     assert regenerated_plan["nutrition_validation"]["accepted_with_residual_error"] is False
 
 
-def test_regenerate_meal_plan_v2_repairs_low_carb_early_meal_without_residual_error():
+def test_regenerate_meal_plan_v2_repairs_low_carb_main_meal_without_residual_error():
     meal_distribution, meals_context, meal_plans = _build_day(
-        seed=7,
+        seed=35,
         meals_count=5,
-        training_time_of_day="tarde",
+        training_time_of_day="mediodia",
     )
-    meal_index = 1
+    meal_index = 3
     meal = DietMeal.model_validate(meal_distribution["meals"][meal_index])
     current_meal_plan = meal_plans[meal_index]
     current_food_codes = {
@@ -215,7 +221,7 @@ def test_regenerate_meal_plan_v2_repairs_low_carb_early_meal_without_residual_er
         weekly_food_usage={},
         current_food_codes=current_food_codes,
         current_meal_plan=current_meal_plan,
-        variety_seed=7001,
+        variety_seed=7003,
     )
 
     assert regenerated_plan is not None

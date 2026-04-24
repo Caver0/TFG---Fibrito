@@ -13,7 +13,7 @@ from app.services.diet_v2.day_planner import plan_day_blueprints, rank_blueprint
 from app.services.diet_v2.diversity import create_diversity_state, register_instantiated_meal
 from app.services.diet_v2.families import get_primary_family_id
 from app.services.diet_v2.meal_instantiator import instantiate_blueprint
-from app.services.diet_v2.repair import repair_meal_plan
+from app.services.diet_v2.repair import repair_meal_plan_with_diagnostics
 from app.services.diet_v2.telemetry import set_last_generation_diagnostics
 
 logger = logging.getLogger(__name__)
@@ -149,12 +149,11 @@ def generate_day_meal_plans_v2(
         if not attempted_blueprint_ids:
             attempted_blueprint_ids = candidate_blueprint_ids
         for candidate_rank, blueprint_id in enumerate(attempted_blueprint_ids):
-            attempt_started_at = time.perf_counter()
             if not blueprint_id:
                 meal_diagnostic["attempts"].append({
                     "blueprint_id": blueprint_id,
                     "status": "missing_blueprint_id",
-                    "elapsed_seconds": time.perf_counter() - attempt_started_at,
+                    "elapsed_seconds": 0.0,
                 })
                 continue
             blueprint = get_blueprint(blueprint_id)
@@ -162,7 +161,7 @@ def generate_day_meal_plans_v2(
                 meal_diagnostic["attempts"].append({
                     "blueprint_id": blueprint_id,
                     "status": "unknown_blueprint",
-                    "elapsed_seconds": time.perf_counter() - attempt_started_at,
+                    "elapsed_seconds": 0.0,
                 })
                 continue
             if (
@@ -172,138 +171,11 @@ def generate_day_meal_plans_v2(
                 meal_diagnostic["attempts"].append({
                     "blueprint_id": blueprint_id,
                     "status": "skipped_repeat_limit",
-                    "elapsed_seconds": time.perf_counter() - attempt_started_at,
+                    "elapsed_seconds": 0.0,
                 })
                 continue
-            instantiation = instantiate_blueprint(
-                blueprint=blueprint,
-                meal_request=meal_request,
-                food_lookup=food_lookup,
-                preference_profile=preference_profile,
-                daily_food_usage=daily_food_usage,
-                weekly_food_usage=weekly_food_usage,
-                diversity_state=diversity_state,
-                variety_seed=variety_seed + meal_index,
-            )
-            if instantiation is None:
-                meal_diagnostic["attempts"].append({
-                    "blueprint_id": blueprint_id,
-                    "status": "instantiation_failed",
-                    "elapsed_seconds": time.perf_counter() - attempt_started_at,
-                })
-                continue
-            candidate_plan = repair_meal_plan(
-                blueprint=blueprint,
-                meal=meal_request["meal"],
-                meal_request=meal_request,
-                instantiation=instantiation,
-                food_lookup=food_lookup,
-                preference_profile=preference_profile,
-                daily_food_usage=daily_food_usage,
-                weekly_food_usage=weekly_food_usage,
-            )
-            if candidate_plan is None:
-                meal_diagnostic["attempts"].append({
-                    "blueprint_id": blueprint_id,
-                    "status": "portion_fit_failed",
-                    "selected_role_codes": instantiation.get("selected_role_codes", {}),
-                    "elapsed_seconds": time.perf_counter() - attempt_started_at,
-                })
-                continue
-            selection_noise = _stable_noise(
-                variety_seed,
-                meal_index,
-                blueprint.id,
-                candidate_plan.get("selected_role_codes", {}),
-            )
-            if meal_request["meal_role"] == "breakfast":
-                planner_rank_penalty = candidate_rank * 0.72
-            else:
-                planner_rank_penalty = candidate_rank * (0.46 if meal_request["meal_slot"] == "early" else 0.16)
-            breakfast_structure_penalty = 0.0
-            candidate_visual_family = str(candidate_plan.get("applied_blueprint_visual_family") or "")
-            candidate_visual_continuity = str(
-                candidate_plan.get("applied_blueprint_visual_continuity_group") or ""
-            )
-            continuity_bias = 0.0
-            if meal_request["meal_role"] == "breakfast":
-                if candidate_visual_family == "cold_snack":
-                    breakfast_structure_penalty += 0.44
-                elif candidate_visual_family == "breakfast_bowl":
-                    breakfast_structure_penalty += 0.24
-                elif candidate_visual_family == "egg_breakfast_plate":
-                    breakfast_structure_penalty -= 0.12
-                elif candidate_visual_family == "breakfast_wrap":
-                    breakfast_structure_penalty -= 0.16
-                elif candidate_visual_family == "breakfast_toast":
-                    breakfast_structure_penalty -= 0.18
-                elif candidate_visual_family == "stacked_snack":
-                    breakfast_structure_penalty += 0.08
-            elif meal_request["meal_slot"] in {"main", "late"}:
-                repeated_main_continuity = int(
-                    diversity_state["visual_continuity_group_counts"].get(candidate_visual_continuity, 0)
-                )
-                if candidate_visual_continuity == "protein_starch_veg_meal":
-                    continuity_bias += repeated_main_continuity * 0.32
-                    if repeated_main_continuity:
-                        continuity_bias += 0.18
-                elif (
-                    candidate_visual_continuity == "bread_based_meal"
-                    and diversity_state["visual_continuity_group_counts"].get("protein_starch_veg_meal", 0) > 0
-                ):
-                    continuity_bias -= 0.12
-            if meal_request["meal_slot"] == "early":
-                candidate_total_score = (
-                    float(candidate_plan.get("score") or 0.0)
-                    + float(instantiation.get("blueprint_diversity_penalty") or 0.0)
-                    + planner_rank_penalty
-                    + breakfast_structure_penalty
-                    + continuity_bias
-                    - (selection_noise * 1.6)
-                )
-            else:
-                candidate_total_score = (
-                    float(candidate_plan.get("score") or 0.0)
-                    + float(instantiation.get("blueprint_diversity_penalty") or 0.0)
-                    + planner_rank_penalty
-                    + breakfast_structure_penalty
-                    + continuity_bias
-                    - (selection_noise * 0.15)
-                )
-            meal_diagnostic["attempts"].append({
-                "blueprint_id": blueprint_id,
-                "status": "candidate_resolved",
-                "fit_method": candidate_plan.get("portion_fit_method", "exact"),
-                "selected_role_codes": candidate_plan.get("selected_role_codes", {}),
-                "score": float(candidate_plan.get("score") or 0.0),
-                "candidate_total_score": candidate_total_score,
-                "elapsed_seconds": time.perf_counter() - attempt_started_at,
-            })
-            if resolved_plan is None or resolved_plan_score is None or candidate_total_score < resolved_plan_score:
-                resolved_plan = candidate_plan
-                resolved_plan_score = candidate_total_score
-
-        if resolved_plan is None and deferred_blueprint_ids:
-            for deferred_offset, blueprint_id in enumerate(deferred_blueprint_ids, start=len(attempted_blueprint_ids)):
+            for instantiation_variant, instantiation_seed_offset in enumerate((0, 53, 97)):
                 attempt_started_at = time.perf_counter()
-                blueprint = get_blueprint(blueprint_id)
-                if blueprint is None:
-                    meal_diagnostic["attempts"].append({
-                        "blueprint_id": blueprint_id,
-                        "status": "unknown_blueprint",
-                        "elapsed_seconds": time.perf_counter() - attempt_started_at,
-                    })
-                    continue
-                if (
-                    not blueprint.allow_repeat
-                    and diversity_state["blueprint_counts"].get(blueprint.id, 0) >= blueprint.daily_max_repetitions
-                ):
-                    meal_diagnostic["attempts"].append({
-                        "blueprint_id": blueprint_id,
-                        "status": "skipped_repeat_limit",
-                        "elapsed_seconds": time.perf_counter() - attempt_started_at,
-                    })
-                    continue
                 instantiation = instantiate_blueprint(
                     blueprint=blueprint,
                     meal_request=meal_request,
@@ -312,16 +184,17 @@ def generate_day_meal_plans_v2(
                     daily_food_usage=daily_food_usage,
                     weekly_food_usage=weekly_food_usage,
                     diversity_state=diversity_state,
-                    variety_seed=variety_seed + meal_index,
+                    variety_seed=variety_seed + meal_index + (candidate_rank * 17) + instantiation_seed_offset,
                 )
                 if instantiation is None:
                     meal_diagnostic["attempts"].append({
                         "blueprint_id": blueprint_id,
+                        "instantiation_variant": instantiation_variant,
                         "status": "instantiation_failed",
                         "elapsed_seconds": time.perf_counter() - attempt_started_at,
                     })
                     continue
-                candidate_plan = repair_meal_plan(
+                candidate_plan, repair_attempts = repair_meal_plan_with_diagnostics(
                     blueprint=blueprint,
                     meal=meal_request["meal"],
                     meal_request=meal_request,
@@ -334,21 +207,25 @@ def generate_day_meal_plans_v2(
                 if candidate_plan is None:
                     meal_diagnostic["attempts"].append({
                         "blueprint_id": blueprint_id,
-                        "status": "portion_fit_failed",
+                        "instantiation_variant": instantiation_variant,
+                        "status": "no_strict_candidate",
                         "selected_role_codes": instantiation.get("selected_role_codes", {}),
+                        "repair_attempts": repair_attempts,
                         "elapsed_seconds": time.perf_counter() - attempt_started_at,
                     })
                     continue
+                nutrition_validation = dict(candidate_plan.get("nutrition_validation") or {})
                 selection_noise = _stable_noise(
                     variety_seed,
                     meal_index,
                     blueprint.id,
+                    instantiation_variant,
                     candidate_plan.get("selected_role_codes", {}),
                 )
                 if meal_request["meal_role"] == "breakfast":
-                    planner_rank_penalty = deferred_offset * 0.72
+                    planner_rank_penalty = candidate_rank * 0.72
                 else:
-                    planner_rank_penalty = deferred_offset * (0.46 if meal_request["meal_slot"] == "early" else 0.16)
+                    planner_rank_penalty = candidate_rank * (0.46 if meal_request["meal_slot"] == "early" else 0.16)
                 breakfast_structure_penalty = 0.0
                 candidate_visual_family = str(candidate_plan.get("applied_blueprint_visual_family") or "")
                 candidate_visual_continuity = str(
@@ -381,36 +258,180 @@ def generate_day_meal_plans_v2(
                         and diversity_state["visual_continuity_group_counts"].get("protein_starch_veg_meal", 0) > 0
                     ):
                         continuity_bias -= 0.12
-                if meal_request["meal_slot"] == "early":
-                    candidate_total_score = (
-                        float(candidate_plan.get("score") or 0.0)
-                        + float(instantiation.get("blueprint_diversity_penalty") or 0.0)
-                        + planner_rank_penalty
-                        + breakfast_structure_penalty
-                        + continuity_bias
-                        - (selection_noise * 1.6)
-                    )
-                else:
-                    candidate_total_score = (
-                        float(candidate_plan.get("score") or 0.0)
-                        + float(instantiation.get("blueprint_diversity_penalty") or 0.0)
-                        + planner_rank_penalty
-                        + breakfast_structure_penalty
-                        + continuity_bias
-                        - (selection_noise * 0.15)
-                    )
+                candidate_total_score = (
+                    float(nutrition_validation.get("normalized_error_score") or 0.0) * 3.5
+                    + float(candidate_plan.get("score") or 0.0)
+                    + float(instantiation.get("blueprint_diversity_penalty") or 0.0)
+                    + planner_rank_penalty
+                    + breakfast_structure_penalty
+                    + continuity_bias
+                    - (selection_noise * (1.6 if meal_request["meal_slot"] == "early" else 0.15))
+                )
                 meal_diagnostic["attempts"].append({
                     "blueprint_id": blueprint_id,
+                    "instantiation_variant": instantiation_variant,
                     "status": "candidate_resolved",
                     "fit_method": candidate_plan.get("portion_fit_method", "exact"),
                     "selected_role_codes": candidate_plan.get("selected_role_codes", {}),
                     "score": float(candidate_plan.get("score") or 0.0),
                     "candidate_total_score": candidate_total_score,
+                    "within_tolerance": bool(nutrition_validation.get("within_tolerance")),
+                    "out_of_tolerance_fields": list(nutrition_validation.get("out_of_tolerance_fields") or []),
+                    "normalized_error_score": float(nutrition_validation.get("normalized_error_score") or 0.0),
+                    "repair_attempts": repair_attempts,
                     "elapsed_seconds": time.perf_counter() - attempt_started_at,
                 })
                 if resolved_plan is None or resolved_plan_score is None or candidate_total_score < resolved_plan_score:
                     resolved_plan = candidate_plan
                     resolved_plan_score = candidate_total_score
+
+        if resolved_plan is None and deferred_blueprint_ids:
+            for deferred_offset, blueprint_id in enumerate(deferred_blueprint_ids, start=len(attempted_blueprint_ids)):
+                if not blueprint_id:
+                    meal_diagnostic["attempts"].append({
+                        "blueprint_id": blueprint_id,
+                        "status": "missing_blueprint_id",
+                        "elapsed_seconds": 0.0,
+                    })
+                    continue
+                blueprint = get_blueprint(blueprint_id)
+                if blueprint is None:
+                    meal_diagnostic["attempts"].append({
+                        "blueprint_id": blueprint_id,
+                        "status": "unknown_blueprint",
+                        "elapsed_seconds": 0.0,
+                    })
+                    continue
+                if (
+                    not blueprint.allow_repeat
+                    and diversity_state["blueprint_counts"].get(blueprint.id, 0) >= blueprint.daily_max_repetitions
+                ):
+                    meal_diagnostic["attempts"].append({
+                        "blueprint_id": blueprint_id,
+                        "status": "skipped_repeat_limit",
+                        "elapsed_seconds": 0.0,
+                    })
+                    continue
+                for instantiation_variant, instantiation_seed_offset in enumerate((0, 53, 97)):
+                    attempt_started_at = time.perf_counter()
+                    instantiation = instantiate_blueprint(
+                        blueprint=blueprint,
+                        meal_request=meal_request,
+                        food_lookup=food_lookup,
+                        preference_profile=preference_profile,
+                        daily_food_usage=daily_food_usage,
+                        weekly_food_usage=weekly_food_usage,
+                        diversity_state=diversity_state,
+                        variety_seed=(
+                            variety_seed
+                            + meal_index
+                            + (deferred_offset * 17)
+                            + instantiation_seed_offset
+                        ),
+                    )
+                    if instantiation is None:
+                        meal_diagnostic["attempts"].append({
+                            "blueprint_id": blueprint_id,
+                            "instantiation_variant": instantiation_variant,
+                            "status": "instantiation_failed",
+                            "elapsed_seconds": time.perf_counter() - attempt_started_at,
+                        })
+                        continue
+                    candidate_plan, repair_attempts = repair_meal_plan_with_diagnostics(
+                        blueprint=blueprint,
+                        meal=meal_request["meal"],
+                        meal_request=meal_request,
+                        instantiation=instantiation,
+                        food_lookup=food_lookup,
+                        preference_profile=preference_profile,
+                        daily_food_usage=daily_food_usage,
+                        weekly_food_usage=weekly_food_usage,
+                    )
+                    if candidate_plan is None:
+                        meal_diagnostic["attempts"].append({
+                            "blueprint_id": blueprint_id,
+                            "instantiation_variant": instantiation_variant,
+                            "status": "no_strict_candidate",
+                            "selected_role_codes": instantiation.get("selected_role_codes", {}),
+                            "repair_attempts": repair_attempts,
+                            "elapsed_seconds": time.perf_counter() - attempt_started_at,
+                        })
+                        continue
+                    nutrition_validation = dict(candidate_plan.get("nutrition_validation") or {})
+                    selection_noise = _stable_noise(
+                        variety_seed,
+                        meal_index,
+                        blueprint.id,
+                        instantiation_variant,
+                        candidate_plan.get("selected_role_codes", {}),
+                    )
+                    if meal_request["meal_role"] == "breakfast":
+                        planner_rank_penalty = deferred_offset * 0.72
+                    else:
+                        planner_rank_penalty = deferred_offset * (
+                            0.46 if meal_request["meal_slot"] == "early" else 0.16
+                        )
+                    breakfast_structure_penalty = 0.0
+                    candidate_visual_family = str(candidate_plan.get("applied_blueprint_visual_family") or "")
+                    candidate_visual_continuity = str(
+                        candidate_plan.get("applied_blueprint_visual_continuity_group") or ""
+                    )
+                    continuity_bias = 0.0
+                    if meal_request["meal_role"] == "breakfast":
+                        if candidate_visual_family == "cold_snack":
+                            breakfast_structure_penalty += 0.44
+                        elif candidate_visual_family == "breakfast_bowl":
+                            breakfast_structure_penalty += 0.24
+                        elif candidate_visual_family == "egg_breakfast_plate":
+                            breakfast_structure_penalty -= 0.12
+                        elif candidate_visual_family == "breakfast_wrap":
+                            breakfast_structure_penalty -= 0.16
+                        elif candidate_visual_family == "breakfast_toast":
+                            breakfast_structure_penalty -= 0.18
+                        elif candidate_visual_family == "stacked_snack":
+                            breakfast_structure_penalty += 0.08
+                    elif meal_request["meal_slot"] in {"main", "late"}:
+                        repeated_main_continuity = int(
+                            diversity_state["visual_continuity_group_counts"].get(candidate_visual_continuity, 0)
+                        )
+                        if candidate_visual_continuity == "protein_starch_veg_meal":
+                            continuity_bias += repeated_main_continuity * 0.32
+                            if repeated_main_continuity:
+                                continuity_bias += 0.18
+                        elif (
+                            candidate_visual_continuity == "bread_based_meal"
+                            and diversity_state["visual_continuity_group_counts"].get(
+                                "protein_starch_veg_meal",
+                                0,
+                            ) > 0
+                        ):
+                            continuity_bias -= 0.12
+                    candidate_total_score = (
+                        float(nutrition_validation.get("normalized_error_score") or 0.0) * 3.5
+                        + float(candidate_plan.get("score") or 0.0)
+                        + float(instantiation.get("blueprint_diversity_penalty") or 0.0)
+                        + planner_rank_penalty
+                        + breakfast_structure_penalty
+                        + continuity_bias
+                        - (selection_noise * (1.6 if meal_request["meal_slot"] == "early" else 0.15))
+                    )
+                    meal_diagnostic["attempts"].append({
+                        "blueprint_id": blueprint_id,
+                        "instantiation_variant": instantiation_variant,
+                        "status": "candidate_resolved",
+                        "fit_method": candidate_plan.get("portion_fit_method", "exact"),
+                        "selected_role_codes": candidate_plan.get("selected_role_codes", {}),
+                        "score": float(candidate_plan.get("score") or 0.0),
+                        "candidate_total_score": candidate_total_score,
+                        "within_tolerance": bool(nutrition_validation.get("within_tolerance")),
+                        "out_of_tolerance_fields": list(nutrition_validation.get("out_of_tolerance_fields") or []),
+                        "normalized_error_score": float(nutrition_validation.get("normalized_error_score") or 0.0),
+                        "repair_attempts": repair_attempts,
+                        "elapsed_seconds": time.perf_counter() - attempt_started_at,
+                    })
+                    if resolved_plan is None or resolved_plan_score is None or candidate_total_score < resolved_plan_score:
+                        resolved_plan = candidate_plan
+                        resolved_plan_score = candidate_total_score
 
         if resolved_plan is None:
             used_fallback = True

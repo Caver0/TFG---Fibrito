@@ -20,6 +20,7 @@ from app.services.diet.constants import (
     SPOONACULAR_FOOD_DATA_SOURCE,
 )
 from app.services.diet.solver import build_exact_meal_solution
+from app.services.diet_v2.nutrition_validation import summarize_daily_payload_nutrition, summarize_meal_plan_nutrition
 
 
 def generate_food_based_meal(
@@ -41,18 +42,25 @@ def generate_food_based_meal(
     selected_role_foods = {
         role: food_lookup[food_code]
         for role, food_code in selected_role_codes.items()
+        if food_code in food_lookup
     }
-    meal_fit = build_exact_meal_solution(
-        meal=meal,
-        role_foods=selected_role_foods,
-        support_food_specs=meal_plan.get("support_food_specs", []),
-        candidate_indexes={"protein": 0, "carb": 0, "fat": 0},
-        food_lookup=food_lookup,
-        training_focus=training_focus,
-        meal_slot=meal_slot,
-    )
+    meal_fit = meal_plan if meal_plan.get("foods") else None
+    if meal_fit is None and len(selected_role_foods) == 3:
+        meal_fit = build_exact_meal_solution(
+            meal=meal,
+            role_foods=selected_role_foods,
+            support_food_specs=meal_plan.get("support_food_specs", []),
+            candidate_indexes={"protein": 0, "carb": 0, "fat": 0},
+            food_lookup=food_lookup,
+            training_focus=training_focus,
+            meal_slot=meal_slot,
+        )
     if meal_fit is None:
         meal_fit = meal_plan
+    nutrition_summary = summarize_meal_plan_nutrition(
+        meal=meal,
+        meal_plan=meal_fit,
+    )
 
     return {
         "meal_number": meal.meal_number,
@@ -64,14 +72,14 @@ def generate_food_based_meal(
         "target_protein_grams": round_diet_value(meal.target_protein_grams),
         "target_fat_grams": round_diet_value(meal.target_fat_grams),
         "target_carb_grams": round_diet_value(meal.target_carb_grams),
-        "actual_calories": meal_fit["actual_calories"],
-        "actual_protein_grams": meal_fit["actual_protein_grams"],
-        "actual_fat_grams": meal_fit["actual_fat_grams"],
-        "actual_carb_grams": meal_fit["actual_carb_grams"],
-        "calorie_difference": meal_fit["calorie_difference"],
-        "protein_difference": meal_fit["protein_difference"],
-        "fat_difference": meal_fit["fat_difference"],
-        "carb_difference": meal_fit["carb_difference"],
+        "actual_calories": nutrition_summary["actual_calories"],
+        "actual_protein_grams": nutrition_summary["actual_protein_grams"],
+        "actual_fat_grams": nutrition_summary["actual_fat_grams"],
+        "actual_carb_grams": nutrition_summary["actual_carb_grams"],
+        "calorie_difference": nutrition_summary["calorie_difference"],
+        "protein_difference": nutrition_summary["protein_difference"],
+        "fat_difference": nutrition_summary["fat_difference"],
+        "carb_difference": nutrition_summary["carb_difference"],
         "foods": meal_fit["foods"],
     }
 
@@ -122,32 +130,22 @@ def calculate_daily_totals_from_meals(
     target_carb_grams: float,
     meals: list[dict],
 ) -> dict[str, float]:
-    actual_protein_grams = round_diet_value(sum(meal["actual_protein_grams"] for meal in meals))
-    actual_fat_grams = round_diet_value(sum(meal["actual_fat_grams"] for meal in meals))
-    actual_carb_grams = round_diet_value(sum(meal["actual_carb_grams"] for meal in meals))
-    actual_calories = round_diet_value(
-        calculate_macro_calories(
-            actual_protein_grams,
-            actual_fat_grams,
-            actual_carb_grams,
-        )
+    daily_summary = summarize_daily_payload_nutrition(
+        target_calories=target_calories,
+        target_protein_grams=target_protein_grams,
+        target_fat_grams=target_fat_grams,
+        target_carb_grams=target_carb_grams,
+        meals=meals,
     )
-
     return {
-        "actual_calories": actual_calories,
-        "actual_protein_grams": actual_protein_grams,
-        "actual_fat_grams": actual_fat_grams,
-        "actual_carb_grams": actual_carb_grams,
-        **calculate_difference_summary(
-            target_calories=target_calories,
-            target_protein_grams=target_protein_grams,
-            target_fat_grams=target_fat_grams,
-            target_carb_grams=target_carb_grams,
-            actual_calories=actual_calories,
-            actual_protein_grams=actual_protein_grams,
-            actual_fat_grams=actual_fat_grams,
-            actual_carb_grams=actual_carb_grams,
-        ),
+        "actual_calories": daily_summary["actual_calories"],
+        "actual_protein_grams": daily_summary["actual_protein_grams"],
+        "actual_fat_grams": daily_summary["actual_fat_grams"],
+        "actual_carb_grams": daily_summary["actual_carb_grams"],
+        "calorie_difference": daily_summary["calorie_difference"],
+        "protein_difference": daily_summary["protein_difference"],
+        "fat_difference": daily_summary["fat_difference"],
+        "carb_difference": daily_summary["carb_difference"],
     }
 
 
