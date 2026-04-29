@@ -558,10 +558,34 @@ function DietsPage() {
       return
     }
 
+    if (name === 'useCustomDistribution') {
+      setGeneratorForm((current) => ({
+        ...current,
+        useCustomDistribution: checked,
+        customPercentages: checked
+          ? getDefaultDistributionTemplate(Number(current.mealsCount)).map((entry) => String(entry))
+          : current.customPercentages,
+      }))
+      return
+    }
+
     setGeneratorForm((current) => ({
       ...current,
       [name]: type === 'checkbox' ? checked : value,
     }))
+  }
+
+  function handleToggleCustomDistribution() {
+    setGeneratorForm((current) => {
+      const nextEnabledState = !current.useCustomDistribution
+      return {
+        ...current,
+        useCustomDistribution: nextEnabledState,
+        customPercentages: nextEnabledState
+          ? getDefaultDistributionTemplate(Number(current.mealsCount)).map((entry) => String(entry))
+          : current.customPercentages,
+      }
+    })
   }
 
   function handleDistributionChange(index, value) {
@@ -1094,18 +1118,17 @@ function DietsPage() {
               </select>
             </label>
 
-            <label className="protocol-generator-toggle">
-              <input
-                checked={generatorForm.useCustomDistribution}
-                disabled={isGenerating}
-                name="useCustomDistribution"
-                type="checkbox"
-                onChange={handleGeneratorBaseChange}
-              />
-              <span>Usar distribución calórica personalizada</span>
-            </label>
+            <div className="protocol-generator-custom-block">
+              <div className="protocol-generator-toggle" aria-live="polite">
+                <span>Usar distribucion calorica personalizada</span>
+              </div>
 
-            {generatorForm.useCustomDistribution ? (
+              <button type="button" className="protocol-secondary-button protocol-secondary-button-subtle" disabled={isGenerating} onClick={handleToggleCustomDistribution}>
+                {generatorForm.useCustomDistribution ? 'Ocultar personalizacion' : 'Personalizar plantilla'}
+              </button>
+            </div>
+
+            <div className={`protocol-generator-custom-panel ${generatorForm.useCustomDistribution ? 'protocol-generator-custom-panel-active' : ''}`.trim()}>
               <div className="protocol-generator-percentages">
                 {generatorForm.customPercentages.map((value, index) => (
                   <label key={`distribution-${index}`}>
@@ -1121,7 +1144,7 @@ function DietsPage() {
                   </label>
                 ))}
               </div>
-            ) : null}
+            </div>
 
             {generateError ? <p className="page-status page-status-error">{generateError}</p> : null}
             {generateMessage ? <p className="page-status page-status-success">{generateMessage}</p> : null}

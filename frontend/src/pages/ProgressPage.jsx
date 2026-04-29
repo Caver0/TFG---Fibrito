@@ -19,7 +19,6 @@ import CircularGauge from '../components/CircularGauge'
 import SectionPanel from '../components/SectionPanel'
 import { useAuth } from '../context/AuthContext'
 import {
-  formatAdherenceLevel,
   formatCalories,
   formatCompactNumber,
   formatDateLabel,
@@ -32,7 +31,7 @@ import {
   formatSignedMass,
 } from '../utils/stitch'
 
-const WEEKDAY_LABELS = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM']
+const WEEKDAY_LABELS = ['LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB', 'DOM']
 
 function getTodayDateInputValue() {
   const today = new Date()
@@ -99,7 +98,7 @@ function buildWeeklyRegisteredMealsSeries(dailyBreakdown) {
     const omittedMeals = Math.max(0, registeredMeals - completedMeals - modifiedMeals)
 
     return {
-      dayLabel: day?.day_label ?? WEEKDAY_LABELS[index] ?? `Día ${index + 1}`,
+      dayLabel: day?.day_label ?? WEEKDAY_LABELS[index] ?? `Dia ${index + 1}`,
       completedMeals,
       modifiedMeals,
       omittedMeals,
@@ -125,6 +124,101 @@ function WeeklyRegisteredMealsTooltip({ active, payload, label }) {
   )
 }
 
+function isSameAdjustmentWeek(entry, analysis) {
+  if (!entry || !analysis) return false
+  return (
+    entry.previous_week_label === analysis.previous_week_label
+    && entry.current_week_label === analysis.current_week_label
+  )
+}
+
+function isMonday(createdAt) {
+  if (!createdAt) return false
+  return new Date(createdAt).getDay() === 1
+}
+
+function buildWeeklyAdjustmentStatus(analysis, adjustment) {
+  if (adjustment) {
+    if (adjustment.adjustment_applied) {
+      return {
+        tone: 'success',
+        label: isMonday(adjustment.created_at) ? 'Ajuste aplicado el lunes' : 'Ajuste aplicado esta semana',
+        detail: adjustment.adjustment_reason,
+        appliedChange: adjustment.calorie_change,
+      }
+    }
+
+    if (adjustment.progress_status === 'needs_attention') {
+      return {
+        tone: 'muted',
+        label: 'Ajuste no aplicado (datos insuficientes)',
+        detail: adjustment.adjustment_reason,
+        appliedChange: adjustment.calorie_change,
+      }
+    }
+
+    return {
+      tone: 'neutral',
+      label: 'Sin ajuste (peso estable)',
+      detail: adjustment.adjustment_reason,
+      appliedChange: 0,
+    }
+  }
+
+  if (!analysis?.can_analyze) {
+    return {
+      tone: 'muted',
+      label: 'Ajuste no aplicado (datos insuficientes)',
+      detail: analysis?.adjustment_reason || 'Todavia no hay una semana completa para analizar.',
+      appliedChange: null,
+    }
+  }
+
+  if (!analysis.adjustment_needed && analysis.calorie_change === 0) {
+    return {
+      tone: 'neutral',
+      label: 'Sin ajuste (peso estable)',
+      detail: analysis.adjustment_reason,
+      appliedChange: 0,
+    }
+  }
+
+  if (analysis.progress_status === 'needs_attention') {
+    return {
+      tone: 'muted',
+      label: 'Ajuste no aplicado (datos insuficientes)',
+      detail: analysis.adjustment_reason,
+      appliedChange: analysis.calorie_change,
+    }
+  }
+
+  return {
+    tone: 'neutral',
+    label: 'Ajuste pendiente de sincronizacion',
+    detail: analysis.adjustment_reason,
+    appliedChange: analysis.calorie_change,
+  }
+}
+
+function resolveAdjustmentOutcomeLabel(adjustmentStatus, adjustmentEntry) {
+  if (adjustmentEntry?.adjustment_applied) {
+    return formatSignedCalories(adjustmentEntry.calorie_change)
+  }
+  if (adjustmentEntry && adjustmentEntry.calorie_change === 0) {
+    return 'Sin cambios'
+  }
+  if (adjustmentEntry && adjustmentEntry.calorie_change !== 0) {
+    return 'No aplicado'
+  }
+  if (adjustmentStatus.appliedChange === null || adjustmentStatus.appliedChange === undefined) {
+    return 'Pendiente'
+  }
+  if (adjustmentStatus.appliedChange === 0) {
+    return 'Sin cambios'
+  }
+  return formatSignedCalories(adjustmentStatus.appliedChange)
+}
+
 function ProgressPage() {
   const { refreshUser, token } = useAuth()
   const [entries, setEntries] = useState([])
@@ -147,7 +241,7 @@ function ProgressPage() {
   const [saveError, setSaveError] = useState('')
   const [saveMessage, setSaveMessage] = useState('')
   const [applyError, setApplyError] = useState('')
-  const [applyMessage, setApplyMessage] = useState('')
+  const [weeklyAdjustmentStatus, setWeeklyAdjustmentStatus] = useState(buildWeeklyAdjustmentStatus(null, null))
   const [isHistoryLoading, setIsHistoryLoading] = useState(false)
   const [isSummaryLoading, setIsSummaryLoading] = useState(false)
   const [isWeeklyAveragesLoading, setIsWeeklyAveragesLoading] = useState(false)
@@ -274,7 +368,7 @@ function ProgressPage() {
   }
 
   async function reloadAll(activeToken = token) {
-    const [, , analysis] = await Promise.all([
+    const [weightEntries, progressSummary, analysis, averages, adjustmentEntries, snapshot] = await Promise.all([
       loadWeightHistory(activeToken),
       loadProgressSummary(activeToken),
       loadWeeklyAnalysis(activeToken),
@@ -282,12 +376,83 @@ function ProgressPage() {
       loadAdjustmentHistory(activeToken),
       loadDashboardSnapshot(activeToken),
     ])
-    await loadWeeklyAdherenceSummary(activeToken, analysis?.current_week_label ?? null)
+    const adherence = await loadWeeklyAdherenceSummary(activeToken, analysis?.current_week_label ?? null)
+    return {
+      weightEntries,
+      progressSummary,
+      analysis,
+      averages,
+      adjustmentEntries,
+      snapshot,
+      adherence,
+    }
+  }
+
+  async function syncWeeklyAdjustment(activeToken = token) {
+    if (!activeToken) return null
+    setIsApplyingAdjustment(true)
+    setApplyError('')
+
+    try {
+      const response = await progressApi.applyWeeklyAdjustment(activeToken)
+      if (response.adjustment?.adjustment_applied) {
+        await refreshUser(activeToken)
+      }
+
+      const refreshedData = await reloadAll(activeToken)
+      const matchingAdjustment = refreshedData.adjustmentEntries.find((entry) => isSameAdjustmentWeek(entry, refreshedData.analysis)) ?? response.adjustment ?? null
+      setWeeklyAdjustmentStatus(buildWeeklyAdjustmentStatus(refreshedData.analysis ?? response.analysis, matchingAdjustment))
+      window.dispatchEvent(new CustomEvent('dashboard:refresh'))
+      return {
+        analysis: refreshedData.analysis ?? response.analysis,
+        adjustment: matchingAdjustment,
+      }
+    } catch (error) {
+      setApplyError(error.message)
+      setWeeklyAdjustmentStatus({
+        tone: 'error',
+        label: 'Error al guardar',
+        detail: error.message,
+        appliedChange: null,
+      })
+      return null
+    } finally {
+      setIsApplyingAdjustment(false)
+    }
+  }
+
+  async function syncWeeklyAdjustmentIfNeeded(activeToken = token, analysis = weeklyAnalysis, adjustmentEntries = adjustmentHistory) {
+    const matchingAdjustment = adjustmentEntries.find((entry) => isSameAdjustmentWeek(entry, analysis)) ?? null
+
+    if (!analysis?.can_analyze) {
+      setWeeklyAdjustmentStatus(buildWeeklyAdjustmentStatus(analysis, matchingAdjustment))
+      return { analysis, adjustment: matchingAdjustment }
+    }
+
+    if (matchingAdjustment) {
+      setWeeklyAdjustmentStatus(buildWeeklyAdjustmentStatus(analysis, matchingAdjustment))
+      return { analysis, adjustment: matchingAdjustment }
+    }
+
+    return syncWeeklyAdjustment(activeToken)
   }
 
   useEffect(() => {
-    if (!token) return
-    reloadAll(token)
+    if (!token) return undefined
+
+    let isActive = true
+
+    async function initializeProgress() {
+      const data = await reloadAll(token)
+      if (!isActive) return
+      await syncWeeklyAdjustmentIfNeeded(token, data.analysis, data.adjustmentEntries)
+    }
+
+    initializeProgress()
+
+    return () => {
+      isActive = false
+    }
   }, [token])
 
   useEffect(() => {
@@ -316,9 +481,10 @@ function ProgressPage() {
       } else {
         await weightApi.createWeightEntry(token, payload)
       }
-      await reloadAll(token)
+      const data = await reloadAll(token)
+      await syncWeeklyAdjustmentIfNeeded(token, data.analysis, data.adjustmentEntries)
       window.dispatchEvent(new CustomEvent('dashboard:refresh'))
-      setSaveMessage(editingEntryId ? 'Peso de hoy actualizado correctamente.' : 'Registro de peso guardado correctamente.')
+      setSaveMessage(editingEntryId ? 'Peso actualizado correctamente.' : 'Registro de peso guardado correctamente.')
       setEditingEntryId('')
       setWeightForm({
         weight: '',
@@ -343,31 +509,13 @@ function ProgressPage() {
           date: getTodayDateInputValue(),
         })
       }
-      await reloadAll(token)
+      const data = await reloadAll(token)
+      await syncWeeklyAdjustmentIfNeeded(token, data.analysis, data.adjustmentEntries)
       window.dispatchEvent(new CustomEvent('dashboard:refresh'))
     } catch (error) {
       setHistoryError(error.message)
     } finally {
       setDeletingEntryId('')
-    }
-  }
-
-  async function handleApplyAdjustment() {
-    if (!token) return
-    setIsApplyingAdjustment(true)
-    setApplyError('')
-    setApplyMessage('')
-    try {
-      const response = await progressApi.applyWeeklyAdjustment(token)
-      setWeeklyAnalysis(response.analysis)
-      await refreshUser(token)
-      await reloadAll(token)
-      window.dispatchEvent(new CustomEvent('dashboard:refresh'))
-      setApplyMessage(response.adjustment?.adjustment_applied ? 'Ajuste semanal aplicado y guardado.' : response.analysis.adjustment_reason)
-    } catch (error) {
-      setApplyError(error.message)
-    } finally {
-      setIsApplyingAdjustment(false)
     }
   }
 
@@ -402,10 +550,12 @@ function ProgressPage() {
     : []
   const weeklyRegisteredMealsSeries = buildWeeklyRegisteredMealsSeries(dailyBreakdown)
   const weeklyBreakdownDescription = canRenderSharedDailyBreakdown && dashboardAdherence?.start_date && dashboardAdherence?.end_date
-    ? `Comidas registradas por día en la misma semana de referencia: ${formatDateLabel(dashboardAdherence.start_date, { month: 'short', day: '2-digit' })} a ${formatDateLabel(dashboardAdherence.end_date, { month: 'short', day: '2-digit', year: 'numeric' })}.`
-    : 'Comidas registradas por día en la misma semana de referencia.'
+    ? `Comidas registradas por dia en la misma semana de referencia: ${formatDateLabel(dashboardAdherence.start_date, { month: 'short', day: '2-digit' })} a ${formatDateLabel(dashboardAdherence.end_date, { month: 'short', day: '2-digit', year: 'numeric' })}.`
+    : 'Comidas registradas por dia en la misma semana de referencia.'
   const recentEntries = [...entries].slice(-3).reverse()
   const todayEntry = entries.find((entry) => entry.date === getTodayDateInputValue())
+  const currentAdjustment = adjustmentHistory.find((entry) => isSameAdjustmentWeek(entry, weeklyAnalysis)) ?? null
+  const adjustmentOutcomeLabel = resolveAdjustmentOutcomeLabel(weeklyAdjustmentStatus, currentAdjustment)
 
   function handleEditTodayEntry() {
     if (!todayEntry) return
@@ -437,37 +587,71 @@ function ProgressPage() {
         : null}
 
       <div className="progress-hero-grid">
-        <SectionPanel eyebrow="Interpretación semanal" className="progress-hero-card progress-hero-copy">
-          <h3>Fiabilidad: <span>{formatPercent(confidenceScore, 0)}</span></h3>
-          <p>
-            {weeklyAdherenceSummary?.interpretation_message || dashboardSnapshot?.summary?.adherence_interpretation || 'La fiabilidad mejorará cuando empieces a registrar comidas.'}
-            {referenceWeekLabel ? ` Semana de referencia: ${referenceWeekLabel}.` : ''}
-          </p>
-          <button type="button" className="panel-cta-button" onClick={() => window.location.hash = '#diets'}>Revisar dieta</button>
-        </SectionPanel>
+        <SectionPanel eyebrow="Registro diario" title="Registrar peso" className="progress-hero-card progress-weight-card">
+          <form className="progress-log-form progress-weight-form" onSubmit={handleSave}>
+            <label><span>Peso (kg)</span><input type="number" step="0.1" min="0" value={weightForm.weight} onChange={(event) => setWeightForm((current) => ({ ...current, weight: event.target.value }))} required /></label>
+            <label><span>Fecha</span><input type="date" value={weightForm.date} onChange={(event) => setWeightForm((current) => ({ ...current, date: event.target.value }))} disabled={Boolean(editingEntryId)} required /></label>
+            <button type="submit" className="panel-cta-button progress-weight-submit" disabled={isSaving}>{isSaving ? 'Guardando...' : editingEntryId ? 'Actualizar peso' : 'Registrar peso'}</button>
+          </form>
 
-        <SectionPanel className="progress-hero-card progress-gauge-card">
-          <CircularGauge
-            value={confidenceScore}
-            label="Fiabilidad"
-            caption={referenceWeekLabel ? `Semana ${referenceWeekLabel}` : undefined}
-          />
-          <div className="progress-gauge-meta">
-            <div><small>Cobertura</small><strong>{formatPercent(coveragePercentage, 0)}</strong></div>
-            <div><small>Adherencia registrada</small><strong>{formatPercent(adherencePercentage, 0)}</strong></div>
-            <div><small>Nivel de adherencia</small><strong>{weeklyAdherenceSummary?.adherence_level ? formatAdherenceLevel(weeklyAdherenceSummary.adherence_level) : 'Sin datos'}</strong></div>
+          <div className="progress-weight-meta">
+            <div><small>Ultimo peso</small><strong>{summary?.latest_weight ? formatMass(summary.latest_weight) : 'Sin registros'}</strong></div>
+            <div><small>Historial</small><strong>{summary?.number_of_entries ? `${summary.number_of_entries} registros` : 'Empieza esta semana'}</strong></div>
+          </div>
+
+          <div className="progress-weight-actions">
+            {todayEntry && !editingEntryId ? <button type="button" className="protocol-chip-button" onClick={handleEditTodayEntry}>Modificar peso de hoy</button> : null}
+            {editingEntryId ? <button type="button" className="protocol-chip-button" onClick={handleCancelEdit}>Cancelar edicion</button> : null}
           </div>
         </SectionPanel>
 
-        <div className="progress-quick-stats">
-          <SectionPanel className="progress-quick-card"><small>Cambio semanal</small><strong>{formatSignedMass(weeklyAnalysis?.weekly_change, { maximumFractionDigits: 2, minimumFractionDigits: 2 })}</strong></SectionPanel>
-          <SectionPanel className="progress-quick-card progress-quick-card-danger"><small>Ajuste calórico</small><strong>{formatSignedCalories(weeklyAnalysis?.calorie_change)}</strong></SectionPanel>
-        </div>
+        <SectionPanel eyebrow="Resumen semanal" className="progress-hero-card progress-summary-card">
+          <div className="progress-summary-layout">
+            <div className="progress-summary-left">
+              <CircularGauge
+                value={confidenceScore}
+                label="Fiabilidad"
+                caption={referenceWeekLabel ? `Semana ${referenceWeekLabel}` : undefined}
+              />
+            </div>
+
+            <div className="progress-summary-right progress-summary-meta">
+              <div className="progress-summary-stat">
+                <small>Cobertura</small>
+                <strong>{formatPercent(coveragePercentage, 0)}</strong>
+              </div>
+              <div className="progress-summary-stat">
+                <small>Adherencia</small>
+                <strong>{formatPercent(adherencePercentage, 0)}</strong>
+              </div>
+              <div className="progress-summary-stat">
+                <small>Cambio semanal</small>
+                <strong>{formatSignedMass(weeklyAnalysis?.weekly_change, { maximumFractionDigits: 2, minimumFractionDigits: 2 })}</strong>
+              </div>
+              <div className="progress-summary-stat progress-summary-stat-danger">
+                <small>Ajuste calorico</small>
+                <strong>{formatSignedCalories(weeklyAnalysis?.calorie_change)}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className={`progress-summary-status progress-summary-status-${weeklyAdjustmentStatus.tone}`.trim()}>
+            <div className="progress-summary-status-head">
+              <strong>{weeklyAdjustmentStatus.label}</strong>
+              <span>{weeklyAnalysis?.current_week_label ?? 'Pendiente'} - {adjustmentOutcomeLabel}</span>
+            </div>
+            <p>
+              {isApplyingAdjustment
+                ? 'Sincronizando el ajuste semanal automatico...'
+                : weeklyAdjustmentStatus.detail}
+            </p>
+          </div>
+        </SectionPanel>
       </div>
 
       <SectionPanel
         title="Tendencia del peso"
-        description="Comparación entre la evolución real y la tendencia esperada."
+        description="Comparacion entre la evolucion real y la tendencia esperada."
         actions={<div className="legend-group"><span><i className="legend-dot legend-dot-primary" />Actual</span><span><i className="legend-dot legend-dot-muted" />Esperado</span></div>}
       >
         <div className="dashboard-chart-wrap">
@@ -482,13 +666,13 @@ function ProgressPage() {
                 <Line type="monotone" dataKey="actualWeight" stroke="#daf900" strokeWidth={4} dot={false} />
               </ComposedChart>
             </ResponsiveContainer>
-          ) : <p className="panel-placeholder">Los datos de peso aparecerán aquí tras los primeros registros.</p>}
+          ) : <p className="panel-placeholder">Los datos de peso apareceran aqui tras los primeros registros.</p>}
         </div>
       </SectionPanel>
 
       <div className="progress-bottom-layout">
         <SectionPanel
-          title={referenceWeekLabel ? `Adherencia semanal · ${referenceWeekLabel}` : 'Adherencia semanal'}
+          title={referenceWeekLabel ? `Adherencia semanal - ${referenceWeekLabel}` : 'Adherencia semanal'}
           description={weeklyBreakdownDescription}
           actions={<div className="legend-group"><span><i className="legend-dot legend-dot-primary" />Cuenta 1</span><span><i className="legend-dot legend-dot-info" />Cuenta 0.5</span><span><i className="legend-dot legend-dot-muted" />Cuenta 0</span></div>}
         >
@@ -517,48 +701,30 @@ function ProgressPage() {
           </div>
         </SectionPanel>
 
-        <SectionPanel title="Registros recientes">
-          {recentEntries.length > 0 ? (
-            <div className="recent-log-list">
-              {recentEntries.map((entry) => (
-                <article key={entry.id} className="recent-log-item">
-                  <div className="recent-log-copy">
-                    <strong>{formatMass(entry.weight)}</strong>
-                    <small>{formatDayLabel(entry.date)} · {formatDateLabel(entry.date, { month: 'short', day: '2-digit', year: 'numeric' })}</small>
-                  </div>
-                  <button type="button" className="protocol-chip-button" disabled={deletingEntryId === entry.id} onClick={() => handleDelete(entry.id)}>
-                    {deletingEntryId === entry.id ? 'Borrando...' : 'Borrar'}
-                  </button>
-                </article>
-              ))}
-            </div>
-          ) : <p className="panel-placeholder">Los registros de peso recientes aparecerán aquí.</p>}
-        </SectionPanel>
-      </div>
-
-      <SectionPanel className="progress-footer-bar">
-        <form className="progress-log-form" onSubmit={handleSave}>
-          <label><span>Peso (kg)</span><input type="number" step="0.1" min="0" value={weightForm.weight} onChange={(event) => setWeightForm((current) => ({ ...current, weight: event.target.value }))} required /></label>
-          <label><span>Fecha</span><input type="date" value={weightForm.date} onChange={(event) => setWeightForm((current) => ({ ...current, date: event.target.value }))} disabled={Boolean(editingEntryId)} required /></label>
-          <button type="submit" className="protocol-secondary-button" disabled={isSaving}>{isSaving ? 'Guardando...' : editingEntryId ? 'Actualizar peso de hoy' : 'Registrar peso'}</button>
-        </form>
-
-        <div className="progress-footer-copy">
-          <strong>{summary?.latest_weight ? `Último peso ${formatMass(summary.latest_weight)}` : 'Aún no hay registros de peso'}</strong>
-          <span>{summary?.number_of_entries ? `${summary.number_of_entries} registros guardados` : 'Empieza a registrar tu peso para activar el análisis.'}</span>
-          {todayEntry && !editingEntryId ? <button type="button" className="protocol-chip-button" onClick={handleEditTodayEntry}>Modificar peso de hoy</button> : null}
-          {editingEntryId ? <button type="button" className="protocol-chip-button" onClick={handleCancelEdit}>Cancelar edición</button> : null}
+        <div className="progress-side-stack">
+          <SectionPanel title="Registros recientes">
+            {recentEntries.length > 0 ? (
+              <div className="recent-log-list">
+                {recentEntries.map((entry) => (
+                  <article key={entry.id} className="recent-log-item">
+                    <div className="recent-log-copy">
+                      <strong>{formatMass(entry.weight)}</strong>
+                      <small>{formatDayLabel(entry.date)} - {formatDateLabel(entry.date, { month: 'short', day: '2-digit', year: 'numeric' })}</small>
+                    </div>
+                    <button type="button" className="protocol-chip-button" disabled={deletingEntryId === entry.id} onClick={() => handleDelete(entry.id)}>
+                      {deletingEntryId === entry.id ? 'Borrando...' : 'Borrar'}
+                    </button>
+                  </article>
+                ))}
+              </div>
+            ) : <p className="panel-placeholder">Los registros de peso recientes apareceran aqui.</p>}
+          </SectionPanel>
         </div>
-
-        <button type="button" className="panel-cta-button" disabled={isApplyingAdjustment} onClick={handleApplyAdjustment}>
-          {isApplyingAdjustment ? 'Revisando...' : 'Revisar y aplicar ajuste semanal'}
-        </button>
-      </SectionPanel>
+      </div>
 
       <AdjustmentHistory entries={adjustmentHistory} isLoading={false} error="" />
 
       {saveMessage ? <p className="page-status page-status-success">{saveMessage}</p> : null}
-      {applyMessage ? <p className="page-status page-status-success">{applyMessage}</p> : null}
     </div>
   )
 }

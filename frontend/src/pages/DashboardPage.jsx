@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   CartesianGrid,
   ComposedChart,
@@ -10,6 +10,7 @@ import {
   YAxis,
 } from 'recharts'
 import * as dashboardApi from '../api/dashboardApi'
+import * as progressApi from '../api/progressApi'
 import CircularGauge from '../components/CircularGauge'
 import MetricCard from '../components/MetricCard'
 import SectionPanel from '../components/SectionPanel'
@@ -64,10 +65,10 @@ function getRelativeDayLabel(value) {
     return 'Ajustado hoy'
   }
   if (differenceInDays === 1) {
-    return 'Ajustado hace 1 día'
+    return 'Ajustado hace 1 dia'
   }
 
-  return `Ajustado hace ${differenceInDays} días`
+  return `Ajustado hace ${differenceInDays} dias`
 }
 
 function getProgressStatusNote(analysis) {
@@ -85,7 +86,7 @@ function getProgressStatusNote(analysis) {
     return 'Dentro del rango objetivo'
   }
 
-  return analysis.adjustment_reason || 'Revisión semanal lista'
+  return analysis.adjustment_reason || 'Revision semanal lista'
 }
 
 function buildWeightChartPayload(weightProgress) {
@@ -189,17 +190,28 @@ function DashboardTooltip({ active, payload }) {
       <strong>{formatDateLabel(pointDate, { month: 'short', day: '2-digit', year: 'numeric' })}</strong>
       {weightPoint ? <p>Peso real: {formatMass(weightPoint.value)}</p> : null}
       {regressionPoint ? <p>Tendencia: {formatMass(regressionPoint.value)}</p> : null}
-      {projectionPoint ? <p>Proyección: {formatMass(projectionPoint.value)}</p> : null}
+      {projectionPoint ? <p>Proyeccion: {formatMass(projectionPoint.value)}</p> : null}
       {calorieChange !== undefined ? <p>Ajuste: {calorieChange > 0 ? '+' : ''}{calorieChange} kcal</p> : null}
     </div>
   )
 }
 
+function needsDashboardAdjustmentSync(weightProgress) {
+  const latestAnalysis = weightProgress?.latest_analysis
+  if (!latestAnalysis?.can_analyze || !latestAnalysis.current_week_label) {
+    return false
+  }
+
+  const latestAdjustmentEvent = weightProgress?.adjustment_events?.[weightProgress.adjustment_events.length - 1] ?? null
+  return latestAdjustmentEvent?.week_label !== latestAnalysis.current_week_label
+}
+
 function DashboardPage() {
-  const { token } = useAuth()
+  const { refreshUser, token } = useAuth()
   const [overview, setOverview] = useState(null)
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const adjustmentSyncWeekRef = useRef('')
 
   async function loadOverview(activeToken = token) {
     if (!activeToken) {
@@ -224,11 +236,43 @@ function DashboardPage() {
 
   useEffect(() => {
     if (!token) {
-      return
+      return undefined
     }
 
-    loadOverview(token)
-  }, [token])
+    let isMounted = true
+
+    async function initializeDashboard() {
+      const response = await loadOverview(token)
+      if (!isMounted || !response) {
+        return
+      }
+
+      const currentWeekKey = response.weight_progress?.latest_analysis?.current_week_label ?? ''
+      if (!needsDashboardAdjustmentSync(response.weight_progress) || adjustmentSyncWeekRef.current === currentWeekKey) {
+        return
+      }
+
+      adjustmentSyncWeekRef.current = currentWeekKey
+
+      try {
+        const adjustmentResponse = await progressApi.applyWeeklyAdjustment(token)
+        if (adjustmentResponse.adjustment?.adjustment_applied) {
+          await refreshUser(token)
+        }
+        if (isMounted) {
+          await loadOverview(token)
+        }
+      } catch {
+        // El dashboard sigue siendo util aunque falle la sincronizacion automatica.
+      }
+    }
+
+    initializeDashboard()
+
+    return () => {
+      isMounted = false
+    }
+  }, [refreshUser, token])
 
   useEffect(() => {
     if (!token) {
@@ -266,8 +310,8 @@ function DashboardPage() {
       value: formatCompactNumber(summary?.current_weight, { maximumFractionDigits: 1, minimumFractionDigits: 1 }),
       suffix: 'KG',
       note: lastEntryDelta === null
-        ? 'Esperando más pesajes'
-        : `${formatSignedMass(lastEntryDelta, { maximumFractionDigits: 1, minimumFractionDigits: 1 }).toUpperCase()} DESDE EL ÚLTIMO REGISTRO`,
+        ? 'Esperando mas pesajes'
+        : `${formatSignedMass(lastEntryDelta, { maximumFractionDigits: 1, minimumFractionDigits: 1 }).toUpperCase()} DESDE EL ULTIMO REGISTRO`,
       noteTone: lastEntryDelta !== null && lastEntryDelta > 0 ? 'danger' : 'accent',
       icon: 'monitor_weight',
       highlight: true,
@@ -281,7 +325,7 @@ function DashboardPage() {
       icon: 'trending_down',
     },
     {
-      title: 'Calorías objetivo',
+      title: 'Calorias objetivo',
       value: formatCompactNumber(activeDiet?.target_calories ?? summary?.current_target_calories, { maximumFractionDigits: 0 }),
       suffix: 'KCAL',
       note: getRelativeDayLabel(latestAdjustmentEvent?.date).toUpperCase(),
@@ -301,7 +345,7 @@ function DashboardPage() {
   const dietMacroRows = [
     {
       key: 'protein',
-      label: 'Proteína',
+      label: 'Proteina',
       current: activeDiet?.actual_protein_grams ?? activeDiet?.protein_grams ?? summary?.current_macros?.protein_grams,
       target: activeDiet?.protein_grams ?? summary?.current_macros?.protein_grams,
     },
@@ -352,7 +396,7 @@ function DashboardPage() {
 
   return (
     <div className="dashboard-page">
-      {isLoading ? <p className="page-status">Cargando panel...</p> : null}
+      {isLoading ? <p className="page-status">Cargando dashboard...</p> : null}
       {!isLoading && error ? <p className="page-status page-status-error">{error}</p> : null}
 
       {!isLoading && !error ? (
@@ -366,13 +410,13 @@ function DashboardPage() {
           <div className="dashboard-main-layout">
             <div className="dashboard-main-column">
               <SectionPanel
-                title="Evolución del peso"
-                description="Peso a lo largo del tiempo y ajustes calóricos"
+                title="Evolucion del peso"
+                description="Peso a lo largo del tiempo y ajustes caloricos"
                 actions={(
                   <div className="legend-group">
                     <span><i className="legend-dot legend-dot-primary" />Peso</span>
                     <span><i className="legend-dot legend-dot-info" />Tendencia</span>
-                    <span><i className="legend-dot legend-dot-info legend-dot-dashed" />Proyección</span>
+                    <span><i className="legend-dot legend-dot-info legend-dot-dashed" />Proyeccion</span>
                     <span><i className="legend-dot legend-dot-danger" />Ajuste</span>
                   </div>
                 )}
@@ -435,7 +479,7 @@ function DashboardPage() {
                       </ComposedChart>
                     </ResponsiveContainer>
                   ) : (
-                    <p className="panel-placeholder">Los datos de peso aparecerán aquí después de tus primeros registros.</p>
+                    <p className="panel-placeholder">Los datos de peso apareceran aqui despues de tus primeros registros.</p>
                   )}
                 </div>
               </SectionPanel>
@@ -486,7 +530,7 @@ function DashboardPage() {
                     </div>
                   </div>
                 ) : (
-                  <p className="panel-placeholder">Genera una dieta para ver aquí su resumen.</p>
+                  <p className="panel-placeholder">Genera una dieta para ver aqui su resumen.</p>
                 )}
               </SectionPanel>
             </div>
@@ -500,12 +544,12 @@ function DashboardPage() {
                 />
 
                 <div className="interpretation-card">
-                  <span>{adherenceWeekLabel ? `Semana ${adherenceWeekLabel}` : 'Interpretación semanal'}</span>
-                  <p>{summary?.adherence_interpretation || adherence?.interpretation_message || 'Los datos de adherencia aparecerán aquí cuando empieces a registrar comidas.'}</p>
+                  <span>{adherenceWeekLabel ? `Semana ${adherenceWeekLabel}` : 'Interpretacion semanal'}</span>
+                  <p>{summary?.adherence_interpretation || adherence?.interpretation_message || 'Los datos de adherencia apareceran aqui cuando empieces a registrar comidas.'}</p>
                 </div>
               </SectionPanel>
 
-              <SectionPanel eyebrow="Resumen">
+              <SectionPanel eyebrow="Resumen" className="dashboard-summary-panel">
                 <div className="key-value-stack">
                   {insightRows.map((row) => (
                     <div key={row.label} className="key-value-row">
@@ -515,24 +559,24 @@ function DashboardPage() {
                   ))}
                 </div>
 
-                <button type="button" className="panel-cta-button" onClick={() => { window.location.hash = '#progress' }}>
+                <button type="button" className="panel-cta-button dashboard-summary-button" onClick={() => { window.location.hash = '#progress' }}>
                   Ver progreso
                 </button>
               </SectionPanel>
 
-              <SectionPanel eyebrow="Últimos ajustes">
+              <SectionPanel eyebrow="Ultimos ajustes">
                 {logItems.length > 0 ? (
                   <div className="system-log-list">
                     {logItems.map((item) => (
                       <article key={item.id} className="system-log-item">
-                        <small>{item.calorie_change === 0 ? 'Análisis' : 'Ajuste'}</small>
+                        <small>{item.week_label}</small>
                         <strong>{item.adjustment_reason}</strong>
                         <p>{formatDateLabel(item.date, { month: 'short', day: '2-digit', year: 'numeric' })}</p>
                       </article>
                     ))}
                   </div>
                 ) : (
-                  <p className="panel-placeholder">Los ajustes semanales aparecerán aquí cuando estén disponibles.</p>
+                  <p className="panel-placeholder">Los ajustes semanales apareceran aqui cuando esten disponibles.</p>
                 )}
               </SectionPanel>
             </div>

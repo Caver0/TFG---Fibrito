@@ -38,8 +38,7 @@ function RegisterPage({ onSwitch }) {
     <AuthShell>
       <AuthCard
         mode="register"
-        title="Protocolo de Reclutamiento"
-        subtitle="Crea un perfil de operativo en vivo conectado al sistema FIBRIT0."
+        title="Crea una cuenta"
         footer={(
           <p className="auth-switch-line">
             <span>Ya estas autorizado?</span>{' '}
@@ -51,7 +50,7 @@ function RegisterPage({ onSwitch }) {
       >
         <form className="auth-command-form" onSubmit={handleSubmit}>
           <label className="auth-field">
-            <span>Nombre de Operativo</span>
+            <span>Nombre</span>
             <div className="auth-input-shell">
               <i className="material-symbols-outlined" aria-hidden="true">
                 badge
@@ -59,7 +58,7 @@ function RegisterPage({ onSwitch }) {
               <input
                 name="name"
                 type="text"
-                placeholder="Designacion de atleta"
+                placeholder="Nombre de usuario"
                 autoComplete="name"
                 value={form.name}
                 onChange={handleChange}

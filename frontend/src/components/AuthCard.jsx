@@ -11,7 +11,7 @@ function AuthCard({
 
       <header className="auth-card-header">
         <h2>{title}</h2>
-        <p>{subtitle}</p>
+        {subtitle ? <p>{subtitle}</p> : null}
       </header>
 
       <div className="auth-card-body">{children}</div>

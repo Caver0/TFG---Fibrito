@@ -685,6 +685,46 @@
   gap: 8px;
 }
 
+.autosave-indicator {
+  display: grid;
+  gap: 4px;
+  min-width: 132px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(72, 72, 73, 0.18);
+  text-align: right;
+}
+
+.autosave-indicator small {
+  color: var(--lab-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.autosave-indicator strong {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.autosave-indicator-saving {
+  border-color: rgba(218, 249, 0, 0.22);
+}
+
+.autosave-indicator-saved {
+  color: var(--lab-lime-soft);
+  border-color: rgba(218, 249, 0, 0.2);
+  background: rgba(218, 249, 0, 0.08);
+}
+
+.autosave-indicator-error {
+  color: #ffd2c8;
+  border-color: rgba(255, 113, 98, 0.22);
+  background: rgba(255, 113, 98, 0.1);
+}
+
 .section-panel h3 {
   font-size: clamp(1.4rem, 2vw, 1.9rem);
   text-transform: uppercase;
@@ -1471,10 +1511,37 @@
 }
 
 .protocol-generator-toggle {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 10px;
   color: var(--lab-soft);
+  font-weight: 600;
+}
+
+.protocol-generator-custom-block {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(72, 72, 73, 0.18);
+}
+
+.protocol-generator-custom-panel {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transform: translateY(-8px);
+  transition: max-height 220ms ease, opacity 220ms ease, transform 220ms ease;
+}
+
+.protocol-generator-custom-panel-active {
+  max-height: 420px;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
 }
 
 .protocol-generator-percentages,
@@ -1812,6 +1879,17 @@
   color: var(--lab-lime);
   background: rgba(218, 249, 0, 0.1);
   border-color: rgba(218, 249, 0, 0.2);
+}
+
+.protocol-secondary-button-subtle {
+  background: transparent;
+  border: 1px solid rgba(218, 249, 0, 0.14);
+  color: var(--lab-soft);
+}
+
+.protocol-secondary-button-subtle:hover {
+  border-color: rgba(218, 249, 0, 0.34);
+  color: var(--lab-lime-soft);
 }
 
 .profile-goal-option.profile-goal-option-active,
@@ -2194,44 +2272,190 @@
 }
 
 .progress-hero-grid {
-  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr) minmax(260px, 0.8fr);
+  grid-template-columns: minmax(320px, 1.05fr) minmax(420px, 1.25fr);
+  align-items: stretch;
+  gap: 16px;
 }
 
-.progress-hero-card h3,
-.progress-hero-card h3 span {
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: clamp(1.7rem, 2.2vw, 2.4rem);
-  line-height: 1.1;
-  letter-spacing: -0.05em;
-  text-transform: none;
+.progress-hero-card.section-panel,
+.progress-summary-card.section-panel {
+  padding: 20px 22px;
 }
 
-.progress-hero-copy h3 span {
-  color: var(--lab-lime);
-}
-
-.progress-hero-copy p {
-  max-width: 28ch;
-}
-
-.progress-gauge-card {
+.progress-summary-card {
   display: grid;
-  align-content: center;
-  justify-items: center;
+  gap: 14px;
 }
 
-.progress-quick-stats {
+.progress-summary-card .section-panel-header {
+  margin-bottom: 0;
+}
+
+.progress-summary-layout {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.72fr) minmax(0, 1.28fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.progress-summary-left {
+  display: grid;
+  place-items: center;
+  align-content: center;
+}
+
+.progress-summary-left .circular-gauge {
+  width: min(100%, 168px);
+  margin: 0 auto;
+}
+
+.progress-summary-left .circular-gauge-center strong {
+  font-size: clamp(2.2rem, 2.8vw, 2.7rem);
+}
+
+.progress-summary-left .circular-gauge-center span {
+  font-size: 0.74rem;
+}
+
+.progress-summary-left .circular-gauge-center small {
+  font-size: 0.7rem;
+}
+
+.progress-summary-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.progress-summary-stat {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.progress-summary-right {
+  align-self: stretch;
+  align-content: center;
+}
+
+.progress-summary-stat {
+  min-height: 0;
+  align-content: start;
+}
+
+.progress-summary-stat small,
+.progress-summary-meta small {
+  color: var(--lab-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.progress-summary-stat strong,
+.progress-summary-meta strong {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: clamp(1.45rem, 2vw, 1.9rem);
+  line-height: 1;
+}
+
+.progress-summary-stat-danger {
+  border-left: 3px solid var(--lab-red);
+}
+
+.progress-summary-status {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(72, 72, 73, 0.18);
+}
+
+.progress-summary-status-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.progress-summary-status-head strong {
+  color: var(--lab-text);
+}
+
+.progress-summary-status-head span {
+  color: var(--lab-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.progress-summary-status p {
+  margin: 0;
+  color: var(--lab-muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.progress-summary-status-success {
+  border-color: rgba(218, 249, 0, 0.22);
+}
+
+.progress-summary-status-muted {
+  border-color: rgba(72, 72, 73, 0.28);
+}
+
+.progress-summary-status-error {
+  border-color: rgba(255, 113, 98, 0.22);
+}
+
+.progress-side-stack {
   display: grid;
   gap: 18px;
 }
 
-.progress-quick-card strong {
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: clamp(2rem, 3vw, 3rem);
+.progress-weight-card {
+  display: grid;
+  gap: 12px;
 }
 
-.progress-quick-card-danger {
-  border-left: 3px solid var(--lab-red);
+.progress-weight-card .section-panel-header {
+  margin-bottom: 2px;
+}
+
+.progress-weight-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.progress-weight-submit {
+  grid-column: 1 / -1;
+  min-height: 48px;
+}
+
+.progress-weight-meta,
+.progress-adjustment-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.progress-weight-meta > div,
+.progress-adjustment-summary > div {
+  display: grid;
+  gap: 6px;
+  padding: 11px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.progress-weight-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .progress-bottom-layout,
@@ -2366,10 +2590,80 @@
   min-height: 58px;
 }
 
-.profile-protocol-row {
+.profile-protocol-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.profile-restrictions-panel .section-panel-header {
+  margin-bottom: 16px;
+}
+
+.profile-restrictions-panel .profile-protocol-row {
+  align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding-inline: 16px;
+  min-height: 0;
+  padding: 14px 16px;
+  transition: background 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+
+.profile-restrictions-panel .profile-protocol-row-active {
+  background: rgba(218, 249, 0, 0.08);
+  border-color: rgba(218, 249, 0, 0.22);
+}
+
+.profile-protocol-copy,
+.profile-protocol-copy div {
+  display: grid;
+  gap: 6px;
+}
+
+.profile-protocol-copy div {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.profile-protocol-copy small {
+  color: var(--lab-muted);
+  font-size: 0.72rem;
+}
+
+.profile-restrictions-panel .profile-protocol-row-active .profile-protocol-copy small {
+  color: var(--lab-lime-soft);
+}
+
+.profile-visual-switch {
+  position: relative;
+  width: 48px;
+  height: 28px;
+  border-radius: 999px;
+  background: #303033;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+  transition: background 180ms ease, border-color 180ms ease;
+}
+
+.profile-visual-switch-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #7b7b7d;
+  transition: transform 180ms ease, background 180ms ease;
+}
+
+.profile-visual-switch-active {
+  background: rgba(218, 249, 0, 0.22);
+  border-color: rgba(218, 249, 0, 0.34);
+}
+
+.profile-visual-switch-active .profile-visual-switch-thumb {
+  transform: translateX(20px);
+  background: var(--lab-lime);
 }
 
 .profile-protocol-row div {
@@ -2421,6 +2715,16 @@
   gap: 18px;
 }
 
+.dashboard-summary-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.dashboard-summary-button {
+  width: 100%;
+  margin-top: 4px;
+}
+
 .page-status {
   margin: 0;
   padding: 16px 18px;
@@ -2465,6 +2769,11 @@
 }
 
 @media (max-width: 960px) {
+  .autosave-indicator {
+    min-width: 0;
+    text-align: left;
+  }
+
   .app-loading-screen,
   .auth-shell,
   .app-shell {
@@ -2481,7 +2790,9 @@
   .lab-topbar-title,
   .lab-topbar-actions,
   .section-panel-header,
+  .protocol-generator-custom-block,
   .progress-footer-bar,
+  .profile-footer-bar,
   .lab-nav {
     flex-direction: column;
     align-items: stretch;
@@ -2499,10 +2810,29 @@
   .replacement-lab-grid,
   .protocol-generator-percentages,
   .progress-log-form,
+  .progress-weight-form,
+  .progress-weight-meta,
+  .progress-adjustment-summary,
+  .progress-summary-layout,
+  .progress-summary-meta,
   .profile-biometric-grid,
   .profile-calibration-strip,
+  .profile-protocol-grid,
   .adherence-heatmap-grid {
     grid-template-columns: 1fr;
+  }
+
+  .progress-summary-left {
+    justify-items: center;
+  }
+
+  .progress-summary-status-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .progress-summary-card {
+    width: 100%;
   }
 
   .auth-card {
@@ -2631,8 +2961,6 @@
 }
 
 .adjustment-history-table .adj-week-cell {
-  font-weight: 700;
-  color: var(--lab-text);
   white-space: nowrap;
 }
 
@@ -2640,6 +2968,28 @@
   font-family: 'Space Grotesk', sans-serif;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.adj-week-cell,
+.adj-weight-cell,
+.adj-decision-cell,
+.adj-outcome-cell {
+  display: grid;
+  gap: 6px;
+}
+
+.adj-week-cell strong,
+.adj-weight-cell strong,
+.adj-decision-cell strong,
+.adj-outcome-cell strong {
+  color: var(--lab-text);
+}
+
+.adj-week-cell small,
+.adj-decision-cell small,
+.adj-outcome-cell small {
+  color: var(--lab-muted);
+  line-height: 1.5;
 }
 
 .adj-change-positive { color: var(--lab-lime-soft); }

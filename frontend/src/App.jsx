@@ -17,9 +17,9 @@ import { formatDateLabel, formatGoalPhase } from './utils/stitch'
 const APP_VIEWS = [
   {
     id: 'dashboard',
-    sidebarLabel: 'Panel',
+    sidebarLabel: 'Dashboard',
     icon: 'dashboard',
-    topbarTitle: 'PANEL',
+    topbarTitle: 'DASHBOARD',
     getTopbarContext: (user) => formatGoalPhase(user?.goal),
   },
   {
