@@ -265,6 +265,10 @@ function DietsPage() {
   const activeGenerationStage = GENERATION_LOADING_STAGES[
     Math.min(generationStageIndex, GENERATION_LOADING_STAGES.length - 1)
   ]
+  const mealCount = activeDiet?.meals?.length || 0
+  const activeDietMealsGridClassName = `meal-protocol-grid meal-protocol-grid-${mealCount}`
+  const historicalMealCount = selectedHistoricalDiet?.meals?.length || 0
+  const selectedHistoricalMealsGridClassName = `meal-protocol-grid meal-protocol-grid-${historicalMealCount}`
 
   function resetReplacementSearchState() {
     setReplacementSearchQuery('')
@@ -1246,7 +1250,7 @@ function DietsPage() {
             </p>
           ) : null}
 
-          <div className="meal-protocol-grid">
+          <div className={activeDietMealsGridClassName}>
             {activeDiet.meals.map((meal) => {
               const visual = getMealVisual(meal.meal_number, meal.meal_role, meal.meal_label)
               const adherenceRecord = adherenceRecordsByMeal[meal.meal_number]
@@ -1576,7 +1580,8 @@ function DietsPage() {
                       <div className="diet-history-row-head">
                         <div className="diet-history-date-block">
                           <strong>{formatDateLabel(diet.created_at, { month: 'short', day: '2-digit', year: 'numeric' })}</strong>
-                          <small>{diet.meals_count} comidas</small>
+                          {' '}
+                          <small>· {diet.meals_count} comidas</small>
                         </div>
 
                         <div className="diet-history-row-tags">
@@ -1684,7 +1689,7 @@ function DietsPage() {
             </article>
           </div>
 
-          <div className="meal-protocol-grid">
+          <div className={selectedHistoricalMealsGridClassName}>
             {selectedHistoricalDiet.meals.map((meal) => (
               <HistoryDietMealCard key={`history-preview-${selectedHistoricalDiet.id}-${meal.meal_number}`} meal={meal} />
             ))}

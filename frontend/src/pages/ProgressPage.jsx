@@ -14,7 +14,6 @@ import * as adherenceApi from '../api/adherenceApi'
 import * as dashboardApi from '../api/dashboardApi'
 import * as progressApi from '../api/progressApi'
 import * as weightApi from '../api/weightApi'
-import AdjustmentHistory from '../components/AdjustmentHistory'
 import CircularGauge from '../components/CircularGauge'
 import SectionPanel from '../components/SectionPanel'
 import { useAuth } from '../context/AuthContext'
@@ -23,6 +22,7 @@ import {
   formatCompactNumber,
   formatDateLabel,
   formatDayLabel,
+  formatMacro,
   formatMass,
   formatPercent,
   resolveConfidencePercentage,
@@ -219,6 +219,59 @@ function resolveAdjustmentOutcomeLabel(adjustmentStatus, adjustmentEntry) {
   return formatSignedCalories(adjustmentStatus.appliedChange)
 }
 
+function formatWeeklyWeightValue(value) {
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue)) {
+    return 'N/A'
+  }
+
+  return formatCompactNumber(numericValue, {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 2,
+  })
+}
+
+function resolveAdjustmentHistoryDecision(entry) {
+  if (entry.adjustment_applied) {
+    return {
+      label: 'Ajuste aplicado',
+      note: 'Se actualizo el objetivo semanal.',
+    }
+  }
+
+  if (entry.calorie_change === 0) {
+    return {
+      label: 'Sin ajuste',
+      note: 'La tendencia se mantuvo estable.',
+    }
+  }
+
+  return {
+    label: 'Sin ajuste',
+    note: 'La recomendacion no se aplico por fiabilidad o cobertura.',
+  }
+}
+
+function renderAdjustmentHistoryOutcome(entry) {
+  if (entry.adjustment_applied) {
+    return formatSignedCalories(entry.calorie_change)
+  }
+
+  return 'Sin cambios'
+}
+
+function renderAdjustmentHistoryMacroSummary(entry) {
+  if (!entry.adjustment_applied) {
+    return 'Macros sin cambios'
+  }
+
+  if (!entry.new_target_macros) {
+    return 'Macros no disponibles'
+  }
+
+  return `P ${formatMacro(entry.new_target_macros.protein_grams)} / C ${formatMacro(entry.new_target_macros.carb_grams)} / G ${formatMacro(entry.new_target_macros.fat_grams)}`
+}
+
 function ProgressPage() {
   const { refreshUser, token } = useAuth()
   const [entries, setEntries] = useState([])
@@ -252,6 +305,7 @@ function ProgressPage() {
   const [isApplyingAdjustment, setIsApplyingAdjustment] = useState(false)
   const [deletingEntryId, setDeletingEntryId] = useState('')
   const [editingEntryId, setEditingEntryId] = useState('')
+  const [isAdjustmentHistoryExpanded, setIsAdjustmentHistoryExpanded] = useState(false)
 
   async function loadWeightHistory(activeToken = token) {
     if (!activeToken) return []
@@ -722,7 +776,93 @@ function ProgressPage() {
         </div>
       </div>
 
-      <AdjustmentHistory entries={adjustmentHistory} isLoading={false} error="" />
+      <SectionPanel
+        eyebrow="Historial de ajustes"
+        title="Analisis semanales"
+        description="Cada fila resume la semana analizada, el peso inicial y final, la decision tomada y el ajuste aplicado."
+        actions={adjustmentHistory.length > 0 ? (
+          <button
+            type="button"
+            className="secondary-button collapsible-toggle"
+            onClick={() => setIsAdjustmentHistoryExpanded((value) => !value)}
+          >
+            {isAdjustmentHistoryExpanded ? 'Ocultar historial' : `Ver historial (${adjustmentHistory.length})`}
+          </button>
+        ) : null}
+      >
+        {adjustmentHistory.length === 0 ? (
+          <p className="info-note">Todavia no se ha guardado ningun analisis semanal.</p>
+        ) : null}
+
+        {adjustmentHistory.length > 0 && isAdjustmentHistoryExpanded ? (
+          <div className="adjustment-history-table-wrap">
+            <table className="adjustments-history-table">
+              <thead>
+                <tr>
+                  <th>Semana</th>
+                  <th>Peso inicial / final</th>
+                  <th>Cambio semanal</th>
+                  <th>Decision</th>
+                  <th>Ajuste aplicado</th>
+                  <th>Detalle</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {adjustmentHistory.map((entry) => {
+                  const weeklyChange = entry.weekly_change ?? null
+                  const changeClass =
+                    weeklyChange === null
+                      ? 'adj-change-neutral'
+                      : weeklyChange > 0
+                        ? 'adj-change-positive'
+                        : weeklyChange < 0
+                          ? 'adj-change-negative'
+                          : 'adj-change-neutral'
+                  const decision = resolveAdjustmentHistoryDecision(entry)
+
+                  return (
+                    <tr key={entry.id || `${entry.current_week_label}-${entry.previous_week_label}`}>
+                      <td className="adj-week-cell">
+                        <strong>{entry.current_week_label || 'Semana actual'}</strong>
+                        <small>{entry.previous_week_label || 'Sin semana comparada'}</small>
+                      </td>
+
+                      <td className="adj-weight-cell">
+                        <strong>
+                          {formatWeeklyWeightValue(entry.previous_week_avg)} &rarr; {formatWeeklyWeightValue(entry.current_week_avg)}
+                        </strong>
+                      </td>
+
+                      <td className="adj-change-cell">
+                        <strong className={changeClass}>
+                          {weeklyChange !== null
+                            ? formatSignedMass(weeklyChange, { maximumFractionDigits: 2, minimumFractionDigits: 2 })
+                            : 'N/A'}
+                        </strong>
+                      </td>
+
+                      <td className="adj-decision-cell">
+                        <strong>{decision.label}</strong>
+                        <small>{decision.note}</small>
+                      </td>
+
+                      <td className="adj-outcome-cell">
+                        <strong>{renderAdjustmentHistoryOutcome(entry)}</strong>
+                        <small>{renderAdjustmentHistoryMacroSummary(entry)}</small>
+                      </td>
+
+                      <td className="adj-reason-cell">
+                        {entry.adjustment_reason || 'Sin detalle disponible'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </SectionPanel>
 
       {saveMessage ? <p className="page-status page-status-success">{saveMessage}</p> : null}
     </div>

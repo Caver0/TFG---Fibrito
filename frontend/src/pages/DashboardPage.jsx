@@ -366,6 +366,7 @@ function DashboardPage() {
 
   const dietMeals = activeDiet?.calories_per_meal ?? []
   const hasExtendedDietMeals = dietMeals.length > 3
+  const hasOddDietMeals = dietMeals.length % 2 !== 0
   const insightRows = [
     {
       label: 'Objetivo',
@@ -515,7 +516,7 @@ function DashboardPage() {
                       })}
                     </div>
 
-                    <div className={`dashboard-meal-stack ${hasExtendedDietMeals ? 'dashboard-meal-stack-extended' : ''}`.trim()}>
+                    <div className={`dashboard-meal-stack ${hasExtendedDietMeals ? 'dashboard-meal-stack-extended' : ''} ${hasOddDietMeals ? 'dashboard-meal-stack-odd' : ''}`.trim()}>
                       {dietMeals.map((meal) => (
                         <article key={meal.meal_number} className="dashboard-meal-preview">
                           <div>

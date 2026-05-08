@@ -1287,9 +1287,17 @@
   grid-template-columns: 1fr;
 }
 
+.dashboard-meal-stack {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
 .dashboard-meal-stack-extended {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 14px;
+}
+
+.dashboard-meal-stack-odd .dashboard-meal-preview:last-child {
+  grid-column: 1 / -1;
 }
 
 .macro-line {
@@ -1850,8 +1858,32 @@
 
 .meal-protocol-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 18px;
+}
+
+.meal-protocol-grid-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.meal-protocol-grid-4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.meal-protocol-grid-5 {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.meal-protocol-grid-5 .protocol-meal-card {
+  grid-column: span 2;
+}
+
+.meal-protocol-grid-5 .protocol-meal-card:nth-last-child(-n + 2) {
+  grid-column: span 3;
+}
+
+.meal-protocol-grid-6 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .protocol-meal-card {
@@ -1861,7 +1893,7 @@
 
 .protocol-meal-hero {
   position: relative;
-  min-height: 200px;
+  min-height: 180px;
   overflow: hidden;
   --meal-accent: rgba(218, 249, 0, 0.24);
   --meal-accent-soft: rgba(218, 249, 0, 0.12);
@@ -1996,15 +2028,15 @@
 
 .protocol-meal-body {
   display: grid;
-  gap: 16px;
-  padding: 22px;
+  gap: 14px;
+  padding: 18px;
 }
 
 .protocol-food-row {
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 12px;
+  gap: 12px;
+  padding-bottom: 10px;
   border-bottom: 1px solid rgba(72, 72, 73, 0.18);
 }
 
@@ -2029,7 +2061,7 @@
   flex: 1 1 320px;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -2037,7 +2069,7 @@
 .protocol-food-macros {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .protocol-food-breakdown span,
@@ -3060,6 +3092,11 @@
   .lab-content {
     overflow: visible;
   }
+
+  .meal-protocol-grid-5 .protocol-meal-card,
+  .meal-protocol-grid-5 .protocol-meal-card:nth-last-child(-n + 2) {
+    grid-column: auto;
+  }
 }
 
 @media (max-width: 960px) {
@@ -3226,104 +3263,137 @@
   border: 1px solid rgba(72, 72, 73, 0.18);
 }
 
-.adjustment-history-table {
+.adjustments-history-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 0.88rem;
 }
 
-.adjustment-history-table thead tr {
+.adjustments-history-table thead tr {
   background: var(--lab-surface-3);
 }
 
-.adjustment-history-table th {
-  padding: 13px 16px;
+.adjustments-history-table th,
+.adjustments-history-table td {
+  padding: 14px 16px;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   text-align: left;
+}
+
+.adjustments-history-table th {
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--lab-muted);
   white-space: nowrap;
-  border-bottom: 1px solid rgba(72, 72, 73, 0.22);
 }
 
-.adjustment-history-table td {
-  padding: 13px 16px;
-  vertical-align: middle;
-  border-bottom: 1px solid rgba(72, 72, 73, 0.10);
+.adjustments-history-table td {
   color: var(--lab-soft);
+  line-height: 1.5;
 }
 
-.adjustment-history-table tbody tr:last-child td {
-  border-bottom: 0;
+.adjustments-history-table td strong,
+.adjustments-history-table td small {
+  display: block;
+  margin: 0;
 }
 
-.adjustment-history-table tbody tr:hover td {
-  background: rgba(72, 72, 73, 0.08);
-}
-
-.adjustment-history-table .adj-week-cell {
-  white-space: nowrap;
-}
-
-.adjustment-history-table .adj-change-cell {
-  font-family: 'Space Grotesk', sans-serif;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.adj-week-cell,
-.adj-weight-cell,
-.adj-decision-cell,
-.adj-outcome-cell {
-  display: grid;
-  gap: 6px;
-}
-
-.adj-week-cell strong,
-.adj-weight-cell strong,
-.adj-decision-cell strong,
-.adj-outcome-cell strong {
+.adjustments-history-table td strong {
   color: var(--lab-text);
 }
 
-.adj-week-cell small,
-.adj-decision-cell small,
-.adj-outcome-cell small {
+.adjustments-history-table td small {
+  margin-top: 4px;
   color: var(--lab-muted);
-  line-height: 1.5;
+  line-height: 1.45;
+}
+
+.adjustments-history-table th:nth-child(1),
+.adjustments-history-table td:nth-child(1) {
+  width: 12%;
+}
+
+.adjustments-history-table th:nth-child(2),
+.adjustments-history-table td:nth-child(2) {
+  width: 15%;
+}
+
+.adjustments-history-table th:nth-child(3),
+.adjustments-history-table td:nth-child(3) {
+  width: 13%;
+}
+
+.adjustments-history-table th:nth-child(4),
+.adjustments-history-table td:nth-child(4) {
+  width: 18%;
+}
+
+.adjustments-history-table th:nth-child(5),
+.adjustments-history-table td:nth-child(5) {
+  width: 18%;
+}
+
+.adjustments-history-table th:nth-child(6),
+.adjustments-history-table td:nth-child(6) {
+  width: 24%;
+}
+
+.adjustments-history-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.adjustments-history-table tbody tr:hover td {
+  background: rgba(72, 72, 73, 0.08);
+}
+
+.adjustments-history-table td:nth-child(1),
+.adjustments-history-table td:nth-child(2),
+.adjustments-history-table td:nth-child(3) {
+  white-space: nowrap;
+}
+
+.adjustments-history-table td:nth-child(6) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.adjustments-history-table .adj-change-cell strong {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
 }
 
 .adj-change-positive { color: var(--lab-lime-soft); }
 .adj-change-negative { color: var(--lab-red); }
 .adj-change-neutral  { color: var(--lab-muted); }
 
-.adj-cal-cell {
-  white-space: nowrap;
-  font-family: 'Space Grotesk', sans-serif;
-}
-
-.adj-arrow {
-  color: var(--lab-muted);
-  margin: 0 4px;
-  font-size: 0.8em;
-}
-
 .adj-reason-cell {
-  max-width: 340px;
-  line-height: 1.5;
   color: var(--lab-muted);
   font-size: 0.84rem;
 }
 
 @media (max-width: 960px) {
-  .adjustment-history-table th,
-  .adjustment-history-table td {
+  .adjustments-history-table th,
+  .adjustments-history-table td {
     padding: 10px 12px;
   }
+}
+.system-log-list {
+  display: grid;
+  gap: 10px;
+}
 
-  .adj-reason-cell {
-    max-width: 200px;
-  }
+.system-log-item {
+  display: grid;
+  gap: 6px;
+}
+
+.system-log-item small,
+.system-log-item strong,
+.system-log-item p {
+  display: block;
+  margin: 0;
 }
