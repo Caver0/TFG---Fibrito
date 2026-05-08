@@ -37,11 +37,11 @@ function LoginPage({ onRecoverPassword, onSwitch }) {
     <AuthShell>
       <AuthCard
         mode="login"
-        title="Iniciar sesion"
+        title="Iniciar sesión"
         subtitle="Accede a tu perfil para continuar"
         footer={(
           <p className="auth-switch-line">
-            <span>Aun no tienes cuenta?</span>{' '}
+            <span>¿Aún no tienes cuenta?</span>{' '}
             <button type="button" className="auth-inline-link" onClick={onSwitch}>
               Crear cuenta
             </button>
@@ -69,13 +69,13 @@ function LoginPage({ onRecoverPassword, onSwitch }) {
 
           <label className="auth-field">
             <span className="auth-field-row">
-              <span>Contrasena</span>
+              <span>Contraseña</span>
               <button
                 type="button"
                 className="auth-inline-link auth-inline-link-utility"
                 onClick={onRecoverPassword}
               >
-                Recuperar contrasena
+                Recuperar contraseña
               </button>
             </span>
             <div className="auth-input-shell">
@@ -102,7 +102,7 @@ function LoginPage({ onRecoverPassword, onSwitch }) {
             className="auth-primary-button"
             disabled={isSubmitting}
           >
-            <span>{isSubmitting ? 'Entrando a Fibrito...' : 'Entrar al Fibrito'}</span>
+            <span>{isSubmitting ? 'Entrando...' : 'Entrar'}</span>
             <i className="material-symbols-outlined" aria-hidden="true">
               arrow_forward
             </i>

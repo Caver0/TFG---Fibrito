@@ -4,6 +4,7 @@ function AuthCard({
   children,
   footer,
   mode = 'login',
+  bodyClassName = '',
 }) {
   return (
     <section className={`auth-card auth-card-${mode}`.trim()}>
@@ -14,7 +15,7 @@ function AuthCard({
         {subtitle ? <p>{subtitle}</p> : null}
       </header>
 
-      <div className="auth-card-body">{children}</div>
+      <div className={`auth-card-body ${bodyClassName}`.trim()}>{children}</div>
 
       {footer ? <footer className="auth-card-footer">{footer}</footer> : null}
     </section>

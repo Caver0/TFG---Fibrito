@@ -41,9 +41,9 @@ function RegisterPage({ onSwitch }) {
         title="Crea una cuenta"
         footer={(
           <p className="auth-switch-line">
-            <span>Ya estas autorizado?</span>{' '}
+            <span>¿Ya tienes cuenta?</span>{' '}
             <button type="button" className="auth-inline-link" onClick={onSwitch}>
-              Volver a la Puerta de Acceso
+              Volver a iniciar sesión
             </button>
           </p>
         )}
@@ -68,7 +68,7 @@ function RegisterPage({ onSwitch }) {
           </label>
 
           <label className="auth-field">
-            <span>Correo</span>
+            <span>Correo electrónico</span>
             <div className="auth-input-shell">
               <i className="material-symbols-outlined" aria-hidden="true">
                 alternate_email
@@ -86,7 +86,7 @@ function RegisterPage({ onSwitch }) {
           </label>
 
           <label className="auth-field">
-            <span>Clave de Acceso Segura</span>
+            <span>Contraseña</span>
             <div className="auth-input-shell">
               <i className="material-symbols-outlined" aria-hidden="true">
                 lock
@@ -94,7 +94,7 @@ function RegisterPage({ onSwitch }) {
               <input
                 name="password"
                 type="password"
-                placeholder="Minimo 8 caracteres"
+                placeholder="Mínimo 8 caracteres"
                 autoComplete="new-password"
                 value={form.password}
                 onChange={handleChange}
@@ -107,7 +107,7 @@ function RegisterPage({ onSwitch }) {
           {error ? <p className="auth-feedback auth-feedback-error">{error}</p> : null}
 
           <button type="submit" className="auth-primary-button" disabled={isSubmitting}>
-            <span>{isSubmitting ? 'Reclutando Operativo...' : 'Iniciar Reclutamiento'}</span>
+            <span>{isSubmitting ? 'Creando cuenta...' : 'Crear cuenta'}</span>
             <i className="material-symbols-outlined" aria-hidden="true">
               arrow_forward
             </i>
