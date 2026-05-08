@@ -656,7 +656,7 @@ function ProgressPage() {
       >
         <div className="dashboard-chart-wrap">
           {chartSeries.length > 0 ? (
-            <ResponsiveContainer width="100%" height={340}>
+            <ResponsiveContainer width="100%" height={280}>
               <ComposedChart data={chartSeries}>
                 <CartesianGrid stroke="rgba(118, 117, 118, 0.18)" strokeDasharray="4 6" vertical={false} />
                 <XAxis dataKey="axisLabel" axisLine={false} tickLine={false} tick={{ fill: '#adacab', fontSize: 10, fontWeight: 700 }} />
@@ -677,7 +677,7 @@ function ProgressPage() {
           actions={<div className="legend-group"><span><i className="legend-dot legend-dot-primary" />Cuenta 1</span><span><i className="legend-dot legend-dot-info" />Cuenta 0.5</span><span><i className="legend-dot legend-dot-muted" />Cuenta 0</span></div>}
         >
           <div className="dashboard-chart-wrap">
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={250}>
               <BarChart data={weeklyRegisteredMealsSeries} margin={{ top: 8, right: 8, bottom: 8, left: -10 }}>
                 <CartesianGrid stroke="rgba(118, 117, 118, 0.18)" strokeDasharray="4 6" vertical={false} />
                 <XAxis

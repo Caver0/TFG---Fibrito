@@ -303,6 +303,7 @@ function DashboardPage() {
   const adherenceWeekLabel = adherence?.week_label ?? latestAnalysis?.current_week_label ?? null
   const confidenceScore = resolveConfidencePercentage(adherence)
   const registeredAdherenceScore = resolveRegisteredAdherencePercentage(adherence)
+  const isDashboardEmpty = !activeDiet && chartPayload.sourcePoints.length === 0
 
   const metricCards = [
     {
@@ -395,7 +396,7 @@ function DashboardPage() {
   const logItems = weightProgress?.adjustment_events?.slice(-3).reverse() ?? []
 
   return (
-    <div className="dashboard-page">
+    <div className={`dashboard-page ${isDashboardEmpty ? 'dashboard-page-empty' : ''}`.trim()}>
       {isLoading ? <p className="page-status">Cargando dashboard...</p> : null}
       {!isLoading && error ? <p className="page-status page-status-error">{error}</p> : null}
 
@@ -423,7 +424,7 @@ function DashboardPage() {
               >
                 <div className="dashboard-chart-wrap">
                   {chartPayload.sourcePoints.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={360}>
+                    <ResponsiveContainer width="100%" height={260}>
                       <ComposedChart data={chartPayload.sourcePoints}>
                         <CartesianGrid stroke="rgba(118, 117, 118, 0.18)" strokeDasharray="4 6" vertical={false} />
                         <XAxis
@@ -539,6 +540,7 @@ function DashboardPage() {
               <SectionPanel eyebrow="Fiabilidad" className="dashboard-gauge-panel">
                 <CircularGauge
                   value={confidenceScore}
+                  size={170}
                   label="Fiabilidad"
                   caption={adherenceWeekLabel ? `Semana ${adherenceWeekLabel}` : undefined}
                 />
