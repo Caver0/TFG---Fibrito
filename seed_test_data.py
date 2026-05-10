@@ -282,10 +282,10 @@ def build_adherence(user_id, diet_id_map: dict) -> list:
         0: ("completed", 1.00),
         1: ("completed", 1.00),
         2: ("completed", 1.00),
-        3: ("completed", 1.00),
+        3: ("modified",  0.75),
         4: ("modified",  0.75),
         5: ("omitted",   0.00),
-        6: ("completed", 1.00),
+        6: ("omitted",   0.00),
     }
 
     for diet_days_ago, diet_id in sorted(diet_id_map.items(), reverse=True):
@@ -298,11 +298,28 @@ def build_adherence(user_id, diet_id_map: dict) -> list:
 
             for meal_num in range(1, 5):
                 base_status, base_score = weekday_pattern[weekday]
-                # La comida 3 se omite también en sábado y viernes tarde
-                if meal_num == 3 and weekday in (4, 5):
+                if (
+                    (weekday == 2 and meal_num == 4)
+                    or (weekday in (3, 4, 5) and meal_num == 4)
+                    or (weekday == 6 and meal_num in (3, 4))
+                ):
+                    continue
+                elif weekday == 1 and meal_num == 4:
+                    status, score = "modified", 0.75
+                elif weekday == 2 and meal_num == 3:
+                    status, score = "modified", 0.75
+                elif weekday in (3, 4) and meal_num == 1:
+                    status, score = "completed", 1.0
+                elif weekday in (3, 4) and meal_num == 2:
+                    status, score = "modified", 0.75
+                elif weekday in (3, 4) and meal_num == 3:
                     status, score = "omitted", 0.0
-                elif meal_num == 2 and weekday == 6:
-                    status, score = "modified", 0.65
+                elif weekday == 5 and meal_num in (1, 2, 3):
+                    status, score = "omitted", 0.0
+                elif weekday == 6 and meal_num == 1:
+                    status, score = "completed", 1.0
+                elif weekday == 6 and meal_num == 2:
+                    status, score = "omitted", 0.0
                 else:
                     status, score = base_status, base_score
 
@@ -437,7 +454,7 @@ def seed(db, user_id_str: str):
     print("  • Dietas: macros generados por el backend (comparar G real vs target ~62g)")
     print("  • Dietas: alimentos preferidos (salmón, aguacate, quinoa, yogur, almendras)")
     print("  • Dietas: sin tofu ni kale (alimentos no deseados)")
-    print("  • Adherencia: ~85% semanal, caídas en fin de semana")
+    print("  • Adherencia: más irregular y con cobertura incompleta para que cambie el dashboard")
 
 
 if __name__ == "__main__":

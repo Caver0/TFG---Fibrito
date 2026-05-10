@@ -334,10 +334,10 @@ function DashboardPage() {
       icon: 'bolt',
     },
     {
-      title: 'Fiabilidad',
-      value: formatCompactNumber(confidenceScore, { maximumFractionDigits: 1, minimumFractionDigits: 1 }),
+      title: 'Adherencia',
+      value: formatCompactNumber(registeredAdherenceScore, { maximumFractionDigits: 1, minimumFractionDigits: 1 }),
       suffix: '%',
-      note: (adherenceWeekLabel ? `Semana ${adherenceWeekLabel}` : 'Esperando datos semanales').toUpperCase(),
+      note: (adherenceWeekLabel ? `Semana ${adherenceWeekLabel}` : 'Esperando registros').toUpperCase(),
       noteTone: 'accent',
       icon: 'verified',
     },
