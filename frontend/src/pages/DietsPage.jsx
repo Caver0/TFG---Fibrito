@@ -238,6 +238,9 @@ function DietsPage() {
   const latestDietRequestRef = useRef(0)
   const dietHistoryRequestRef = useRef(0)
   const mealMutationRequestRef = useRef(0)
+  const dietsTopRef = useRef(null)
+  const replacementLabRef = useRef(null)
+  const mealCardRefs = useRef({})
 
   const activeDiet = latestDiet
   const activeDietId = activeDiet?.id ?? ''
@@ -277,6 +280,23 @@ function DietsPage() {
     setIsReplacementSearchLoading(false)
     setIsReplacementPreviewLoading(false)
     setActiveReplacementPreviewCode('')
+  }
+
+  function scrollToNodeAfterRender(resolveNode, options) {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        resolveNode()?.scrollIntoView(options)
+      })
+    })
+  }
+
+  function setMealCardRef(mealNumber, node) {
+    if (node) {
+      mealCardRefs.current[mealNumber] = node
+      return
+    }
+
+    delete mealCardRefs.current[mealNumber]
   }
 
   function closeReplacementLab() {
@@ -731,6 +751,10 @@ function DietsPage() {
       await loadDietHistory(token)
       window.dispatchEvent(new CustomEvent('dashboard:refresh'))
       setDietActionMessage('Dieta activada correctamente.')
+      scrollToNodeAfterRender(() => dietsTopRef.current, {
+        behavior: 'smooth',
+        block: 'start',
+      })
     } catch (error) {
       setDietActionError(error.message)
     } finally {
@@ -763,6 +787,10 @@ function DietsPage() {
         diet: sourceDiet,
       })
       setManualDietMessage('Base cargada en el constructor manual. Guárdala cuando quieras crear la nueva versión.')
+      scrollToNodeAfterRender(() => dietsTopRef.current, {
+        behavior: 'smooth',
+        block: 'start',
+      })
     } catch (error) {
       setManualDietError(error.message)
     } finally {
@@ -817,6 +845,10 @@ function DietsPage() {
     })
     setSelectedReplacementCode('')
     setIsReplacementLoading(true)
+    scrollToNodeAfterRender(() => replacementLabRef.current, {
+      behavior: 'smooth',
+      block: 'start',
+    })
 
     try {
       const response = await dietsApi.getFoodReplacementOptions(token, activeDietId, mealNumber, {
@@ -914,17 +946,18 @@ function DietsPage() {
     const selectedOption = replacementOptions.find((option) => option.food_code === selectedReplacementCode)
     if (!selectedOption) return
 
+    const targetMealNumber = replacementLab.mealNumber
     const requestId = mealMutationRequestRef.current + 1
     mealMutationRequestRef.current = requestId
     setIsMealActionLoading(true)
-    setActiveMealNumber(replacementLab.mealNumber)
+    setActiveMealNumber(targetMealNumber)
     setActiveFoodCode(replacementLab.food.food_code ?? replacementLab.food.name)
     setDietActionError('')
     setDietActionMessage('')
     setReplacementError('')
 
     try {
-      const response = await dietsApi.replaceFoodInMeal(token, activeDietId, replacementLab.mealNumber, {
+      const response = await dietsApi.replaceFoodInMeal(token, activeDietId, targetMealNumber, {
         current_food_name: replacementLab.food.name,
         current_food_code: replacementLab.food.food_code,
         replacement_food_name: selectedOption.name,
@@ -936,6 +969,10 @@ function DietsPage() {
       syncUpdatedDiet(response.diet)
       setDietActionMessage(response.summary.message)
       closeReplacementLab()
+      scrollToNodeAfterRender(() => mealCardRefs.current[targetMealNumber], {
+        behavior: 'smooth',
+        block: 'center',
+      })
       window.dispatchEvent(new CustomEvent('dashboard:refresh'))
       refreshDietCollectionsInBackground(token)
     } catch (error) {
@@ -997,6 +1034,8 @@ function DietsPage() {
           {latestDietError || selectedDietError || historyError || dietActionError || adherenceError || weeklyAdherenceError}
         </p>
       ) : null}
+
+      <div ref={dietsTopRef} />
 
       <div className="diets-hero-layout">
         <SectionPanel
@@ -1258,7 +1297,11 @@ function DietsPage() {
               const isBusyMeal = activeMealNumber === meal.meal_number || activeAdherenceMealNumber === meal.meal_number
 
               return (
-                <article key={meal.meal_number} className="protocol-meal-card">
+                <article
+                  key={meal.meal_number}
+                  ref={(node) => setMealCardRef(meal.meal_number, node)}
+                  className="protocol-meal-card"
+                >
                   <div className={`protocol-meal-hero ${visual.heroClassName}`.trim()}>
                     <div className="protocol-meal-overlay" />
                     <div className="protocol-meal-copy">
@@ -1376,153 +1419,155 @@ function DietsPage() {
       )}
 
       {replacementLab && !isActiveDietManual ? (
-        <SectionPanel
-          eyebrow={`Sustitución · Comida ${String(replacementLab.mealNumber).padStart(2, '0')}`}
-          title={replacementLab.food.name}
-          description="Sustituye este alimento por otro compatible dentro de la comida."
-          actions={<button type="button" className="protocol-secondary-button" onClick={closeReplacementLab}>Cerrar</button>}
-        >
-          {isReplacementLoading ? <p className="page-status">Calculando opciones compatibles...</p> : null}
-          {replacementError ? <p className="page-status page-status-error">{replacementError}</p> : null}
+        <div ref={replacementLabRef}>
+          <SectionPanel
+            eyebrow={`Sustitución · Comida ${String(replacementLab.mealNumber).padStart(2, '0')}`}
+            title={replacementLab.food.name}
+            description="Sustituye este alimento por otro compatible dentro de la comida."
+            actions={<button type="button" className="protocol-secondary-button" onClick={closeReplacementLab}>Cerrar</button>}
+          >
+            {isReplacementLoading ? <p className="page-status">Calculando opciones compatibles...</p> : null}
+            {replacementError ? <p className="page-status page-status-error">{replacementError}</p> : null}
 
-          {!isReplacementLoading ? (() => {
-            const selectedOption = replacementOptions.find((o) => o.food_code === selectedReplacementCode) ?? null
-            return (
-              <div className="replacement-lab-layout">
-                <div className="replacement-lab-summary">
-                  <span>Macro dominante actual: <strong>{formatMacroDominante(replacementLab.currentMacroDominante)}</strong></span>
-                  <span>Porción actual: <strong>{formatFoodPortion(replacementLab.food)}</strong></span>
-                </div>
-
-                <label className="replacement-select-label">
-                  <span>Opciones disponibles</span>
-                  <select value={selectedReplacementCode} onChange={(event) => setSelectedReplacementCode(event.target.value)}>
-                    {replacementOptions.map((option) => (
-                      <option key={option.food_code} value={option.food_code}>
-                        {option.name} — {option.recommended_quantity} {option.recommended_unit} · {formatCalories(option.calories)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <form className="replacement-search-panel" onSubmit={handleSearchReplacementFood}>
-                  <div className="replacement-search-head">
-                    <strong>Buscar alimento</strong>
-                    <small>Solo se mostrarán alimentos compatibles con la función nutricional de esta comida.</small>
+            {!isReplacementLoading ? (() => {
+              const selectedOption = replacementOptions.find((o) => o.food_code === selectedReplacementCode) ?? null
+              return (
+                <div className="replacement-lab-layout">
+                  <div className="replacement-lab-summary">
+                    <span>Macro dominante actual: <strong>{formatMacroDominante(replacementLab.currentMacroDominante)}</strong></span>
+                    <span>Porción actual: <strong>{formatFoodPortion(replacementLab.food)}</strong></span>
                   </div>
 
-                  <div className="replacement-search-row">
-                    <input
-                      type="text"
-                      value={replacementSearchQuery}
-                      onChange={(event) => setReplacementSearchQuery(event.target.value)}
-                      placeholder="Ej. mango, granola, arroz inflado..."
-                    />
-                    <button type="submit" className="protocol-secondary-button" disabled={isReplacementSearchLoading}>
-                      {isReplacementSearchLoading ? 'Buscando...' : 'Buscar'}
-                    </button>
-                  </div>
-
-                  {replacementSearchError ? <p className="page-status page-status-error">{replacementSearchError}</p> : null}
-
-                  {replacementSearchResults.length > 0 ? (
-                    <div className="replacement-search-results">
-                      {replacementSearchResults.map((candidate) => (
-                        <article
-                          key={candidate.food_code}
-                          className={`replacement-search-card ${candidate.valid ? 'replacement-search-card-valid' : 'replacement-search-card-invalid'}`.trim()}
-                        >
-                          <div className="replacement-search-card-head">
-                            <div>
-                              <strong>{candidate.name}</strong>
-                              <small>
-                                {candidate.category} · {formatMacroDominante(candidate.macro_dominante)}
-                              </small>
-                            </div>
-                            <div className="replacement-search-card-meta">
-                              <span>Eq. {formatCompactNumber(candidate.equivalent_grams, { maximumFractionDigits: 0 })} g</span>
-                              <span className={`replacement-search-status ${candidate.valid ? 'replacement-search-status-valid' : 'replacement-search-status-invalid'}`.trim()}>
-                                {candidate.valid ? 'Compatible' : 'No compatible'}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="replacement-search-card-macros">
-                            <span>{formatCalories(candidate.calories)}</span>
-                            <span>P {formatMacro(candidate.protein_grams)}</span>
-                            <span>G {formatMacro(candidate.fat_grams)}</span>
-                            <span>C {formatMacro(candidate.carb_grams)}</span>
-                          </div>
-
-                          <p className={`replacement-search-note ${candidate.valid ? '' : 'replacement-search-note-invalid'}`.trim()}>
-                            {formatReplacementValidationNote(candidate)}
-                          </p>
-
-                          {candidate.valid ? (
-                            <button
-                              type="button"
-                              className="protocol-secondary-button replacement-search-action"
-                              disabled={isReplacementPreviewLoading && activeReplacementPreviewCode === candidate.food_code}
-                              onClick={() => handlePreviewManualReplacement(candidate)}
-                            >
-                              {isReplacementPreviewLoading && activeReplacementPreviewCode === candidate.food_code
-                                ? 'Calculando...'
-                                : 'Previsualizar sustitución'}
-                            </button>
-                          ) : null}
-                        </article>
+                  <label className="replacement-select-label">
+                    <span>Opciones disponibles</span>
+                    <select value={selectedReplacementCode} onChange={(event) => setSelectedReplacementCode(event.target.value)}>
+                      {replacementOptions.map((option) => (
+                        <option key={option.food_code} value={option.food_code}>
+                          {option.name} — {option.recommended_quantity} {option.recommended_unit} · {formatCalories(option.calories)}
+                        </option>
                       ))}
-                    </div>
-                  ) : null}
-                </form>
+                    </select>
+                  </label>
 
-                {selectedOption ? (
-                  <article className="replacement-detail-card">
-                    <div className="replacement-detail-header">
-                      <div>
-                        <strong>{selectedOption.name}</strong>
-                        <small>{selectedOption.category} · {selectedOption.functional_group}</small>
+                  <form className="replacement-search-panel" onSubmit={handleSearchReplacementFood}>
+                    <div className="replacement-search-head">
+                      <strong>Buscar alimento</strong>
+                      <small>Solo se mostrarán alimentos compatibles con la función nutricional de esta comida.</small>
+                    </div>
+
+                    <div className="replacement-search-row">
+                      <input
+                        type="text"
+                        value={replacementSearchQuery}
+                        onChange={(event) => setReplacementSearchQuery(event.target.value)}
+                        placeholder="Ej. mango, granola, arroz inflado..."
+                      />
+                      <button type="submit" className="protocol-secondary-button" disabled={isReplacementSearchLoading}>
+                        {isReplacementSearchLoading ? 'Buscando...' : 'Buscar'}
+                      </button>
+                    </div>
+
+                    {replacementSearchError ? <p className="page-status page-status-error">{replacementSearchError}</p> : null}
+
+                    {replacementSearchResults.length > 0 ? (
+                      <div className="replacement-search-results">
+                        {replacementSearchResults.map((candidate) => (
+                          <article
+                            key={candidate.food_code}
+                            className={`replacement-search-card ${candidate.valid ? 'replacement-search-card-valid' : 'replacement-search-card-invalid'}`.trim()}
+                          >
+                            <div className="replacement-search-card-head">
+                              <div>
+                                <strong>{candidate.name}</strong>
+                                <small>
+                                  {candidate.category} · {formatMacroDominante(candidate.macro_dominante)}
+                                </small>
+                              </div>
+                              <div className="replacement-search-card-meta">
+                                <span>Eq. {formatCompactNumber(candidate.equivalent_grams, { maximumFractionDigits: 0 })} g</span>
+                                <span className={`replacement-search-status ${candidate.valid ? 'replacement-search-status-valid' : 'replacement-search-status-invalid'}`.trim()}>
+                                  {candidate.valid ? 'Compatible' : 'No compatible'}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="replacement-search-card-macros">
+                              <span>{formatCalories(candidate.calories)}</span>
+                              <span>P {formatMacro(candidate.protein_grams)}</span>
+                              <span>G {formatMacro(candidate.fat_grams)}</span>
+                              <span>C {formatMacro(candidate.carb_grams)}</span>
+                            </div>
+
+                            <p className={`replacement-search-note ${candidate.valid ? '' : 'replacement-search-note-invalid'}`.trim()}>
+                              {formatReplacementValidationNote(candidate)}
+                            </p>
+
+                            {candidate.valid ? (
+                              <button
+                                type="button"
+                                className="protocol-secondary-button replacement-search-action"
+                                disabled={isReplacementPreviewLoading && activeReplacementPreviewCode === candidate.food_code}
+                                onClick={() => handlePreviewManualReplacement(candidate)}
+                              >
+                                {isReplacementPreviewLoading && activeReplacementPreviewCode === candidate.food_code
+                                  ? 'Calculando...'
+                                  : 'Previsualizar sustitución'}
+                              </button>
+                            ) : null}
+                          </article>
+                        ))}
                       </div>
-                      <span className={`replacement-strategy replacement-strategy-${selectedOption.strategy}`}>
-                        {selectedOption.strategy === 'strict' ? 'Ajuste directo' : 'Ajuste flexible'}
-                      </span>
-                    </div>
-
-                    <div className="replacement-detail-macros">
-                      <span>{formatCalories(selectedOption.calories)}</span>
-                      <span>P {formatMacro(selectedOption.protein_grams)}</span>
-                      <span>G {formatMacro(selectedOption.fat_grams)}</span>
-                      <span>C {formatMacro(selectedOption.carb_grams)}</span>
-                    </div>
-
-                    {selectedOption.equivalent_grams ? (
-                      <p className="replacement-detail-equivalence">
-                        Equivalencia orientativa: {formatCompactNumber(selectedOption.equivalent_grams, { maximumFractionDigits: 0 })} g del nuevo alimento.
-                      </p>
                     ) : null}
+                  </form>
 
-                    <div className="replacement-detail-deltas">
-                      <span>Respecto al actual: {formatSignedCalories(selectedOption.calorie_delta_vs_current)}</span>
-                      <span>P {formatSignedMass(selectedOption.protein_delta_vs_current)}</span>
-                      <span>G {formatSignedMass(selectedOption.fat_delta_vs_current)}</span>
-                      <span>C {formatSignedMass(selectedOption.carb_delta_vs_current)}</span>
-                    </div>
+                  {selectedOption ? (
+                    <article className="replacement-detail-card">
+                      <div className="replacement-detail-header">
+                        <div>
+                          <strong>{selectedOption.name}</strong>
+                          <small>{selectedOption.category} · {selectedOption.functional_group}</small>
+                        </div>
+                        <span className={`replacement-strategy replacement-strategy-${selectedOption.strategy}`}>
+                          {selectedOption.strategy === 'strict' ? 'Ajuste directo' : 'Ajuste flexible'}
+                        </span>
+                      </div>
 
-                    <p className="replacement-detail-impact">
-                      Impacto en la comida: {formatSignedCalories(selectedOption.meal_calorie_difference)} | P {formatSignedMass(selectedOption.meal_protein_difference)} | G {formatSignedMass(selectedOption.meal_fat_difference)} | C {formatSignedMass(selectedOption.meal_carb_difference)}
-                    </p>
+                      <div className="replacement-detail-macros">
+                        <span>{formatCalories(selectedOption.calories)}</span>
+                        <span>P {formatMacro(selectedOption.protein_grams)}</span>
+                        <span>G {formatMacro(selectedOption.fat_grams)}</span>
+                        <span>C {formatMacro(selectedOption.carb_grams)}</span>
+                      </div>
 
-                    {selectedOption.note ? <p className="replacement-detail-note">{selectedOption.note}</p> : null}
-                  </article>
-                ) : null}
+                      {selectedOption.equivalent_grams ? (
+                        <p className="replacement-detail-equivalence">
+                          Equivalencia orientativa: {formatCompactNumber(selectedOption.equivalent_grams, { maximumFractionDigits: 0 })} g del nuevo alimento.
+                        </p>
+                      ) : null}
 
-                <button type="button" className="panel-cta-button" disabled={isMealActionLoading || !selectedReplacementCode} onClick={handleApplyReplacement}>
-                  {isMealActionLoading ? 'Aplicando reemplazo...' : 'Aplicar reemplazo'}
-                </button>
-              </div>
-            )
-          })() : null}
-        </SectionPanel>
+                      <div className="replacement-detail-deltas">
+                        <span>Respecto al actual: {formatSignedCalories(selectedOption.calorie_delta_vs_current)}</span>
+                        <span>P {formatSignedMass(selectedOption.protein_delta_vs_current)}</span>
+                        <span>G {formatSignedMass(selectedOption.fat_delta_vs_current)}</span>
+                        <span>C {formatSignedMass(selectedOption.carb_delta_vs_current)}</span>
+                      </div>
+
+                      <p className="replacement-detail-impact">
+                        Impacto en la comida: {formatSignedCalories(selectedOption.meal_calorie_difference)} | P {formatSignedMass(selectedOption.meal_protein_difference)} | G {formatSignedMass(selectedOption.meal_fat_difference)} | C {formatSignedMass(selectedOption.meal_carb_difference)}
+                      </p>
+
+                      {selectedOption.note ? <p className="replacement-detail-note">{selectedOption.note}</p> : null}
+                    </article>
+                  ) : null}
+
+                  <button type="button" className="panel-cta-button" disabled={isMealActionLoading || !selectedReplacementCode} onClick={handleApplyReplacement}>
+                    {isMealActionLoading ? 'Aplicando reemplazo...' : 'Aplicar reemplazo'}
+                  </button>
+                </div>
+              )
+            })() : null}
+          </SectionPanel>
+        </div>
       ) : null}
 
       <div className="diets-support-layout">
