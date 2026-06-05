@@ -3286,6 +3286,255 @@
   .lab-bottom-nav-item-active:hover {
     color: var(--lab-lime);
   }
+
+  /* ═══════════════════════════════════════════════════════════════
+     COMPACTACIÓN MOBILE — todos los valores son overrides de desktop
+     El objetivo es reducir scroll sin cambiar la estética.
+  ════════════════════════════════════════════════════════════════ */
+
+  /* Gaps globales más ajustados */
+  .dashboard-page,
+  .diets-page,
+  .progress-page,
+  .profile-page {
+    gap: 10px;
+  }
+
+  .dashboard-main-layout,
+  .dashboard-main-column,
+  .dashboard-side-column,
+  .dashboard-diet-grid,
+  .diets-hero-layout,
+  .diets-support-layout,
+  .progress-hero-grid,
+  .progress-bottom-layout,
+  .profile-top-layout,
+  .profile-bottom-layout {
+    gap: 10px;
+  }
+
+  /* Panels con menos padding */
+  .section-panel {
+    padding: 14px;
+    border-radius: 12px;
+  }
+
+  .section-panel h3 {
+    font-size: 1rem;
+  }
+
+  .section-panel-header {
+    margin-bottom: 10px;
+  }
+
+  /* Metric cards: más bajas y compactas */
+  .metric-card {
+    min-height: 0;
+    padding: 14px;
+    gap: 8px;
+    border-radius: 12px;
+  }
+
+  .metric-card-grid {
+    gap: 8px;
+  }
+
+  /* Valor principal de metric card mucho más pequeño */
+  .metric-card-body strong,
+  .dashboard-page .metric-card-body strong {
+    font-size: 1.65rem;
+  }
+
+  .metric-card-note {
+    font-size: 0.66rem;
+  }
+
+  /* Topbar más bajo */
+  .lab-topbar {
+    padding: 10px 14px;
+  }
+
+  .lab-topbar-title h2 {
+    font-size: 1rem;
+  }
+
+  /* Content con menos padding lateral y arriba */
+  .lab-content {
+    padding: 10px 12px calc(68px + env(safe-area-inset-bottom, 0px));
+    gap: 10px;
+  }
+
+  /* Botones primarios y secundarios más compactos */
+  .auth-primary-button,
+  .panel-cta-button,
+  .protocol-primary-button {
+    min-height: 44px;
+    font-size: 0.88rem;
+  }
+
+  .protocol-secondary-button,
+  .protocol-chip-button,
+  .lab-logout-button {
+    min-height: 40px;
+    padding: 0 12px;
+    font-size: 0.82rem;
+  }
+
+  /* Inputs más compactos */
+  .auth-input-shell,
+  .lab-search,
+  .protocol-generator-form input,
+  .protocol-generator-form select,
+  .inline-date-field input,
+  .progress-log-form input,
+  .profile-biometric-grid input,
+  .replacement-lab-layout select {
+    min-height: 44px;
+  }
+
+  .protocol-generator-form input,
+  .protocol-generator-form select,
+  .inline-date-field input,
+  .progress-log-form input,
+  .profile-biometric-grid input,
+  .replacement-lab-layout select,
+  .profile-chip-input input {
+    min-height: 44px;
+  }
+
+  /* Profile sex toggle y goal options */
+  .profile-sex-toggle button {
+    min-height: 40px;
+  }
+
+  .profile-goal-option {
+    min-height: 42px;
+  }
+
+  /* Operador card de la sidebar más compacto */
+  .lab-operator-card {
+    padding: 10px 12px;
+  }
+
+  .lab-operator-avatar {
+    width: 34px;
+    height: 34px;
+    font-size: 0.78rem;
+  }
+
+  /* Meal hero cards menos altas */
+  .protocol-meal-hero {
+    min-height: 130px;
+  }
+
+  .protocol-meal-copy h3 {
+    font-size: 1.45rem;
+  }
+
+  /* Diet performance kcal value más pequeño */
+  .diet-performance-kcal strong {
+    font-size: 2rem;
+  }
+
+  .diet-performance-kcal span {
+    font-size: 1.1rem;
+  }
+
+  /* Key-value stack más compacto */
+  .key-value-stack,
+  .protocol-food-list,
+  .protocol-history-list,
+  .recent-log-list,
+  .profile-chip-group {
+    gap: 8px;
+  }
+
+  /* Progress summary */
+  .progress-summary-stat {
+    padding: 8px 10px;
+  }
+
+  .progress-summary-stat strong,
+  .progress-summary-meta strong {
+    font-size: 1.1rem;
+  }
+
+  /* Recent log items */
+  .recent-log-item {
+    padding: 10px 12px;
+  }
+
+  /* Food rows más compactos */
+  .protocol-food-row {
+    padding-bottom: 8px;
+  }
+
+  /* Macro gauge */
+  .diet-macro-gauge {
+    padding: 10px 12px;
+  }
+
+  /* Manual diet toolbar */
+  .manual-diet-toolbar {
+    padding: 10px 12px;
+  }
+
+  /* Circular gauge más pequeño en mobile */
+  .circular-gauge {
+    width: min(100%, 140px);
+  }
+
+  .circular-gauge-center strong {
+    font-size: 1.8rem;
+  }
+
+  /* Autosave indicator */
+  .autosave-indicator {
+    padding: 7px 10px;
+  }
+
+  /* Section panel eyebrow */
+  .section-panel-eyebrow {
+    font-size: 0.66rem;
+  }
+
+  /* Interpretation card */
+  .interpretation-card {
+    padding: 12px;
+    margin-top: 12px;
+    font-size: 0.88rem;
+  }
+
+  /* Dashboard meal preview */
+  .dashboard-meal-preview {
+    padding: 10px 12px;
+  }
+
+  .dashboard-meal-preview p {
+    font-size: 1.25rem;
+  }
+
+  /* Weight form meta */
+  .progress-weight-meta > div,
+  .progress-adjustment-summary > div {
+    padding: 8px 10px;
+  }
+
+  /* Profile chip */
+  .profile-chip {
+    padding: 5px 10px;
+    font-size: 0.72rem;
+  }
+
+  /* Progress footer */
+  .progress-footer-bar {
+    padding: 12px 14px;
+  }
+
+  /* Profile footer */
+  .profile-footer-bar {
+    gap: 10px;
+  }
 }
 
 @media (max-width: 960px) {
@@ -3638,4 +3887,139 @@
 .system-log-item p {
   display: block;
   margin: 0;
+}
+
+/* v2 */
+
+/* ═══════════════════════════════════════════════════════════
+   BLOQUE FINAL — Compactación mobile
+   Va al FINAL del archivo para ganar la cascada CSS.
+   Activa en pantallas ≤600px (teléfonos).
+══════════════════════════════════════════════════════════ */
+@media (max-width: 600px) {
+
+  /* Gaps globales */
+  .dashboard-page,
+  .diets-page,
+  .progress-page,
+  .profile-page { gap: 10px; }
+
+  .dashboard-main-layout,
+  .dashboard-main-column,
+  .dashboard-side-column,
+  .dashboard-diet-grid,
+  .diets-hero-layout,
+  .diets-support-layout,
+  .progress-hero-grid,
+  .progress-bottom-layout,
+  .profile-top-layout,
+  .profile-bottom-layout { gap: 10px; }
+
+  /* Content padding (incluye espacio para bottom nav) */
+  .lab-content {
+    padding: 10px 12px calc(68px + env(safe-area-inset-bottom, 0px));
+    gap: 10px;
+  }
+
+  /* Topbar compacto */
+  .lab-topbar { padding: 10px 14px; }
+  .lab-topbar-title h2 { font-size: 1rem; }
+
+  /* Panels */
+  .section-panel {
+    padding: 14px;
+    border-radius: 12px;
+  }
+  .section-panel h3 { font-size: 1rem; }
+  .section-panel-header { margin-bottom: 10px; }
+
+  /* Metric cards */
+  .metric-card {
+    min-height: 0;
+    padding: 14px;
+    gap: 8px;
+    border-radius: 12px;
+  }
+  .metric-card-grid { gap: 8px; }
+
+  /* Valores numéricos grandes */
+  .metric-card-body strong { font-size: 1.65rem; }
+  .dashboard-page .metric-card-body strong { font-size: 1.65rem; }
+  .metric-card-note { font-size: 0.66rem; }
+
+  /* Botones */
+  .auth-primary-button,
+  .panel-cta-button,
+  .protocol-primary-button {
+    min-height: 44px;
+    font-size: 0.88rem;
+  }
+  .protocol-secondary-button,
+  .protocol-chip-button,
+  .lab-logout-button {
+    min-height: 40px;
+    padding: 0 12px;
+    font-size: 0.82rem;
+  }
+
+  /* Inputs */
+  .auth-input-shell,
+  .lab-search { min-height: 44px; }
+  .protocol-generator-form input,
+  .protocol-generator-form select,
+  .inline-date-field input,
+  .progress-log-form input,
+  .profile-biometric-grid input,
+  .replacement-lab-layout select,
+  .profile-chip-input input { min-height: 44px; }
+
+  /* Toggle y goal */
+  .profile-sex-toggle button { min-height: 40px; }
+  .profile-goal-option { min-height: 42px; }
+
+  /* Sidebar drawer */
+  .lab-operator-card { padding: 10px 12px; }
+  .lab-operator-avatar { width: 34px; height: 34px; font-size: 0.78rem; }
+
+  /* Meal hero */
+  .protocol-meal-hero { min-height: 130px; }
+  .protocol-meal-copy h3 { font-size: 1.45rem; }
+
+  /* Diet kcal */
+  .diet-performance-kcal strong { font-size: 2rem; }
+  .diet-performance-kcal span { font-size: 1.1rem; }
+
+  /* Stacks */
+  .key-value-stack,
+  .protocol-food-list,
+  .protocol-history-list,
+  .recent-log-list,
+  .profile-chip-group { gap: 8px; }
+
+  /* Progress stats */
+  .progress-summary-stat { padding: 8px 10px; }
+  .progress-summary-stat strong,
+  .progress-summary-meta strong { font-size: 1.1rem; }
+
+  /* Items y rows */
+  .recent-log-item { padding: 10px 12px; }
+  .protocol-food-row { padding-bottom: 8px; }
+  .diet-macro-gauge { padding: 10px 12px; }
+  .manual-diet-toolbar { padding: 10px 12px; }
+
+  /* Circular gauge */
+  .circular-gauge { width: min(100%, 140px); }
+  .circular-gauge-center strong { font-size: 1.8rem; }
+
+  /* Misc */
+  .autosave-indicator { padding: 7px 10px; }
+  .section-panel-eyebrow { font-size: 0.66rem; }
+  .interpretation-card { padding: 12px; margin-top: 12px; font-size: 0.88rem; }
+  .dashboard-meal-preview { padding: 10px 12px; }
+  .dashboard-meal-preview p { font-size: 1.25rem; }
+  .progress-weight-meta > div,
+  .progress-adjustment-summary > div { padding: 8px 10px; }
+  .profile-chip { padding: 5px 10px; font-size: 0.72rem; }
+  .progress-footer-bar { padding: 12px 14px; }
+  .profile-footer-bar { gap: 10px; }
 }
