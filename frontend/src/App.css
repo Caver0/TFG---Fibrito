@@ -670,17 +670,26 @@
   background: var(--lab-bg);
 }
 
+/* ── Sidebar ─────────────────────────────────────────────────────────── */
 .lab-sidebar {
   height: 100vh;
   position: sticky;
   top: 0;
   overflow: hidden;
-  padding: 20px 16px;
+  padding: 0;
   background: linear-gradient(180deg, rgba(10, 10, 10, 0.8), rgba(8, 8, 8, 0.94));
   border-right: 1px solid rgba(72, 72, 73, 0.18);
+}
+
+/* Wrapper interno: permite animar el drawer en mobile sin afectar al desktop */
+.lab-sidebar-inner {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  height: 100%;
+  padding: 20px 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .lab-brand h1 {
@@ -799,6 +808,39 @@
   border-radius: 12px;
 }
 
+/* ── Hamburger button — oculto en desktop ─────────────────────────── */
+.lab-hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  color: var(--lab-soft);
+  border-radius: 10px;
+  background: transparent;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.lab-hamburger:hover {
+  background: var(--lab-surface-3);
+  color: var(--lab-lime);
+}
+
+.lab-hamburger .material-symbols-outlined {
+  font-size: 1.5rem;
+}
+
+/* ── Mobile overlay ──────────────────────────────────────────────── */
+.lab-mobile-overlay {
+  display: none;
+}
+
+/* ── Bottom navigation — oculta en desktop ───────────────────────── */
+.lab-bottom-nav {
+  display: none;
+}
+
 .lab-logout-button span {
   font-size: 0.82rem;
 }
@@ -820,6 +862,7 @@
   padding: 18px 24px;
   background: rgba(14, 14, 15, 0.7);
   backdrop-filter: blur(16px);
+  flex-shrink: 0;
 }
 
 .lab-topbar-title,
@@ -827,23 +870,34 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+}
+
+.lab-topbar-title {
+  flex: 1;
+  min-width: 0;
 }
 
 .lab-topbar-title h2 {
   color: var(--lab-lime);
-  font-size: clamp(1.4rem, 1.8vw, 1.7rem);
+  font-size: clamp(1.1rem, 3.5vw, 1.7rem);
   text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .lab-topbar-title p {
   font-size: 0.68rem;
   letter-spacing: 0.18em;
+  white-space: nowrap;
 }
 
 .lab-topbar-divider {
   width: 1px;
   height: 14px;
   background: rgba(72, 72, 73, 0.48);
+  flex-shrink: 0;
 }
 
 .lab-search {
@@ -3074,15 +3128,23 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .lab-sidebar {
-    position: static;
+  .meal-protocol-grid-5 .protocol-meal-card,
+  .meal-protocol-grid-5 .protocol-meal-card:nth-last-child(-n + 2) {
+    grid-column: auto;
+  }
+}
+
+/* ── Mobile: punto de quiebre principal para navegación ─────────── */
+@media (max-width: 900px) {
+  /* La app-lab-frame pasa a columna única (sidebar oculta en desktop) */
+  .app-lab-frame {
+    grid-template-columns: 1fr;
     height: auto;
+    min-height: 100vh;
     overflow: visible;
-    border-right: 0;
-    border-bottom: 1px solid rgba(72, 72, 73, 0.18);
+    position: relative;
   }
 
-  .app-lab-frame,
   .lab-main {
     height: auto;
     min-height: 100vh;
@@ -3091,11 +3153,138 @@
 
   .lab-content {
     overflow: visible;
+    /* Espacio para la bottom nav */
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
   }
 
-  .meal-protocol-grid-5 .protocol-meal-card,
-  .meal-protocol-grid-5 .protocol-meal-card:nth-last-child(-n + 2) {
-    grid-column: auto;
+  /* Sidebar se convierte en drawer lateral */
+  .lab-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 200;
+    height: 100dvh;
+    width: 260px;
+    border-right: 1px solid rgba(72, 72, 73, 0.28);
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.28s ease;
+    background: linear-gradient(180deg, rgba(12, 12, 14, 0.98), rgba(8, 8, 10, 0.99));
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+  }
+
+  .lab-sidebar-open {
+    transform: translateX(0);
+    box-shadow: 8px 0 48px rgba(0, 0, 0, 0.6);
+  }
+
+  .lab-sidebar-inner {
+    padding: 24px 16px;
+    padding-top: calc(24px + env(safe-area-inset-top, 0px));
+  }
+
+  /* Overlay oscuro al abrir el drawer */
+  .lab-mobile-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 199;
+    background: rgba(0, 0, 0, 0.62);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    animation: overlay-fade-in 0.22s ease forwards;
+  }
+
+  @keyframes overlay-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  /* Botón hamburguesa visible en mobile */
+  .lab-hamburger {
+    display: flex;
+  }
+
+  /* Topbar simplificado: sin flex-direction column */
+  .lab-topbar {
+    padding: 14px 16px;
+    gap: 12px;
+  }
+
+  .lab-topbar-title {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .lab-topbar-title p {
+    display: none;
+  }
+
+  .lab-topbar-divider {
+    display: none;
+  }
+
+  /* Bottom navigation bar */
+  .lab-bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: rgba(10, 10, 12, 0.94);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(72, 72, 73, 0.22);
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4);
+  }
+
+  .lab-bottom-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 60px;
+    padding: 8px 4px;
+    color: var(--lab-muted);
+    background: transparent;
+    border: 0;
+    transition: color 0.18s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .lab-bottom-nav-item .material-symbols-outlined {
+    font-size: 1.35rem;
+    transition: transform 0.18s ease;
+  }
+
+  .lab-bottom-nav-item span {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+
+  .lab-bottom-nav-item-active {
+    color: var(--lab-lime);
+  }
+
+  .lab-bottom-nav-item-active .material-symbols-outlined {
+    transform: translateY(-1px);
+  }
+
+  .lab-bottom-nav-item:hover {
+    color: var(--lab-soft);
+  }
+
+  .lab-bottom-nav-item-active:hover {
+    color: var(--lab-lime);
   }
 }
 
@@ -3105,26 +3294,14 @@
     text-align: left;
   }
 
-  .app-loading-screen,
-  .auth-shell,
-  .app-shell {
-    padding: 12px;
-  }
-
-  .lab-topbar,
-  .lab-content,
   .auth-shell-surface {
     padding-inline: 20px;
   }
 
-  .lab-topbar,
-  .lab-topbar-title,
-  .lab-topbar-actions,
   .section-panel-header,
   .protocol-generator-custom-block,
   .progress-footer-bar,
-  .profile-footer-bar,
-  .lab-nav {
+  .profile-footer-bar {
     flex-direction: column;
     align-items: stretch;
   }
@@ -3148,9 +3325,13 @@
   .progress-summary-meta,
   .profile-biometric-grid,
   .profile-calibration-strip,
-  .profile-protocol-grid,
-  .adherence-heatmap-grid {
+  .profile-protocol-grid {
     grid-template-columns: 1fr;
+  }
+
+  /* El heatmap mantiene sus 7 columnas pero con gap reducido */
+  .adherence-heatmap-grid {
+    gap: 6px;
   }
 
   .progress-summary-left {
@@ -3222,11 +3403,6 @@
 }
 
 @media (max-width: 720px) {
-  .lab-frame {
-    border-width: 4px;
-    border-radius: 26px;
-  }
-
   .auth-deco {
     font-size: 6rem;
   }
@@ -3240,7 +3416,6 @@
     bottom: 92px;
   }
 
-  .lab-sidebar,
   .section-panel,
   .metric-card {
     padding: 18px;
@@ -3248,10 +3423,77 @@
 
   .lab-content {
     padding: 14px;
+    /* bottom-nav space ya incluido en el breakpoint 900px */
   }
 
   .auth-shell-surface {
     padding-block: 28px;
+    padding-inline: 16px;
+  }
+
+  /* Meal cards con mínimo más pequeño para caber en 375px */
+  .meal-protocol-grid {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+
+  /* Grids de 2 columnas pasan a 1 en móviles pequeños */
+  .metric-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  /* En móviles muy pequeños, las metric cards en 1 columna */
+  .metric-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Las tarjetas de comida en 1 columna */
+  .meal-protocol-grid,
+  .meal-protocol-grid-3,
+  .meal-protocol-grid-4,
+  .meal-protocol-grid-5,
+  .meal-protocol-grid-6 {
+    grid-template-columns: 1fr;
+  }
+
+  .meal-protocol-grid-5 .protocol-meal-card,
+  .meal-protocol-grid-5 .protocol-meal-card:nth-last-child(-n + 2) {
+    grid-column: auto;
+  }
+
+  /* Replacement grid en 1 col */
+  .replacement-lab-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Auth surfaces con menos padding */
+  .auth-shell-surface {
+    padding-inline: 12px;
+  }
+
+  .auth-card {
+    padding: 22px 16px 20px;
+  }
+
+  /* Touch targets mínimos */
+  .protocol-food-meta button,
+  .profile-chip-input button {
+    min-height: 44px;
+  }
+
+  .profile-chip {
+    min-height: 36px;
+    padding: 6px 12px;
+  }
+
+  /* El heatmap mantiene 7 cols con celdas pequeñas */
+  .adherence-heatmap-grid {
+    gap: 4px;
+  }
+
+  .adherence-heatmap-cell-wrap span {
+    font-size: 0.6rem;
   }
 }
 
